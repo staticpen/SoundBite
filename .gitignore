@@ -413,3 +413,4 @@ SoundBite/soundbite.db-*
 
 # Local test cookies and credentials
 SoundBite/cookies.txt
+.DS_Store
