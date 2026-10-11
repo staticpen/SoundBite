@@ -1,8 +1,8 @@
-
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using SoundBite.Components;
 using SoundBite.Data;
+using SoundBite.Endpoints;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -10,16 +10,15 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlite(
         builder.Configuration.GetConnectionString("DefaultConnection")));
 
-
 builder.Services
     .AddAuthentication(options =>
     {
         options.DefaultAuthenticateScheme =
-            Microsoft.AspNetCore.Identity.IdentityConstants.ApplicationScheme;
+            IdentityConstants.ApplicationScheme;
         options.DefaultChallengeScheme =
-            Microsoft.AspNetCore.Identity.IdentityConstants.ApplicationScheme;
+            IdentityConstants.ApplicationScheme;
         options.DefaultSignInScheme =
-            Microsoft.AspNetCore.Identity.IdentityConstants.ApplicationScheme;
+            IdentityConstants.ApplicationScheme;
     })
     .AddIdentityCookies();
 
@@ -27,32 +26,23 @@ builder.Services
     .AddIdentityCore<ApplicationUser>(options =>
     {
         options.User.RequireUniqueEmail = true;
+        options.Password.RequiredLength = 8;
     })
     .AddEntityFrameworkStores<ApplicationDbContext>()
     .AddSignInManager();
 
-// Blazor services
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
-// SQLite database
-builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseSqlite(
-        builder.Configuration.GetConnectionString(
-            "DefaultConnection")));
-
-
 builder.Services.AddAuthorization();
 builder.Services.AddCascadingAuthenticationState();
+builder.Services.AddHttpClient();
 
 var app = builder.Build();
 
-// HTTP request pipeline
 if (!app.Environment.IsDevelopment())
 {
-    app.UseExceptionHandler(
-        "/Error",
-        createScopeForErrors: true);
+    app.UseExceptionHandler("/Error", createScopeForErrors: true);
     app.UseHsts();
 }
 
@@ -60,15 +50,14 @@ app.UseStatusCodePagesWithReExecute(
     "/not-found",
     createScopeForStatusCodePages: true);
 
-
 app.UseHttpsRedirection();
-
 app.UseAuthentication();
 app.UseAuthorization();
-
 app.UseAntiforgery();
 
 app.MapStaticAssets();
+
+app.MapAccountEndpoints();
 
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();

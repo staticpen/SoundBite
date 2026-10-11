@@ -403,3 +403,13 @@ FodyWeavers.xsd
 # Additional files built by Visual Studio
 
 # End of https://www.toptal.com/developers/gitignore/api/visualstudio
+
+# macOS metadata
+.DS_Store
+
+# Local development database
+SoundBite/soundbite.db
+SoundBite/soundbite.db-*
+
+# Local test cookies and credentials
+SoundBite/cookies.txt

@@ -1,0 +1,100 @@
+.register-container {
+    min-height: 75vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 2rem 1rem;
+}
+
+.register-card {
+    width: 100%;
+    max-width: 440px;
+    padding: 2rem;
+    border-radius: 16px;
+    background: var(--bs-body-bg, #ffffff);
+    border: 1px solid var(--bs-border-color, #dee2e6);
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.08);
+}
+
+.register-card h1 {
+    margin-bottom: 0.5rem;
+    font-size: 2rem;
+    font-weight: 700;
+}
+
+.subtitle {
+    margin-bottom: 1.75rem;
+    color: var(--bs-secondary-color, #6c757d);
+}
+
+.form-group {
+    margin-bottom: 1.1rem;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 0.4rem;
+    font-weight: 600;
+}
+
+.form-control {
+    display: block;
+    width: 100%;
+    padding: 0.7rem 0.8rem;
+    border: 1px solid #ced4da;
+    border-radius: 8px;
+    box-sizing: border-box;
+}
+
+.form-control:focus {
+    outline: 2px solid #7657e8;
+    outline-offset: 1px;
+}
+
+.register-button {
+    width: 100%;
+    padding: 0.8rem;
+    border: none;
+    border-radius: 8px;
+    background: #7657e8;
+    color: white;
+    font-weight: 700;
+    cursor: pointer;
+    margin-top: 0.5rem;
+}
+
+.register-button:hover {
+    background: #6242d0;
+}
+
+.register-button:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+}
+
+.message {
+    padding: 0.8rem;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+}
+
+.success {
+    background: #d1e7dd;
+    color: #0f5132;
+}
+
+.error {
+    background: #f8d7da;
+    color: #842029;
+}
+
+.login-prompt {
+    margin-top: 1.5rem;
+    margin-bottom: 0;
+    text-align: center;
+}
+
+.login-prompt a {
+    font-weight: 600;
+}
+

@@ -1,0 +1,158 @@
+@page "/register"
+@using System.Net.Http.Json
+@using System.ComponentModel.DataAnnotations
+@inject IHttpClientFactory HttpClientFactory
+
+<PageTitle>Create Account | SoundBite</PageTitle>
+
+<div class="register-container">
+    <div class="register-card">
+        <h1>Join SoundBite</h1>
+        <p class="subtitle">Discover music. Share your taste.</p>
+
+        @if (!string.IsNullOrWhiteSpace(message))
+        {
+            <div class="message @(isSuccess ? "success" : "error")" role="alert">
+                @message
+            </div>
+        }
+
+        <EditForm Model="model" OnValidSubmit="RegisterAsync">
+            <DataAnnotationsValidator />
+            <ValidationSummary />
+
+            <div class="form-group">
+                <label for="username">Username</label>
+                <InputText id="username"
+                           class="form-control"
+                           @bind-Value="model.UserName"
+                           autocomplete="username" />
+                <ValidationMessage For="@(() => model.UserName)" />
+            </div>
+
+            <div class="form-group">
+                <label for="email">Email</label>
+                <InputText id="email"
+                           class="form-control"
+                           @bind-Value="model.Email"
+                           autocomplete="email" />
+                <ValidationMessage For="@(() => model.Email)" />
+            </div>
+
+            <div class="form-group">
+                <label for="password">Password</label>
+                <InputText id="password"
+                           type="password"
+                           class="form-control"
+                           @bind-Value="model.Password"
+                           autocomplete="new-password" />
+                <ValidationMessage For="@(() => model.Password)" />
+            </div>
+
+            <div class="form-group">
+                <label for="confirmPassword">Confirm password</label>
+                <InputText id="confirmPassword"
+                           type="password"
+                           class="form-control"
+                           @bind-Value="model.ConfirmPassword"
+                           autocomplete="new-password" />
+                <ValidationMessage For="@(() => model.ConfirmPassword)" />
+            </div>
+
+            <button type="submit" class="register-button" disabled="@isSubmitting">
+                @(isSubmitting ? "Creating account..." : "Create account")
+            </button>
+        </EditForm>
+
+        <p class="login-prompt">
+            Already have an account? <a href="/login">Log in</a>
+        </p>
+    </div>
+</div>
+
+@code {
+    private RegisterModel model = new();
+    private string? message;
+    private bool isSuccess;
+    private bool isSubmitting;
+
+    private async Task RegisterAsync()
+    {
+        if (model.Password != model.ConfirmPassword)
+        {
+            message = "Your passwords do not match.";
+            isSuccess = false;
+            return;
+        }
+
+        isSubmitting = true;
+        message = null;
+
+        try
+        {
+            var client = HttpClientFactory.CreateClient();
+            var response = await client.PostAsJsonAsync(
+                "/api/account/register",
+                new RegisterRequest(model.UserName, model.Email, model.Password));
+
+            if (response.IsSuccessStatusCode)
+            {
+                message = "Account created successfully! You can now log in.";
+                isSuccess = true;
+                model = new RegisterModel();
+                return;
+            }
+
+            var errorBody = await response.Content.ReadAsStringAsync();
+
+            if (errorBody.Contains("DuplicateUserName", StringComparison.OrdinalIgnoreCase))
+            {
+                message = "That username is already taken. Please choose another.";
+            }
+            else if (errorBody.Contains("DuplicateEmail", StringComparison.OrdinalIgnoreCase))
+            {
+                message = "That email address is already registered.";
+            }
+            else
+            {
+                message = "Registration failed. Check your details and try again.";
+            }
+
+            isSuccess = false;
+        }
+        catch
+        {
+            message = "Unable to reach the server. Please try again.";
+            isSuccess = false;
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+
+    private sealed class RegisterModel
+    {
+        [Required(ErrorMessage = "Please enter a username.")]
+        [StringLength(30, MinimumLength = 3,
+            ErrorMessage = "Username must be between 3 and 30 characters.")]
+        public string UserName { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Please enter your email.")]
+        [EmailAddress(ErrorMessage = "Enter a valid email address.")]
+        public string Email { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Please enter a password.")]
+        [MinLength(8, ErrorMessage = "Password must be at least 8 characters.")]
+        public string Password { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Please confirm your password.")]
+        public string ConfirmPassword { get; set; } = string.Empty;
+    }
+
+    private sealed record RegisterRequest(
+        string UserName,
+        string Email,
+        string Password);
+}
+
