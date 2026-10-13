@@ -17,6 +17,36 @@ namespace SoundBite.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.12");
 
+            modelBuilder.Entity("ArtistAlbums", b =>
+                {
+                    b.Property<int>("AlbumsId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("ArtistsId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("AlbumsId", "ArtistsId");
+
+                    b.HasIndex("ArtistsId");
+
+                    b.ToTable("ArtistAlbums");
+                });
+
+            modelBuilder.Entity("ArtistTracks", b =>
+                {
+                    b.Property<int>("ArtistsId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("TracksId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("ArtistsId", "TracksId");
+
+                    b.HasIndex("TracksId");
+
+                    b.ToTable("ArtistTracks");
+                });
+
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRole", b =>
                 {
                     b.Property<string>("Id")
@@ -209,6 +239,107 @@ namespace SoundBite.Migrations
                     b.ToTable("AspNetUsers", (string)null);
                 });
 
+            modelBuilder.Entity("SoundBite.Models.Album", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("SpotifyId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SpotifyId")
+                        .IsUnique();
+
+                    b.ToTable("Albums");
+                });
+
+            modelBuilder.Entity("SoundBite.Models.Artist", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SpotifyId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SpotifyId")
+                        .IsUnique();
+
+                    b.ToTable("Artists");
+                });
+
+            modelBuilder.Entity("SoundBite.Models.Track", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("AlbumId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("SpotifyId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AlbumId");
+
+                    b.HasIndex("SpotifyId")
+                        .IsUnique();
+
+                    b.ToTable("Tracks");
+                });
+
+            modelBuilder.Entity("ArtistAlbums", b =>
+                {
+                    b.HasOne("SoundBite.Models.Album", null)
+                        .WithMany()
+                        .HasForeignKey("AlbumsId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SoundBite.Models.Artist", null)
+                        .WithMany()
+                        .HasForeignKey("ArtistsId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ArtistTracks", b =>
+                {
+                    b.HasOne("SoundBite.Models.Artist", null)
+                        .WithMany()
+                        .HasForeignKey("ArtistsId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SoundBite.Models.Track", null)
+                        .WithMany()
+                        .HasForeignKey("TracksId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>
                 {
                     b.HasOne("Microsoft.AspNetCore.Identity.IdentityRole", null)
@@ -258,6 +389,21 @@ namespace SoundBite.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("SoundBite.Models.Track", b =>
+                {
+                    b.HasOne("SoundBite.Models.Album", "Album")
+                        .WithMany("Tracks")
+                        .HasForeignKey("AlbumId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Album");
+                });
+
+            modelBuilder.Entity("SoundBite.Models.Album", b =>
+                {
+                    b.Navigation("Tracks");
                 });
 #pragma warning restore 612, 618
         }
