@@ -1,0 +1,120 @@
+@page "/catalogue/search"
+@rendermode InteractiveServer
+@using SoundBite.Interfaces
+@using SoundBite.Models
+@inject IMusicCatalog Catalog
+@inject ILogger<CatalogueSearch> Logger
+
+<PageTitle>Catalogue Search</PageTitle>
+
+<h1>Catalogue Search</h1>
+<p>Find artists by name, or albums and tracks by title.</p>
+
+<form @onsubmit="SearchAsync" @onsubmit:preventDefault>
+    <label for="catalogue-query" class="form-label">Search the catalogue</label>
+    <div class="input-group mb-3">
+        <input id="catalogue-query" type="search" class="form-control"
+               @bind="query" @bind:event="oninput" disabled="@isLoading"
+               placeholder="Enter a name or title" />
+        <button type="submit" class="btn btn-primary" disabled="@isLoading">Search</button>
+    </div>
+</form>
+
+<div aria-live="polite" aria-busy="@isLoading">
+    @if (isLoading)
+    {
+        <p role="status"><span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Searching...</p>
+    }
+    else if (error is not null)
+    {
+        <p class="alert alert-danger" role="alert">@error</p>
+    }
+    else if (results is null)
+    {
+        <p class="text-muted">Enter a name or title to search.</p>
+    }
+    else if (results.TotalCount == 0)
+    {
+        <p role="status">No results found for “@searchedQuery”. Try another name or title.</p>
+    }
+    else
+    {
+        <p role="status">@results.TotalCount results for “@searchedQuery”.</p>
+        <div class="row g-3">
+            <section class="col-md-4" aria-labelledby="artist-results">
+                <h2 id="artist-results" class="h4">Artists (@results.Artists.Count)</h2>
+                @if (results.Artists.Count == 0)
+                {
+                    <p class="text-muted">No matching artists.</p>
+                }
+                <ul class="list-group">
+                    @foreach (var artist in results.Artists)
+                    {
+                        <li class="list-group-item text-break" @key="artist.Id">@artist.Name</li>
+                    }
+                </ul>
+            </section>
+            <section class="col-md-4" aria-labelledby="album-results">
+                <h2 id="album-results" class="h4">Albums (@results.Albums.Count)</h2>
+                @if (results.Albums.Count == 0)
+                {
+                    <p class="text-muted">No matching albums.</p>
+                }
+                <ul class="list-group">
+                    @foreach (var album in results.Albums)
+                    {
+                        <li class="list-group-item text-break" @key="album.Id">@album.Title</li>
+                    }
+                </ul>
+            </section>
+            <section class="col-md-4" aria-labelledby="track-results">
+                <h2 id="track-results" class="h4">Tracks (@results.Tracks.Count)</h2>
+                @if (results.Tracks.Count == 0)
+                {
+                    <p class="text-muted">No matching tracks.</p>
+                }
+                <ul class="list-group">
+                    @foreach (var track in results.Tracks)
+                    {
+                        <li class="list-group-item text-break" @key="track.Id">@track.Title</li>
+                    }
+                </ul>
+            </section>
+        </div>
+    }
+</div>
+
+@code {
+    private string query = string.Empty;
+    private string searchedQuery = string.Empty;
+    private CatalogueSearchResults? results;
+    private bool isLoading;
+    private string? error;
+
+    private async Task SearchAsync()
+    {
+        if (isLoading)
+            return;
+
+        searchedQuery = query.Trim();
+        results = null;
+        error = null;
+        if (searchedQuery.Length == 0)
+            return;
+
+        isLoading = true;
+        try
+        {
+            results = await Catalog.SearchAsync(searchedQuery);
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Catalogue search failed");
+            error = "The catalogue could not be searched. Please try again.";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+}
