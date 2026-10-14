@@ -5,7 +5,7 @@ public class Review
     private static readonly HashSet<(int trackId, string review)> ExistingReviews = new();
 
     public int trackId { get; }
-    public string review { get; } 
+    public string reviewer { get; }
     public string comment { get; }
     public int rating { get; }
 
