@@ -39,21 +39,25 @@ namespace SoundBite.Data
                 .IsRequired(false)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            builder.Entity<Review>()
-                .HasOne(review => review.Track)
-                .WithMany()
-                .HasForeignKey(review => review.TrackId)
-                .OnDelete(DeleteBehavior.Cascade);
+            builder.Entity<Review>(entity =>
+            {
+                entity.HasOne(review => review.Track)
+                    .WithMany()
+                    .HasForeignKey(review => review.TrackId)
+                    .OnDelete(DeleteBehavior.Cascade);
 
-            builder.Entity<Review>()
-                .HasOne(review => review.User)
-                .WithMany()
-                .HasForeignKey(review => review.UserId)
-                .OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(review => review.User)
+                    .WithMany()
+                    .HasForeignKey(review => review.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
 
-            builder.Entity<Review>()
-                .HasIndex(review => new { review.TrackId, review.UserId })
-                .IsUnique();
+                entity.HasIndex(review => new { review.TrackId, review.UserId })
+                    .IsUnique();
+
+                entity.ToTable(table => table.HasCheckConstraint(
+                    "CK_Reviews_Rating",
+                    "\"Rating\" >= 1 AND \"Rating\" <= 5"));
+            });
 
             // SQLite unique indexes allow multiple NULLs for unknown external IDs.
             builder.Entity<Artist>().HasIndex(artist => artist.SpotifyId).IsUnique();

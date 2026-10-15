@@ -8,13 +8,43 @@ namespace SoundBite.Tests;
 
 public class ReviewServiceTests
 {
-    [Test]
-    public async Task CreateReviewPersistsReviewAndKeepsLatestMetadata()
-    {
-        var (factory, trackId) = await CreateFactoryAsync();
-        var service = new ReviewService(factory);
+    private SqliteConnection connection = null!;
+    private TestDbContextFactory factory = null!;
+    private ReviewService service = null!;
+    private int trackId;
 
-        var review = await service.CreateReviewAsync("user-1", trackId, 5, "Excellent track");
+    [SetUp]
+    public async Task SetUp()
+    {
+        connection = new SqliteConnection("DataSource=:memory:");
+        await connection.OpenAsync();
+
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        await using (var db = new ApplicationDbContext(options))
+        {
+            await db.Database.MigrateAsync();
+            db.Users.AddRange(
+                new ApplicationUser { Id = "user-1", UserName = "alice", Email = "alice@example.com", DisplayName = "Alice" },
+                new ApplicationUser { Id = "user-2", UserName = "bob", Email = "bob@example.com", DisplayName = "Bob" });
+            db.Tracks.Add(new Track { Title = "Mock track" });
+            await db.SaveChangesAsync();
+            trackId = db.Tracks.Single().Id;
+        }
+
+        factory = new TestDbContextFactory(options);
+        service = new ReviewService(factory);
+    }
+
+    [TearDown]
+    public async Task TearDown() => await connection.DisposeAsync();
+
+    [Test]
+    public async Task CreateReviewPersistsReviewAndReviewer()
+    {
+        var review = await service.CreateReviewAsync("user-1", trackId, 5, "  Excellent track  ");
 
         Assert.Multiple(() =>
         {
@@ -25,17 +55,15 @@ public class ReviewServiceTests
             Assert.That(review.Comment, Is.EqualTo("Excellent track"));
         });
 
-        var persisted = await service.GetUserReviewForTrackAsync("user-1", trackId);
-        Assert.That(persisted, Is.Not.Null);
-        Assert.That(persisted!.Comment, Is.EqualTo("Excellent track"));
+        var reviews = await service.GetReviewsForTrackAsync(trackId);
+        Assert.That(reviews, Has.Count.EqualTo(1));
+        Assert.That(reviews[0].User?.DisplayName, Is.EqualTo("Alice"));
+        Assert.That(await service.GetUserReviewForTrackAsync("user-1", trackId), Is.Not.Null);
     }
 
     [Test]
     public async Task DuplicateReviewForSameUserAndTrackIsRejected()
     {
-        var (factory, trackId) = await CreateFactoryAsync();
-        var service = new ReviewService(factory);
-
         await service.CreateReviewAsync("user-1", trackId, 5, "First");
 
         var exception = Assert.ThrowsAsync<InvalidOperationException>(async () =>
@@ -45,45 +73,77 @@ public class ReviewServiceTests
     }
 
     [Test]
-    public async Task InvalidRatingsAreRejected()
+    public async Task DatabaseUniqueConstraintRejectsDuplicateReview()
     {
-        var (factory, trackId) = await CreateFactoryAsync();
-        var service = new ReviewService(factory);
+        await service.CreateReviewAsync("user-1", trackId, 5, "First");
+        await using var db = factory.CreateDbContext();
+        db.Reviews.Add(new Review { UserId = "user-1", TrackId = trackId, Rating = 4, Comment = "Second" });
 
-        Assert.ThrowsAsync<ArgumentOutOfRangeException>(async () =>
-            await service.CreateReviewAsync("user-1", trackId, 0, "Bad"));
-
-        Assert.ThrowsAsync<ArgumentOutOfRangeException>(async () =>
-            await service.CreateReviewAsync("user-1", trackId, 6, "Bad"));
+        var exception = Assert.ThrowsAsync<DbUpdateException>(async () => await db.SaveChangesAsync());
+        Assert.That(exception!.InnerException, Is.TypeOf<SqliteException>());
+        Assert.That(((SqliteException)exception.InnerException!).SqliteExtendedErrorCode, Is.EqualTo(2067));
     }
 
-    private static async Task<(TestDbContextFactory factory, int trackId)> CreateFactoryAsync()
+    [Test]
+    public async Task DatabaseCheckConstraintRejectsOutOfRangeRating()
     {
-        var connection = new SqliteConnection("DataSource=:memory:");
-        await connection.OpenAsync();
+        using var command = connection.CreateCommand();
+        command.CommandText = """
+            INSERT INTO Reviews (Rating, Comment, UserId, TrackId, CreatedAt, UpdatedAt)
+            VALUES (0, '', 'user-1', $trackId, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            """;
+        command.Parameters.AddWithValue("$trackId", trackId);
 
-        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
-            .UseSqlite(connection)
-            .Options;
+        var exception = Assert.Throws<SqliteException>(() => command.ExecuteNonQuery());
+        Assert.That(exception!.SqliteExtendedErrorCode, Is.EqualTo(275));
+    }
 
-        await using (var db = new ApplicationDbContext(options))
+    [TestCase(0)]
+    [TestCase(6)]
+    public void ServiceRejectsOutOfRangeRating(int rating) =>
+        Assert.ThrowsAsync<ArgumentOutOfRangeException>(async () =>
+            await service.CreateReviewAsync("user-1", trackId, rating, "Bad"));
+
+    [Test]
+    public async Task UpdateReviewChangesExistingRecordWithoutCreatingAnother()
+    {
+        var created = await service.CreateReviewAsync("user-1", trackId, 3, "Original");
+        await Task.Delay(5);
+
+        var updated = await service.UpdateReviewAsync(created.Id, "user-1", 4, "Updated comment");
+
+        Assert.Multiple(() =>
         {
-            await db.Database.EnsureCreatedAsync();
-            db.Users.Add(new ApplicationUser { Id = "user-1", UserName = "alice", Email = "alice@example.com" });
-            db.Tracks.Add(new Track { Title = "Mock track" });
-            await db.SaveChangesAsync();
-        }
+            Assert.That(updated.Id, Is.EqualTo(created.Id));
+            Assert.That(updated.Rating, Is.EqualTo(4));
+            Assert.That(updated.Comment, Is.EqualTo("Updated comment"));
+            Assert.That(updated.CreatedAt, Is.EqualTo(created.CreatedAt));
+            Assert.That(updated.UpdatedAt, Is.GreaterThan(created.UpdatedAt));
+        });
 
-        var factory = new TestDbContextFactory(options);
-        var trackId = factory.CreateDbContext().Tracks.Single().Id;
-        return (factory, trackId);
+        await using var db = factory.CreateDbContext();
+        Assert.That(await db.Reviews.CountAsync(), Is.EqualTo(1));
+        var persisted = await service.GetUserReviewForTrackAsync("user-1", trackId);
+        Assert.That(persisted?.Comment, Is.EqualTo("Updated comment"));
     }
 
-    private sealed class TestDbContextFactory(DbContextOptions<ApplicationDbContext> options) : IDbContextFactory<ApplicationDbContext>
+    [Test]
+    public async Task UserCannotUpdateAnotherUsersReview()
+    {
+        var created = await service.CreateReviewAsync("user-1", trackId, 3, "Original");
+
+        Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await service.UpdateReviewAsync(created.Id, "user-2", 4, "Attempted edit"));
+
+        Assert.That(await service.GetReviewsForTrackAsync(trackId), Has.Count.EqualTo(1));
+    }
+
+    private sealed class TestDbContextFactory(DbContextOptions<ApplicationDbContext> options)
+        : IDbContextFactory<ApplicationDbContext>
     {
         public ApplicationDbContext CreateDbContext() => new(options);
 
         public ValueTask<ApplicationDbContext> CreateDbContextAsync(CancellationToken cancellationToken = default)
-            => new(new ApplicationDbContext(options));
+            => ValueTask.FromResult(CreateDbContext());
     }
 }

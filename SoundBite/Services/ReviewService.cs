@@ -15,6 +15,7 @@ public class ReviewService(IDbContextFactory<ApplicationDbContext> contextFactor
     {
         var cleanedComment = NormalizeComment(comment);
         ValidateReviewCreateInputs(userId, trackId, rating);
+        ValidateComment(cleanedComment);
 
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
 
@@ -49,6 +50,7 @@ public class ReviewService(IDbContextFactory<ApplicationDbContext> contextFactor
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
 
         return await db.Reviews.AsNoTracking()
+            .Include(review => review.User)
             .Where(review => review.TrackId == trackId)
             .OrderByDescending(review => review.CreatedAt)
             .ThenByDescending(review => review.Id)
@@ -75,6 +77,7 @@ public class ReviewService(IDbContextFactory<ApplicationDbContext> contextFactor
     {
         var cleanedComment = NormalizeComment(comment);
         ValidateReviewUpdateInputs(userId, reviewId, rating);
+        ValidateComment(cleanedComment);
 
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
 
@@ -96,6 +99,12 @@ public class ReviewService(IDbContextFactory<ApplicationDbContext> contextFactor
     {
         var trimmed = comment?.Trim();
         return trimmed ?? string.Empty;
+    }
+
+    private static void ValidateComment(string comment)
+    {
+        if (comment.Length > 2000)
+            throw new ArgumentException("Review comments cannot exceed 2000 characters.", nameof(comment));
     }
 
     private static void ValidateReviewCreateInputs(string userId, int trackId, int rating)
