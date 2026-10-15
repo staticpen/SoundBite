@@ -1,0 +1,107 @@
+@page "/tracks/{Id:int}"
+@attribute [StreamRendering]
+@using SoundBite.Interfaces
+@using SoundBite.Models
+@inject IMusicCatalog Catalog
+@inject ILogger<TrackDetails> Logger
+
+<PageTitle>@(track?.Title ?? "Track details") - SoundBite</PageTitle>
+
+<h1>Track details</h1>
+
+@if (loading)
+{
+    <p role="status">Loading track...</p>
+}
+else if (Id <= 0)
+{
+    <div class="alert alert-warning" role="alert">Invalid track ID. Please use a positive whole number.</div>
+}
+else if (failed)
+{
+    <div class="alert alert-danger" role="alert">We couldn't load this track. Please try again later.</div>
+}
+else if (track is null)
+{
+    <div class="alert alert-info" role="status">Track not found.</div>
+}
+else
+{
+    <article class="card">
+        <div class="card-body">
+            <h2 class="card-title">@track.Title</h2>
+            <h3 class="h5">Artists</h3>
+            @if (track.Artists.Count == 0)
+            {
+                <p class="text-muted">No artist information available.</p>
+            }
+            else
+            {
+                <ul>
+                    @foreach (var artist in track.Artists)
+                    {
+                        <li>@artist.Name</li>
+                    }
+                </ul>
+            }
+            <h3 class="h5">Album</h3>
+            @if (track.Album is { } album)
+            {
+                <p>@album.Title</p>
+                @if (!string.IsNullOrWhiteSpace(album.SpotifyId))
+                {
+                    <p>Album Spotify ID: <code>@album.SpotifyId</code>
+                        <a href="@SpotifyUrl("album", album.SpotifyId)" class="ms-2">Open album on Spotify</a>
+                    </p>
+                }
+            }
+            else
+            {
+                <p class="text-muted">No album information available.</p>
+            }
+            @if (!string.IsNullOrWhiteSpace(track.SpotifyId))
+            {
+                <h3 class="h5">Spotify</h3>
+                <p>Track Spotify ID: <code>@track.SpotifyId</code></p>
+                <a href="@SpotifyUrl("track", track.SpotifyId)" class="btn btn-outline-success">Open track on Spotify</a>
+            }
+        </div>
+    </article>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private Track? track;
+    private bool loading;
+    private bool failed;
+    private int loadVersion;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var version = ++loadVersion;
+        track = null;
+        failed = false;
+        loading = Id > 0;
+        if (!loading) return;
+
+        var requestedId = Id;
+        try
+        {
+            var result = await Catalog.GetTrackAsync(requestedId);
+            if (version == loadVersion) track = result;
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Unable to load track {TrackId}", requestedId);
+            if (version == loadVersion) failed = true;
+        }
+        finally
+        {
+            if (version == loadVersion) loading = false;
+        }
+    }
+
+    private static string SpotifyUrl(string type, string id) =>
+        $"https://open.spotify.com/{type}/{Uri.EscapeDataString(id)}";
+}
