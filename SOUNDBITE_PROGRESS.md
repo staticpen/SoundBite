@@ -102,9 +102,9 @@
   - **Impact:** Future catalogue features can extend this model without changing the core schema pattern.
   - **Status:** Confirmed
 
-- **Decision:** Treat the current `Review` implementation as a prototype rather than production-ready persistence logic.
-  - **Reason:** `Models/Review.cs` uses a static in-memory registry instead of EF Core persistence and does not represent the final app data model.
-  - **Impact:** Review / rating logic still needs proper EF mapping, validation, and service-level business rules before it can satisfy the product requirements.
+- **Decision:** Keep the review/rating feature as a small, EF-backed domain model rather than an in-memory placeholder.
+  - **Reason:** The review workflow is now represented in the data model and service layer, with database uniqueness and validation enforced through code and schema constraints.
+  - **Impact:** Product requirements for user reviews can now be satisfied with a stable domain and test coverage, and future work can build on the same pattern for other social features.
   - **Status:** Confirmed
 
 ## 7. Known Issues and Blockers

@@ -1,39 +1,29 @@
+using System.ComponentModel.DataAnnotations;
+using SoundBite.Data;
+
 namespace SoundBite.Models;
 
 public class Review
 {
-    private static readonly HashSet<(int trackId, string review)> ExistingReviews = new();
+    public int Id { get; set; }
 
-    public int trackId { get; }
-    public string reviewer { get; }
-    public string comment { get; }
-    public int rating { get; }
+    [Range(1, 5)]
+    public int Rating { get; set; }
 
-    public Review(int _trackId, string _reviewer, string _comment, int _rating ){
-        
-        // If for some reason, they were able to submit a review without a name.
-        if (string.IsNullOrWhiteSpace(_reviewer)){
-            throw new ArgumentException("Reviewer name cannot be empty.", nameof(_reviewer));
-        }  
+    [MaxLength(2000)]
+    public string Comment { get; set; } = string.Empty;
 
-        var key = (_trackId, _reviewer);
+    [Required]
+    public string UserId { get; set; } = string.Empty;
 
-        // One-review-per-track-per-reviewer rule.
-        if(ExistingReviews.Contains(key)){
-            throw new ArgumentException($"Reviewer '{_reviewer}' has already reviewed track ID {_trackId}.");
-        }
+    public ApplicationUser? User { get; set; }
 
-        trackId = _trackId;
-        reviewer = _reviewer;
-        comment = _comment ?? string.Empty;
-        rating = _rating;
+    [Required]
+    public int TrackId { get; set; }
 
-        // Register this review
-        ExistingReviews.Add(key);
-    }
+    public Track? Track { get; set; }
 
-    // Clears all stored review records (for testing)
-    public static void ResetRegistry(){
-        ExistingReviews.Clear();
-    }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }

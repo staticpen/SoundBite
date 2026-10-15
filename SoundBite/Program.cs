@@ -13,6 +13,7 @@ builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
         builder.Configuration.GetConnectionString("DefaultConnection")));
 
 builder.Services.AddScoped<IMusicCatalog, CatalogueService>();
+builder.Services.AddScoped<ReviewService>();
 
 builder.Services
     .AddAuthentication(options =>
