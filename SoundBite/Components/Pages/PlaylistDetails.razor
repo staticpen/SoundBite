@@ -1,0 +1,330 @@
+@page "/playlists/{Id:int}"
+@rendermode InteractiveServer
+
+@using System.ComponentModel.DataAnnotations
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using SoundBite.Interfaces
+@using SoundBite.Models
+@using SoundBite.Services
+@inject PlaylistService Playlists
+@inject IMusicCatalog Catalog
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager Navigation
+@inject ILogger<PlaylistDetails> Logger
+
+<PageTitle>@(playlist?.Name ?? "Playlist") - SoundBite</PageTitle>
+
+@if (loading)
+{
+    <p role="status">Loading playlist...</p>
+}
+else if (loadFailed)
+{
+    <div class="alert alert-danger" role="alert">The playlist couldn't be loaded. Please try again later.</div>
+}
+else if (playlist is null)
+{
+    <h1>Playlist not found</h1>
+    <p>This public playlist could not be found.</p>
+}
+else
+{
+    var ownerName = string.IsNullOrWhiteSpace(playlist.Owner?.DisplayName)
+        ? playlist.Owner?.UserName ?? "SoundBite user"
+        : playlist.Owner.DisplayName;
+    <article>
+        <div class="d-flex justify-content-between align-items-start gap-3">
+            <div>
+                <h1>@playlist.Name</h1>
+                <p class="text-muted">
+                    By @ownerName · @playlist.Items.Count tracks
+                    @if (!string.IsNullOrWhiteSpace(playlist.Owner?.UserName))
+                    {
+                        <span> · <a href="@($"/users/{Uri.EscapeDataString(playlist.Owner.UserName)}")">View profile</a></span>
+                    }
+                </p>
+                @if (!string.IsNullOrWhiteSpace(playlist.Description))
+                {
+                    <p>@playlist.Description</p>
+                }
+            </div>
+            <a class="btn btn-outline-secondary" href="/playlists">All playlists</a>
+        </div>
+
+        @if (isOwner)
+        {
+            <section class="card my-4" aria-labelledby="edit-playlist-heading">
+                <div class="card-body">
+                    <h2 id="edit-playlist-heading" class="h4">Manage playlist</h2>
+                    <EditForm Model="editModel" OnValidSubmit="UpdatePlaylistAsync">
+                        <DataAnnotationsValidator />
+                        <ValidationSummary />
+                        <div class="mb-3">
+                            <label class="form-label" for="edit-playlist-name">Name</label>
+                            <InputText id="edit-playlist-name" @bind-Value="editModel.Name" class="form-control" maxlength="100" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="edit-playlist-description">Description</label>
+                            <InputTextArea id="edit-playlist-description" @bind-Value="editModel.Description" class="form-control" maxlength="1000" rows="3" />
+                        </div>
+                        <button type="submit" class="btn btn-primary" disabled="@busy">Save changes</button>
+                    </EditForm>
+                    <div class="mt-3">
+                        @if (confirmDelete)
+                        {
+                            <span class="me-2">Delete this playlist and its track list?</span>
+                            <button class="btn btn-danger btn-sm me-2" @onclick="DeletePlaylistAsync" disabled="@busy">Confirm delete</button>
+                            <button class="btn btn-outline-secondary btn-sm" @onclick="CancelDelete" disabled="@busy">Cancel</button>
+                        }
+                        else
+                        {
+                            <button class="btn btn-outline-danger btn-sm" @onclick="RequestDelete" disabled="@busy">Delete playlist</button>
+                        }
+                    </div>
+                    @if (!string.IsNullOrWhiteSpace(message))
+                    {
+                        <p class="mt-3 mb-0" role="status">@message</p>
+                    }
+                </div>
+            </section>
+
+            <section class="card my-4" aria-labelledby="add-track-heading">
+                <div class="card-body">
+                    <h2 id="add-track-heading" class="h4">Add tracks</h2>
+                    <form @onsubmit="SearchTracksAsync" @onsubmit:preventDefault>
+                        <label for="playlist-track-search" class="form-label">Search catalogue</label>
+                        <div class="input-group mb-3">
+                            <input id="playlist-track-search" type="search" class="form-control" @bind="trackQuery" @bind:event="oninput" placeholder="Track title" />
+                            <button type="submit" class="btn btn-outline-primary" disabled="@searching">Search</button>
+                        </div>
+                    </form>
+                    @if (!string.IsNullOrWhiteSpace(searchMessage))
+                    {
+                        <p role="status">@searchMessage</p>
+                    }
+                    @if (searchResults is not null)
+                    {
+                        <ul class="list-group">
+                            @foreach (var track in searchResults.Tracks)
+                            {
+                                <li class="list-group-item d-flex justify-content-between align-items-center gap-3" @key="track.Id">
+                                    <span>@track.Title</span>
+                                    @if (playlist.Items.Any(item => item.TrackId == track.Id))
+                                    {
+                                        <span class="text-muted">Already added</span>
+                                    }
+                                    else
+                                    {
+                                        <button class="btn btn-sm btn-outline-primary" @onclick="() => AddTrackAsync(track.Id)" disabled="@busy">Add</button>
+                                    }
+                                </li>
+                            }
+                        </ul>
+                    }
+                </div>
+            </section>
+        }
+
+        <section class="mt-4" aria-labelledby="playlist-tracks-heading">
+            <h2 id="playlist-tracks-heading">Tracks</h2>
+            @if (playlist.Items.Count == 0)
+            {
+                <p class="text-muted">This playlist has no tracks yet.</p>
+            }
+            else
+            {
+                <ol class="list-group list-group-numbered">
+                    @foreach (var item in playlist.Items.OrderBy(item => item.Position))
+                    {
+                        <li class="list-group-item d-flex justify-content-between align-items-center gap-3" @key="item.Id">
+                            <span>
+                                <a href="@($"/tracks/{item.TrackId}")">@item.Track?.Title</a>
+                                @if (item.Track is { Artists.Count: > 0 } track)
+                                {
+                                    <span class="text-muted"> — @string.Join(", ", track.Artists.Select(artist => artist.Name))</span>
+                                }
+                            </span>
+                            @if (isOwner)
+                            {
+                                <button class="btn btn-sm btn-outline-danger" @onclick="() => RemoveTrackAsync(item.TrackId)" disabled="@busy">Remove</button>
+                            }
+                        </li>
+                    }
+                </ol>
+            }
+        </section>
+    </article>
+}
+
+@code {
+    [Parameter]
+    public int Id { get; set; }
+
+    private readonly EditPlaylistInput editModel = new();
+    private Playlist? playlist;
+    private CatalogueSearchResults? searchResults;
+    private string? userId;
+    private string? message;
+    private string? searchMessage;
+    private string trackQuery = string.Empty;
+    private bool loading = true;
+    private bool loadFailed;
+    private bool busy;
+    private bool searching;
+    private bool confirmDelete;
+    private bool isOwner;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        userId = state.User.FindFirstValue(ClaimTypes.NameIdentifier);
+        await LoadPlaylistAsync();
+    }
+
+    private async Task LoadPlaylistAsync()
+    {
+        loading = true;
+        loadFailed = false;
+        try
+        {
+            var result = await Playlists.GetPublicPlaylistAsync(Id);
+            playlist = result;
+            isOwner = result is not null && !string.IsNullOrWhiteSpace(userId) && result.OwnerId == userId;
+            if (result is not null)
+            {
+                editModel.Name = result.Name;
+                editModel.Description = result.Description;
+            }
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Unable to load playlist {PlaylistId}", Id);
+            loadFailed = true;
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task UpdatePlaylistAsync()
+    {
+        if (!isOwner || playlist is null || string.IsNullOrWhiteSpace(userId))
+            return;
+
+        await RunMutationAsync(async () =>
+        {
+            await Playlists.UpdateAsync(userId, playlist.Id, editModel.Name, editModel.Description);
+            await LoadPlaylistAsync();
+            message = "Playlist updated.";
+        }, "update playlist");
+    }
+
+    private async Task DeletePlaylistAsync()
+    {
+        if (!isOwner || playlist is null || string.IsNullOrWhiteSpace(userId))
+            return;
+
+        await RunMutationAsync(async () =>
+        {
+            await Playlists.DeleteAsync(userId, playlist.Id);
+            Navigation.NavigateTo("/playlists");
+        }, "delete playlist");
+    }
+
+    private void RequestDelete() => confirmDelete = true;
+
+    private void CancelDelete() => confirmDelete = false;
+
+    private async Task SearchTracksAsync()
+    {
+        searchResults = null;
+        searchMessage = null;
+        var query = trackQuery.Trim();
+        if (query.Length == 0)
+        {
+            searchMessage = "Enter a track title to search.";
+            return;
+        }
+
+        searching = true;
+        try
+        {
+            searchResults = await Catalog.SearchAsync(query);
+            if (searchResults.Tracks.Count == 0)
+                searchMessage = "No matching tracks found.";
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Unable to search tracks for playlist {PlaylistId}", Id);
+            searchMessage = "Tracks couldn't be searched. Please try again.";
+        }
+        finally
+        {
+            searching = false;
+        }
+    }
+
+    private async Task AddTrackAsync(int trackId)
+    {
+        if (!isOwner || playlist is null || string.IsNullOrWhiteSpace(userId))
+            return;
+
+        await RunMutationAsync(async () =>
+        {
+            await Playlists.AddTrackAsync(userId, playlist.Id, trackId);
+            await LoadPlaylistAsync();
+            searchMessage = "Track added.";
+        }, "add track to playlist");
+    }
+
+    private async Task RemoveTrackAsync(int trackId)
+    {
+        if (!isOwner || playlist is null || string.IsNullOrWhiteSpace(userId))
+            return;
+
+        await RunMutationAsync(async () =>
+        {
+            await Playlists.RemoveTrackAsync(userId, playlist.Id, trackId);
+            await LoadPlaylistAsync();
+            message = "Track removed.";
+        }, "remove track from playlist");
+    }
+
+    private async Task RunMutationAsync(Func<Task> mutation, string operation)
+    {
+        busy = true;
+        message = null;
+        try
+        {
+            await mutation();
+        }
+        catch (ArgumentException exception)
+        {
+            message = exception.Message;
+        }
+        catch (InvalidOperationException exception)
+        {
+            message = exception.Message;
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Unable to {Operation} for playlist {PlaylistId}", operation, Id);
+            message = "That change couldn't be saved. Please try again.";
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private sealed class EditPlaylistInput
+    {
+        [Required, MaxLength(100)]
+        public string Name { get; set; } = string.Empty;
+
+        [MaxLength(1000)]
+        public string Description { get; set; } = string.Empty;
+    }
+}

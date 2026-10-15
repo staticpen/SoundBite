@@ -17,6 +17,8 @@ namespace SoundBite.Data
         public DbSet<Album> Albums => Set<Album>();
         public DbSet<Track> Tracks => Set<Track>();
         public DbSet<Review> Reviews => Set<Review>();
+        public DbSet<Playlist> Playlists => Set<Playlist>();
+        public DbSet<PlaylistItem> PlaylistItems => Set<PlaylistItem>();
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -58,6 +60,31 @@ namespace SoundBite.Data
                     "CK_Reviews_Rating",
                     "\"Rating\" >= 1 AND \"Rating\" <= 5"));
             });
+
+            builder.Entity<Playlist>()
+                .HasOne(playlist => playlist.Owner)
+                .WithMany()
+                .HasForeignKey(playlist => playlist.OwnerId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.Entity<PlaylistItem>()
+                .HasOne(item => item.Playlist)
+                .WithMany(playlist => playlist.Items)
+                .HasForeignKey(item => item.PlaylistId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.Entity<PlaylistItem>()
+                .HasOne(item => item.Track)
+                .WithMany()
+                .HasForeignKey(item => item.TrackId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            builder.Entity<PlaylistItem>()
+                .HasIndex(item => new { item.PlaylistId, item.TrackId })
+                .IsUnique();
+
+            builder.Entity<PlaylistItem>()
+                .HasIndex(item => new { item.PlaylistId, item.Position });
 
             // SQLite unique indexes allow multiple NULLs for unknown external IDs.
             builder.Entity<Artist>().HasIndex(artist => artist.SpotifyId).IsUnique();
