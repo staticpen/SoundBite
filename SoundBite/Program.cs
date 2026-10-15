@@ -69,3 +69,6 @@ app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
 app.Run();
+
+// Expose the entry point to HTTP integration tests.
+public partial class Program { }

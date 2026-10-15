@@ -22,7 +22,7 @@
 
 - **Overall status:** In progress
 - **Current development phase:** Building working catalogue and social product features
-- **Current focus:** Duplicate registration route fixed; existing authentication UI failures documented
+- **Current focus:** Authentication UI repaired, reviewed and verified for commit
 - **Last verified:** 2026-10-15
 - **Current blocker:** Social interactions and external catalogue integration are not yet implemented
 
@@ -30,7 +30,7 @@
 
 | Feature | Status | Evidence / notes |
 |---|---|---|
-| User registration and authentication | Partially verified — UI blocked | Registration, login by username/email, logout and current-user API checks passed against a temporary migrated database. `/register`, `/login` and `/account` load; registration and login form submissions have existing failures documented below. |
+| Authentication | Implemented — verified | Website registration, username/email login, logout, profile editing, cookie persistence and authorization checks pass using isolated migrated databases; see latest work. |
 | User profiles | Implemented — verified | `ApplicationUser` stores a display name and bio; the account page can edit them, and `/users/{username}` displays the public profile without exposing account email. The migration and persistence round-trip are tested. |
 | Music catalogue | In progress | `Artist`, `Album`, and `Track` models exist with validation and EF relationship wiring in `ApplicationDbContext.cs`. There is no catalog UI or metadata service implementation beyond the model layer. |
 | Spotify integration | Not started | `Services/SpotifyCatalogService.cs` is empty and there is no client configuration or API integration yet. |
@@ -43,10 +43,26 @@
 | Activity feed | Not started | `Models/ActivityItem.cs`, `Services/FeedService.cs`, and social service classes are still empty or incomplete. |
 | Rankings and trends | Planned | `Services/RankingService.cs`, `Services/TrendService.cs`, `Strategies/PopularityRankingStrategy.cs`, and `Strategies/RatingRankingStrategy.cs` exist, but no implemented ranking logic is visible in the current code. |
 | Administrative user management | Not started | `Services/AdminService.cs` is empty and there is no admin UI or authorization pattern beyond Identity setup. |
-| Automated tests | Complete — verified | The NUnit test project passed: 144 tests succeeded, 0 failed, 0 skipped (2026-10-15). |
-| Git and repository hygiene | Verified | `FixDuplicateRegisterRoute` starts at fetched `origin/main` (`1cd65a0`); route fix, regression tests and progress update are uncommitted. |
+| Automated tests | Passed — verified | 153 NUnit tests passed, 0 failed/skipped (2026-10-15), including 9 HTTP authentication regression cases. |
+| Git and repository hygiene | Verified | `FixAuthenticationUI` at fetched `origin/main` (`168d967`, includes PR #13); authentication changes reviewed for the commit `Fix authentication UI and cookie handling`. Existing database unchanged. |
 
 ## 4. Latest Completed Work
+
+### 2026-10-15 — Authentication UI repaired and verified
+
+- Fetched `origin/main` and confirmed PR #13's routing fix: `168d967faf1de9efc3619e34d2e0bddb041be903`. The requested `FixAuthenticationUI` branch already existed at exactly that commit with a clean working tree, so it was reused without resetting it.
+- Root causes: Register used a relative API URL on an HttpClient without a base address. Account called cookie-writing Identity methods inside an Interactive Server circuit after HTTP response headers had started. A server-side HTTP client would also not deliver its received cookie to the browser.
+- Solution: `/register`, `/login`, and `/account` use static SSR with named HTTP POST forms, form binding, server validation and antiforgery protection. App selects render mode through `AcceptsInteractiveRouting()`. Registration and login issue Identity cookies during the HTTP request and redirect to `/account`; logout is an antiforgery-protected POST. Other pages retain interactivity. Account links to the dedicated registration page rather than maintaining a second registration implementation. Profile loading preserves posted values; updates resolve the current authenticated user on the server. Website login enables Identity lockout counting.
+- Changed files: `SoundBite/Components/App.razor`, `SoundBite/Components/Pages/Account.razor`, `SoundBite/Components/Pages/Register.razor`, `SoundBite/Program.cs` (public entry point for integration tests), `SoundBite.Tests/SoundBite.Tests.csproj` (MVC testing dependency), new `SoundBite.Tests/AuthenticationUiTests.cs`, and this progress file. No models, migrations, review/playlist services, or existing JSON API endpoints changed.
+- `dotnet build SoundBite/SoundBite.csproj --nologo`: passed, 0 warnings/errors. `dotnet test SoundBite.Tests/SoundBite.Tests.csproj --nologo`: **153 passed, 0 failed, 0 skipped**. Nine new HTTP cases cover registration cookie issuance, username/email login, logout, profile persistence/public privacy, invalid credentials/duplicate registration/password mismatch, invalid profile rejection, anonymous profile forgery, and missing antiforgery tokens on all four forms. Authenticated/anonymous review and playlist rendering is also asserted; existing ownership and service authorization tests pass.
+- Browser verified using `http://localhost:5193`: registration auto-login; profile editing and persisted values; email login; logout; authenticated refresh/navigation; authenticated playlist creation with owner management controls; authenticated review submission; anonymous public review/playlist reading without mutation controls. Browser input automation required actual keyboard change events for interactive forms. No application defect remained from that tooling behavior.
+- Isolation: fresh browser database `/tmp/soundbite-auth-browser/test.db` migrated using an external console harness, with one test track. Server launched with explicit `ConnectionStrings__DefaultConnection` override. HTTP tests each migrate their own unique temporary SQLite database and remove it after disposal. Existing `SoundBite/soundbite.db` SHA-256 before/after remained `ead1d21ea950e99cd6548f23d0b83159ac69c24b2bd4cbbf2dcac8376159eeaf`.
+- Diff hygiene: `git -c core.whitespace=cr-at-eol diff --check` passed; existing CRLF line endings were preserved in App and Program.
+- Commit verification (2026-10-15): reviewed the full tracked diff and new test file; no unrelated changes found. Re-ran the full application build (0 warnings/errors) and NUnit suite (153 passed, 0 failed/skipped). Route uniqueness/ownership and live HTTP authentication tests passed. Antiforgery tokens are generated by SSR EditForms and explicitly on logout; missing tokens are rejected on all four forms.
+- Security review: Identity cookies received over HTTPS have Secure, HttpOnly and SameSite=Lax flags (regression asserted); the existing framework SecurePolicy follows the request, with HTTPS redirection and production HSTS in place. Sign-ins use session cookies. All UI redirects target the fixed `/account` path; an external query/form ReturnUrl is ignored in a new regression test. Failed login/registration submissions now clear bound passwords before rendering, including invalid-form submissions. Regression assertions cover failed credentials, mismatched and duplicate registration password disclosure, and public-profile email privacy. No credential logging or new sensitive API responses were introduced; pre-existing JSON APIs are unchanged.
+- Database verification: `SoundBite/soundbite.db` is byte-identical to HEAD and retains SHA-256 `ead1d21ea950e99cd6548f23d0b83159ac69c24b2bd4cbbf2dcac8376159eeaf` after the full test run. Only temporary/in-memory databases were used by tests.
+- Outstanding: no blocker remains for the requested authentication UI flows. Existing JSON APIs remain separate and unchanged; broader authentication features such as confirmation/recovery and cross-tab circuit revalidation were not added. The application database was not migrated. Pre-commit review completed; this work is included in `Fix authentication UI and cookie handling`. No push or merge authorized or performed.
+
 
 ### 2026-10-15 — Duplicate registration route fixed and verified
 
@@ -131,8 +147,8 @@
 
 | Issue | Impact | Evidence | Next action | Status |
 |---|---|---|---|---|
-| Registration form cannot reach endpoint | Dedicated registration submission fails | Browser message and unconfigured HttpClient base address | Repair request transport in a separate authentication task | Open |
-| Interactive login cannot set cookie | Valid login terminates circuit | Server reports read-only response headers in Account.LoginAsync | Move cookie issuance to an HTTP request in a separate authentication task | Open |
+| Registration form cannot reach endpoint | Resolved | Replaced server-side loopback HTTP call with static SSR form processing | Verified in browser and HTTP tests | Closed |
+| Interactive login cannot set cookie | Resolved | Cookie operations now execute during HTTP form requests before rendering | Verified registration, login and logout | Closed |
 | Social product features are not yet implemented | The app does not yet support the planned social discovery workflows | Empty follow, like, comment, and feed services/models | Implement follows and a basic activity feed | Open |
 | Social persistence layer is missing | Follows, likes, comments, and feed features cannot be used reliably | Empty `Follow.cs`, `Like.cs`, `Comment.cs`, `ActivityItem.cs`, and related services | Design and implement the social model and service layer | Open |
 | No Spotify client is configured | Music catalogue enrichment is not connected to external metadata | `SpotifyCatalogService.cs` is empty and no API client configuration exists | Add a service abstraction and integrate Spotify metadata access | Open |
@@ -142,19 +158,19 @@
 | Check | Result | Notes |
 |---|---|---|
 | Application build | Passed | `dotnet test SoundBite.Tests/SoundBite.Tests.csproj -v minimal` built the app and test project successfully. |
-| Automated tests | Passed | 144 tests discovered and executed; 144 succeeded; 0 failed; 0 skipped. |
+| Automated tests | Passed — verified | 153 NUnit tests passed, 0 failed/skipped (2026-10-15), including 9 HTTP authentication regression cases. |
 | Application startup | Passed | Command: `dotnet run --project SoundBite --urls http://localhost:5080` → app reported `Now listening on: http://localhost:5080` and `Application started.` |
-| Relevant feature behaviour | Partially verified | All four requested routes loaded in-browser. API authentication passed against temporary data; registration/login form submission failures were reproduced (see latest work). |
+| Relevant feature behaviour | Passed | Website authentication, profile editing, refresh/navigation and authenticated/anonymous review/playlist access verified; see latest work. |
 | Database migrations | Passed | Profile, review, and playlist migrations are exercised by SQLite persistence tests, including playlist creation and CRUD against the migrated schema. |
 
 ## 9. Git Status
 
-- **Active branch:** `FixDuplicateRegisterRoute`, created from latest fetched `origin/main`, `1cd65a04ca70b25181aa2666eb962136b57c980a`.
-- **Initial checkout:** Clean on `CatalogueIntegrationFinal`; no local changes needed stashing.
-- **Uncommitted changes:** `SoundBite/Components/Pages/Account.razor`, new `SoundBite.Tests/PageRouteTests.cs`, `SOUNDBITE_PROGRESS.md`.
-- **Commit/push/merge:** None performed. Review the diff before authorizing publication.
-- **Suggested commit title:** `Fix duplicate registration route and add route regression tests`
-- **Suggested description:** Keep registration on its dedicated page, preserve login/account aliases, add duplicate-route and route-ownership checks, and document build, NUnit and isolated browser/API verification plus existing authentication UI blockers.
+- **Active branch:** `FixAuthenticationUI`, already based on latest fetched `origin/main`, `168d967faf1de9efc3619e34d2e0bddb041be903` (PR #13 included).
+- **Initial checkout:** Clean. No unrelated changes or stashing required.
+- **Authentication commit scope:** Seven files listed in the latest authentication entry above.
+- **Commit:** `Fix authentication UI and cookie handling`. **Push/merge:** Not performed.
+- **Commit title:** `Fix authentication UI and cookie handling`
+- **Suggested description:** Render account routes statically so Identity can issue cookies during HTTP requests, consolidate registration, preserve profile editing, and add isolated HTTP regression coverage.
 
 ## 10. Next Recommended Tasks
 
@@ -170,12 +186,9 @@
 
 ## 11. Handover for the Next Chat Session
 
-- **What was accomplished:** Added persisted playlists and ordered items, public listing/details, owner-only management, duplicate prevention, an EF migration, and service tests.
-- **What remains incomplete:** Follow relationships, likes/comments, activity feed, rankings/trends, Spotify integration, and profile activity.
-- **Known errors or blockers:** No build or test failures remain. Browser-based playlist interaction and applying `AddPlaylists` to the configured application database are outstanding.
-- **Most relevant files for the next task:** `SoundBite/Models/Follow.cs`, `SoundBite/Services/FollowService.cs`, and feed model/service placeholders.
-- **Next recommended action:** Implement follow/unfollow and a basic activity feed.
-- **Verification that remains outstanding:** Authentication UI requires the separately documented fixes; profile editing, review and playlist browser workflows remain unverified. Latest route and API checks are recorded in section 4.
+- Authentication UI fixes are implemented and verified, with 153 passing tests and browser evidence recorded in section 4. Reviewed for commit on `FixAuthenticationUI`; do not push or merge without authorization.
+- Existing database remains unchanged and unmigrated by this session. Temporary browser data is separate under `/tmp/soundbite-auth-browser`.
+- Social features, Spotify integration and profile activity remain incomplete. Those are independent of the resolved authentication UI bugs.
 
 ## 12. Instructions for Updating This File
 
