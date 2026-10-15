@@ -167,8 +167,12 @@ public class CataloguePersistenceTests
     {
         var migrator = db.GetService<IMigrator>();
         migrator.Migrate("20261009035437_InitialCreate");
-        db.Users.Add(new ApplicationUser { UserName = "existing-user" });
-        db.SaveChanges();
+        db.Database.ExecuteSqlRaw("""
+            INSERT INTO AspNetUsers
+                (Id, UserName, EmailConfirmed, PhoneNumberConfirmed, TwoFactorEnabled, LockoutEnabled, AccessFailedCount)
+            VALUES
+                ('existing-user', 'existing-user', 0, 0, 0, 0, 0)
+            """);
         migrator.Migrate();
         Assert.That(db.Users.Count(), Is.EqualTo(1));
         Assert.That(db.Database.GetPendingMigrations(), Is.Empty);
@@ -179,6 +183,29 @@ public class CataloguePersistenceTests
         Assert.That(db.Users.Count(), Is.EqualTo(1));
         migrator.Migrate();
         Assert.That(db.Tracks.Count(), Is.Zero);
+    }
+
+    [Test]
+    public void UserProfileFieldsPersistAndMigrationHasNoPendingModelChanges()
+    {
+        var user = new ApplicationUser
+        {
+            UserName = "profile-user",
+            DisplayName = "Profile Name",
+            Bio = "Music fan"
+        };
+        db.Users.Add(user);
+        db.SaveChanges();
+        db.ChangeTracker.Clear();
+
+        var reloaded = db.Users.Single();
+        Assert.Multiple(() =>
+        {
+            Assert.That(reloaded.DisplayName, Is.EqualTo("Profile Name"));
+            Assert.That(reloaded.Bio, Is.EqualTo("Music fan"));
+            Assert.That(db.Database.GetPendingMigrations(), Is.Empty);
+            Assert.That(db.Database.HasPendingModelChanges(), Is.False);
+        });
     }
 
     private static void AssertConstraint(TestDelegate action, int extendedCode)

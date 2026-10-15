@@ -22,8 +22,35 @@
             <div class="card-body">
                 <h2 class="h4">Signed in</h2>
                 <p class="mb-1"><strong>Username:</strong> @authContext.User.Identity?.Name</p>
-                <p class="mb-3"><strong>Email:</strong> @userEmail</p>
+                <p class="mb-1"><strong>Email:</strong> @userEmail</p>
+                <p class="mb-3"><strong>Public profile:</strong> <a href="@profileUrl">@profileName</a></p>
                 <button class="btn btn-outline-secondary" @onclick="LogoutAsync">Log out</button>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-body">
+                <h2 class="h4">Edit profile</h2>
+                <EditForm Model="profileModel" OnValidSubmit="SaveProfileAsync">
+                    <DataAnnotationsValidator />
+                    <ValidationSummary />
+
+                    <div class="mb-3">
+                        <label class="form-label">Display name</label>
+                        <InputText @bind-Value="profileModel.DisplayName" class="form-control" maxlength="80" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Bio</label>
+                        <InputTextArea @bind-Value="profileModel.Bio" class="form-control" maxlength="500" rows="4" />
+                    </div>
+
+                    <button type="submit" class="btn btn-primary" disabled="@isBusy">Save profile</button>
+                    @if (!string.IsNullOrWhiteSpace(profileMessage))
+                    {
+                        <div class="alert @(profileSaved ? "alert-success" : "alert-danger") mt-3 mb-0" role="status">@profileMessage</div>
+                    }
+                </EditForm>
             </div>
         </div>
     </Authorized>
@@ -99,13 +126,25 @@
     private bool isBusy;
     private string? registerMessage;
     private string? loginMessage;
+    private string? profileMessage;
     private string userEmail = string.Empty;
+    private string profileName = string.Empty;
+    private string profileUrl = "/account";
+    private bool profileSaved;
+    private readonly ProfileInput profileModel = new();
 
     protected override async Task OnInitializedAsync()
     {
         var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         var user = await UserManager.GetUserAsync(state.User);
         userEmail = user?.Email ?? string.Empty;
+        if (user is not null)
+        {
+            profileModel.DisplayName = user.DisplayName;
+            profileModel.Bio = user.Bio ?? string.Empty;
+            profileName = string.IsNullOrWhiteSpace(user.DisplayName) ? user.UserName ?? string.Empty : user.DisplayName;
+            profileUrl = $"/users/{Uri.EscapeDataString(user.UserName ?? string.Empty)}";
+        }
     }
 
     private async Task RegisterAsync()
@@ -179,6 +218,41 @@
         Navigation.NavigateTo("/account", forceLoad: false);
     }
 
+    private async Task SaveProfileAsync()
+    {
+        profileMessage = null;
+        profileSaved = false;
+        isBusy = true;
+        try
+        {
+            var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var user = await UserManager.GetUserAsync(state.User);
+            if (user is null)
+            {
+                profileMessage = "Your session has expired. Please sign in again.";
+                return;
+            }
+
+            user.DisplayName = profileModel.DisplayName.Trim();
+            user.Bio = string.IsNullOrWhiteSpace(profileModel.Bio) ? null : profileModel.Bio.Trim();
+            var result = await UserManager.UpdateAsync(user);
+            if (!result.Succeeded)
+            {
+                profileMessage = string.Join(" ", result.Errors.Select(error => error.Description));
+                return;
+            }
+
+            profileName = string.IsNullOrWhiteSpace(user.DisplayName) ? user.UserName ?? string.Empty : user.DisplayName;
+            profileUrl = $"/users/{Uri.EscapeDataString(user.UserName ?? string.Empty)}";
+            profileMessage = "Profile saved.";
+            profileSaved = true;
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+
     private sealed class RegisterInput
     {
         [Required]
@@ -211,5 +285,14 @@
             UserNameOrEmail = string.Empty;
             Password = string.Empty;
         }
+    }
+
+    private sealed class ProfileInput
+    {
+        [Required, MaxLength(80)]
+        public string DisplayName { get; set; } = string.Empty;
+
+        [MaxLength(500)]
+        public string Bio { get; set; } = string.Empty;
     }
 }
