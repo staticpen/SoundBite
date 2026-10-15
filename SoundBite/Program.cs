@@ -14,6 +14,7 @@ builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
 
 builder.Services.AddScoped<IMusicCatalog, CatalogueService>();
 builder.Services.AddScoped<ReviewService>();
+builder.Services.AddScoped<PlaylistService>();
 
 builder.Services
     .AddAuthentication(options =>
