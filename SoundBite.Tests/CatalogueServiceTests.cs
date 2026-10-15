@@ -1,3 +1,5 @@
+using System.Data.Common;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -14,6 +16,7 @@ public class CatalogueServiceTests
     private ServiceProvider provider = null!;
     private IServiceScope scope = null!;
     private IMusicCatalog catalog = null!;
+    private readonly QueryCounter queryCounter = new();
 
     [SetUp]
     public async Task SetUp()
@@ -21,7 +24,7 @@ public class CatalogueServiceTests
         connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
         await connection.OpenAsync();
         var services = new ServiceCollection();
-        services.AddDbContextFactory<ApplicationDbContext>(options => options.UseSqlite(connection));
+        services.AddDbContextFactory<ApplicationDbContext>(options => options.UseSqlite(connection).AddInterceptors(queryCounter));
         services.AddScoped<IMusicCatalog, CatalogueService>();
         provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
         scope = provider.CreateScope();
@@ -173,16 +176,136 @@ public class CatalogueServiceTests
         Assert.That(reloaded.Albums, Has.Count.EqualTo(3));
     }
 
+    [TestCase("lPh")]
+    [TestCase(" ALPHA ")]
+    public async Task SearchMatchesPartialNamesAndTitlesIgnoringCaseAndTrimsQuery(string query)
+    {
+        await SeedAsync();
+        var results = await catalog.SearchAsync(query);
+        Assert.That(results.Artists.Select(a => a.Id), Is.EqualTo(new[] { 1, 2 }));
+        Assert.That(results.Albums.Select(a => a.Id), Is.EqualTo(new[] { 1, 2 }));
+        Assert.That(results.Tracks.Select(t => t.Id), Is.EqualTo(new[] { 1, 2 }));
+        Assert.That(results.TotalCount, Is.EqualTo(6));
+    }
+
+    [TestCase(null)]
+    [TestCase("")]
+    [TestCase("   ")]
+    [TestCase("not found")]
+    public async Task BlankAndUnmatchedSearchesReturnEmptyResults(string? query)
+    {
+        await SeedAsync();
+        var results = await catalog.SearchAsync(query);
+        Assert.That(results.Artists, Is.Empty);
+        Assert.That(results.Albums, Is.Empty);
+        Assert.That(results.Tracks, Is.Empty);
+    }
+
+    [Test]
+    public async Task SearchOfEmptyCatalogueReturnsNoResults()
+    {
+        Assert.That((await catalog.SearchAsync("music")).TotalCount, Is.Zero);
+    }
+
+    [Test]
+    public async Task SearchFindsSinglesWithoutReturningTheirArtistsOrAlbums()
+    {
+        await SeedAsync();
+        var results = await catalog.SearchAsync("SINGLE");
+        Assert.That(results.Artists, Is.Empty);
+        Assert.That(results.Albums, Is.Empty);
+        Assert.That(results.Tracks.Select(t => t.Id), Is.EqualTo(new[] { 4 }));
+    }
+
+    [Test]
+    public async Task SearchHandlesAccentedCaseAndLiteralWildcardCharacters()
+    {
+        await using (var db = CreateContext())
+        {
+            db.AddRange(new Artist { Name = "Écho 100%_" },
+                new Album { Title = "Écho 100%_" }, new Track { Title = "Écho 100%_" },
+                new Artist { Name = "Other" });
+            await db.SaveChangesAsync();
+        }
+        Assert.That((await catalog.SearchAsync("éCHO")).TotalCount, Is.EqualTo(3));
+        Assert.That((await catalog.SearchAsync("%_")).TotalCount, Is.EqualTo(3));
+    }
+
+    [TestCase(null, 0)]
+    [TestCase(" \t\n", 0)]
+    [TestCase("Alpha", 3)]
+    [TestCase("not found", 3)]
+    public async Task SearchOnlyQueriesEachEntitySetOnce(string? query, int expectedQueries)
+    {
+        await SeedAsync();
+        queryCounter.Count = 0;
+        var results = await catalog.SearchAsync(query);
+        _ = results.TotalCount;
+        Assert.That(queryCounter.Count, Is.EqualTo(expectedQueries));
+    }
+
+    [TestCase("'")]
+    [TestCase("\"")]
+    [TestCase("<script>")]
+    [TestCase("%")]
+    [TestCase("_")]
+    [TestCase("[a]")]
+    [TestCase("🎵")]
+    public async Task SearchTreatsSpecialCharactersAsLiteralText(string term)
+    {
+        await using (var db = CreateContext())
+        {
+            db.AddRange(new Artist { Name = "Before " + term + " After" },
+                new Album { Title = "Before " + term + " After" },
+                new Track { Title = "Before " + term + " After" },
+                new Artist { Name = "Other" }, new Album { Title = "Other" },
+                new Track { Title = "Other" });
+            await db.SaveChangesAsync();
+        }
+        Assert.That((await catalog.SearchAsync(term)).TotalCount, Is.EqualTo(3));
+    }
+
+    [Test]
+    public async Task SearchOrdersResultsAndReturnsDetachedModelsWithoutRelationships()
+    {
+        await SeedAsync();
+        var results = await catalog.SearchAsync("l");
+        Assert.That(results.Artists.Select(a => a.Id), Is.EqualTo(new[] { 1, 2, 3 }));
+        Assert.That(results.Albums.Select(a => a.Id), Is.EqualTo(new[] { 1, 2, 3 }));
+        Assert.That(results.Tracks.Select(t => t.Id), Is.EqualTo(new[] { 1, 2, 4, 3 }));
+        Assert.That(results.Artists.All(a => a.Albums.Count == 0 && a.Tracks.Count == 0), Is.True);
+        Assert.That(results.Albums.All(a => a.Artists.Count == 0 && a.Tracks.Count == 0), Is.True);
+        Assert.That(results.Tracks.All(t => t.Artists.Count == 0 && t.Album is null), Is.True);
+        results.Artists[0].Name = "Changed";
+        results.Albums[0].Title = "Changed";
+        results.Tracks[0].Title = "Changed";
+        Assert.That((await catalog.SearchAsync("Alpha")).TotalCount, Is.EqualTo(6));
+    }
+
     [Test]
     public void AllOperationsHonorCancellation()
     {
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();
         var token = cancellation.Token;
+        Assert.That(async () => await catalog.SearchAsync("Alpha", token), Throws.InstanceOf<OperationCanceledException>());
+        Assert.That(async () => await catalog.SearchAsync(" ", token), Throws.InstanceOf<OperationCanceledException>());
         Assert.That(async () => await catalog.GetArtistsAsync(token), Throws.InstanceOf<OperationCanceledException>());
         Assert.That(async () => await catalog.GetArtistAsync(1, token), Throws.InstanceOf<OperationCanceledException>());
         Assert.That(async () => await catalog.GetAlbumsAsync(token), Throws.InstanceOf<OperationCanceledException>());
         Assert.That(async () => await catalog.GetAlbumAsync(1, token), Throws.InstanceOf<OperationCanceledException>());
         Assert.That(async () => await catalog.GetTrackAsync(1, token), Throws.InstanceOf<OperationCanceledException>());
+    }
+    private sealed class QueryCounter : DbCommandInterceptor
+    {
+        public int Count { get; set; }
+
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
+            DbCommand command, CommandEventData eventData,
+            InterceptionResult<DbDataReader> result, CancellationToken cancellationToken = default)
+        {
+            Count++;
+            return ValueTask.FromResult(result);
+        }
     }
 }

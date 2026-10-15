@@ -7,6 +7,32 @@ namespace SoundBite.Services;
 
 public class CatalogueService(IDbContextFactory<ApplicationDbContext> contextFactory) : IMusicCatalog
 {
+    public async Task<CatalogueSearchResults> SearchAsync(string? query, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var term = query?.Trim();
+        if (string.IsNullOrEmpty(term))
+            return new CatalogueSearchResults();
+
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        // For this small local catalogue, match in .NET so SQLite's ASCII-only
+        // case folding does not prevent case-insensitive matches in accented names.
+        var artists = await db.Artists.AsNoTracking().ToListAsync(cancellationToken);
+        var albums = await db.Albums.AsNoTracking().ToListAsync(cancellationToken);
+        var tracks = await db.Tracks.AsNoTracking().ToListAsync(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        return new CatalogueSearchResults
+        {
+            Artists = artists.Where(a => a.Name.Contains(term, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(a => a.Name, StringComparer.OrdinalIgnoreCase).ThenBy(a => a.Id).ToList(),
+            Albums = albums.Where(a => a.Title.Contains(term, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(a => a.Title, StringComparer.OrdinalIgnoreCase).ThenBy(a => a.Id).ToList(),
+            Tracks = tracks.Where(t => t.Title.Contains(term, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(t => t.Title, StringComparer.OrdinalIgnoreCase).ThenBy(t => t.Id).ToList()
+        };
+    }
+
     // Each call owns its context, including when Blazor components load concurrently.
     public async Task<IReadOnlyList<Artist>> GetArtistsAsync(CancellationToken cancellationToken = default)
     {

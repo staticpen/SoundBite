@@ -9,6 +9,12 @@ namespace SoundBite.Interfaces;
 /// </summary>
 public interface IMusicCatalog
 {
+    /// <summary>
+    /// Matches artist names and album/track titles by ordinal case-insensitive substring.
+    /// Trims the query; null or blank queries return empty results. Relationships are not loaded.
+    /// </summary>
+    Task<CatalogueSearchResults> SearchAsync(string? query, CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<Artist>> GetArtistsAsync(CancellationToken cancellationToken = default);
 
     /// <summary>Loads the artist's albums (including their tracks) and credited tracks.</summary>
