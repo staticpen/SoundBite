@@ -1,5 +1,6 @@
 @page "/account"
 @page "/login"
+@attribute [ExcludeFromInteractiveRouting]
 
 @using System.ComponentModel.DataAnnotations
 @using Microsoft.AspNetCore.Components.Authorization
@@ -22,14 +23,17 @@
                 <p class="mb-1"><strong>Username:</strong> @authContext.User.Identity?.Name</p>
                 <p class="mb-1"><strong>Email:</strong> @userEmail</p>
                 <p class="mb-3"><strong>Public profile:</strong> <a href="@profileUrl">@profileName</a></p>
-                <button class="btn btn-outline-secondary" @onclick="LogoutAsync">Log out</button>
+                <form method="post" @formname="logout" @onsubmit="LogoutAsync">
+                    <AntiforgeryToken />
+                    <button type="submit" class="btn btn-outline-secondary">Log out</button>
+                </form>
             </div>
         </div>
 
         <div class="card">
             <div class="card-body">
                 <h2 class="h4">Edit profile</h2>
-                <EditForm Model="profileModel" OnValidSubmit="SaveProfileAsync">
+                <EditForm method="post" FormName="profile" Model="profileModel" OnValidSubmit="SaveProfileAsync">
                     <DataAnnotationsValidator />
                     <ValidationSummary />
 
@@ -57,41 +61,9 @@
             <div class="col-md-6">
                 <div class="card h-100">
                     <div class="card-body">
-                        <h2 class="h4">Create account</h2>
-                        <EditForm Model="registerModel" OnValidSubmit="RegisterAsync">
-                            <DataAnnotationsValidator />
-                            <ValidationSummary />
-
-                            <div class="mb-3">
-                                <label class="form-label">Username</label>
-                                <InputText @bind-Value="registerModel.UserName" class="form-control" />
-                            </div>
-
-                            <div class="mb-3">
-                                <label class="form-label">Email</label>
-                                <InputText @bind-Value="registerModel.Email" class="form-control" />
-                            </div>
-
-                            <div class="mb-3">
-                                <label class="form-label">Password</label>
-                                <InputText type="password" @bind-Value="registerModel.Password" class="form-control" />
-                            </div>
-
-                            <button type="submit" class="btn btn-primary" disabled="@isBusy">Create account</button>
-                            @if (!string.IsNullOrWhiteSpace(registerMessage))
-                            {
-                                <div class="alert alert-danger mt-3 mb-0">@registerMessage</div>
-                            }
-                        </EditForm>
-                    </div>
-                </div>
-            </div>
-
-            <div class="col-md-6">
-                <div class="card h-100">
-                    <div class="card-body">
                         <h2 class="h4">Log in</h2>
-                        <EditForm Model="loginModel" OnValidSubmit="LoginAsync">
+                        <p>New here? <a href="/register">Create account</a></p>
+                        <EditForm method="post" FormName="login" Model="loginModel" OnValidSubmit="LoginAsync" OnInvalidSubmit="ClearLoginPassword">
                             <DataAnnotationsValidator />
                             <ValidationSummary />
 
@@ -119,58 +91,36 @@
 </AuthorizeView>
 
 @code {
-    private readonly RegisterInput registerModel = new();
-    private readonly LoginInput loginModel = new();
+    [SupplyParameterFromForm(FormName = "login")]
+    private LoginInput loginModel { get; set; } = default!;
     private bool isBusy;
-    private string? registerMessage;
     private string? loginMessage;
     private string? profileMessage;
     private string userEmail = string.Empty;
     private string profileName = string.Empty;
     private string profileUrl = "/account";
     private bool profileSaved;
-    private readonly ProfileInput profileModel = new();
+    [SupplyParameterFromForm(FormName = "profile")]
+    private ProfileInput profileModel { get; set; } = default!;
+
+    [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
 
     protected override async Task OnInitializedAsync()
     {
+        loginModel ??= new();
+        profileModel ??= new();
         var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         var user = await UserManager.GetUserAsync(state.User);
         userEmail = user?.Email ?? string.Empty;
         if (user is not null)
         {
-            profileModel.DisplayName = user.DisplayName;
-            profileModel.Bio = user.Bio ?? string.Empty;
+            if (HttpMethods.IsGet(HttpContext.Request.Method))
+            {
+                profileModel.DisplayName = user.DisplayName;
+                profileModel.Bio = user.Bio ?? string.Empty;
+            }
             profileName = string.IsNullOrWhiteSpace(user.DisplayName) ? user.UserName ?? string.Empty : user.DisplayName;
             profileUrl = $"/users/{Uri.EscapeDataString(user.UserName ?? string.Empty)}";
-        }
-    }
-
-    private async Task RegisterAsync()
-    {
-        registerMessage = null;
-        isBusy = true;
-        try
-        {
-            var user = new ApplicationUser
-            {
-                UserName = registerModel.UserName.Trim(),
-                Email = registerModel.Email.Trim()
-            };
-
-            var result = await UserManager.CreateAsync(user, registerModel.Password);
-            if (!result.Succeeded)
-            {
-                registerMessage = string.Join(" ", result.Errors.Select(error => error.Description));
-                return;
-            }
-
-            await SignInManager.SignInAsync(user, isPersistent: false);
-            registerModel.Reset();
-            Navigation.NavigateTo("/account", forceLoad: false);
-        }
-        finally
-        {
-            isBusy = false;
         }
     }
 
@@ -193,7 +143,7 @@
                 user,
                 loginModel.Password,
                 isPersistent: false,
-                lockoutOnFailure: false);
+                lockoutOnFailure: true);
 
             if (!result.Succeeded)
             {
@@ -202,18 +152,21 @@
             }
 
             loginModel.Reset();
-            Navigation.NavigateTo("/account", forceLoad: false);
+            Navigation.NavigateTo("/account", forceLoad: true);
         }
         finally
         {
+            ClearLoginPassword();
             isBusy = false;
         }
     }
 
+    private void ClearLoginPassword() => loginModel.Password = string.Empty;
+
     private async Task LogoutAsync()
     {
         await SignInManager.SignOutAsync();
-        Navigation.NavigateTo("/account", forceLoad: false);
+        Navigation.NavigateTo("/account", forceLoad: true);
     }
 
     private async Task SaveProfileAsync()
@@ -251,26 +204,7 @@
         }
     }
 
-    private sealed class RegisterInput
-    {
-        [Required]
-        public string UserName { get; set; } = string.Empty;
-
-        [Required, EmailAddress]
-        public string Email { get; set; } = string.Empty;
-
-        [Required, MinLength(8)]
-        public string Password { get; set; } = string.Empty;
-
-        public void Reset()
-        {
-            UserName = string.Empty;
-            Email = string.Empty;
-            Password = string.Empty;
-        }
-    }
-
-    private sealed class LoginInput
+    public sealed class LoginInput
     {
         [Required]
         public string UserNameOrEmail { get; set; } = string.Empty;
@@ -285,7 +219,7 @@
         }
     }
 
-    private sealed class ProfileInput
+    public sealed class ProfileInput
     {
         [Required, MaxLength(80)]
         public string DisplayName { get; set; } = string.Empty;

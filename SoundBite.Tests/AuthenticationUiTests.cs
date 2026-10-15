@@ -1,0 +1,146 @@
+using System.Net;
+using System.Text.RegularExpressions;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using SoundBite.Data;
+
+namespace SoundBite.Tests;
+
+public class AuthenticationUiTests
+{
+    private WebApplicationFactory<Program> app = null!;
+    private HttpClient client = null!;
+    private string directory = null!;
+
+    [SetUp]
+    public async Task SetUp()
+    {
+        directory = Path.Combine(Path.GetTempPath(), "soundbite-auth-" + Guid.NewGuid());
+        Directory.CreateDirectory(directory);
+        app = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+        {
+            builder.UseEnvironment("Development");
+            builder.ConfigureAppConfiguration((_, configuration) => configuration.AddInMemoryCollection(
+                new Dictionary<string, string?> { ["ConnectionStrings:DefaultConnection"] = $"Data Source={directory}/test.db;Pooling=False" }));
+        });
+        client = app.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false, BaseAddress = new Uri("https://localhost") });
+        using var scope = app.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        await db.Database.MigrateAsync();
+        db.Tracks.Add(new SoundBite.Models.Track { Title = "Authentication test track" });
+        await db.SaveChangesAsync();
+    }
+
+    [TearDown]
+    public async Task TearDown()
+    {
+        client.Dispose();
+        await app.DisposeAsync();
+        Directory.Delete(directory, recursive: true);
+    }
+
+    private async Task<HttpResponseMessage> PostForm(string path, string handler, params (string Key, string Value)[] values)
+    {
+        var html = await client.GetStringAsync(path);
+        var token = Regex.Match(html, "name=\"__RequestVerificationToken\" value=\"([^\"]+)\"").Groups[1].Value;
+        Assert.That(token, Is.Not.Empty, "SSR forms must carry an antiforgery token.");
+        var fields = values.ToDictionary(v => v.Key, v => v.Value);
+        fields["_handler"] = handler;
+        fields["__RequestVerificationToken"] = WebUtility.HtmlDecode(token);
+        return await client.PostAsync(path, new FormUrlEncodedContent(fields));
+    }
+
+    private Task<HttpResponseMessage> Register(string confirm = "TestPass123!") => PostForm("/register", "register",
+        ("model.UserName", "authuser"), ("model.Email", "authuser@example.com"),
+        ("model.Password", "TestPass123!"), ("model.ConfirmPassword", confirm));
+
+    [Test]
+    public async Task WebsiteRegistrationProfileLogoutAndLoginPersistCookie()
+    {
+        var registration = await Register();
+        Assert.That(registration.StatusCode, Is.EqualTo(HttpStatusCode.Redirect));
+        var cookie = registration.Headers.GetValues("Set-Cookie").Single(c => c.StartsWith(".AspNetCore.Identity.Application="));
+        Assert.That(cookie.ToLowerInvariant(), Does.Contain("secure").And.Contain("httponly").And.Contain("samesite=lax"));
+        Assert.That(registration.Headers.Location!.OriginalString, Does.EndWith("/account"));
+        Assert.That((await client.GetAsync("/api/account/me")).StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That(await client.GetStringAsync("/account"), Does.Contain("Signed in"));
+        var saved = await PostForm("/account", "profile", ("profileModel.DisplayName", "Updated name"), ("profileModel.Bio", "My music biography"));
+        Assert.That(await saved.Content.ReadAsStringAsync(), Does.Contain("Profile saved."));
+        Assert.That(await client.GetStringAsync("/account"), Does.Contain("Updated name").And.Contain("My music biography"));
+        Assert.That(await client.GetStringAsync("/users/authuser"), Does.Contain("Updated name").And.Not.Contain("authuser@example.com"));
+        Assert.That(await client.GetStringAsync("/playlists"), Does.Contain("Create a playlist"));
+        Assert.That(await client.GetStringAsync("/tracks/1"), Does.Contain("Write a review"));
+        var logout = await PostForm("/account", "logout");
+        Assert.That(logout.StatusCode, Is.EqualTo(HttpStatusCode.Redirect));
+        Assert.That((await client.GetAsync("/api/account/me")).StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized));
+        Assert.That(await client.GetStringAsync("/playlists"), Does.Contain("to create your own playlists").And.Not.Contain("Create a playlist"));
+        Assert.That(await client.GetStringAsync("/tracks/1"), Does.Contain("to rate and review this track").And.Not.Contain("Submit review"));
+        foreach (var identifier in new[] { "authuser", "authuser@example.com" })
+        {
+            var login = await PostForm("/login", "login", ("loginModel.UserNameOrEmail", identifier), ("loginModel.Password", "TestPass123!"));
+            Assert.That(login.StatusCode, Is.EqualTo(HttpStatusCode.Redirect));
+            Assert.That(await client.GetStringAsync("/account"), Does.Contain("Signed in"));
+            await PostForm("/account", "logout");
+        }
+    }
+
+    [Test]
+    public async Task InvalidCredentialsAndRegistrationAreRejected()
+    {
+        var mismatch = await Register("different");
+        Assert.That(await mismatch.Content.ReadAsStringAsync(), Does.Contain("Your passwords do not match").And.Not.Contain("TestPass123!"));
+        Assert.That((await client.GetAsync("/api/account/me")).StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized));
+        await Register();
+        await PostForm("/account", "logout");
+        var duplicate = await Register();
+        Assert.That(await duplicate.Content.ReadAsStringAsync(), Does.Contain("already taken").And.Not.Contain("TestPass123!"));
+        var login = await PostForm("/login", "login", ("loginModel.UserNameOrEmail", "authuser"), ("loginModel.Password", "WrongPassword!"));
+        Assert.That(await login.Content.ReadAsStringAsync(), Does.Contain("Invalid username or password").And.Not.Contain("WrongPassword!"));
+        Assert.That((await client.GetAsync("/api/account/me")).StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized));
+    }
+
+    [Test]
+    public async Task LoginIgnoresExternalReturnUrl()
+    {
+        await Register();
+        await PostForm("/account", "logout");
+        var response = await PostForm("/login?ReturnUrl=https%3A%2F%2Fevil.example", "login",
+            ("loginModel.UserNameOrEmail", "authuser"), ("loginModel.Password", "TestPass123!"),
+            ("ReturnUrl", "//evil.example"));
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Redirect));
+        Assert.That(response.Headers.Location!.OriginalString, Is.EqualTo("https://localhost/account"));
+    }
+
+    [Test]
+    public async Task InvalidProfileDoesNotOverwriteSavedValues()
+    {
+        await Register();
+        await PostForm("/account", "profile", ("profileModel.DisplayName", "Original"), ("profileModel.Bio", "Original bio"));
+        var response = await PostForm("/account", "profile", ("profileModel.DisplayName", new string('x', 81)), ("profileModel.Bio", "Changed"));
+        Assert.That(await response.Content.ReadAsStringAsync(), Does.Contain("maximum length"));
+        Assert.That(await client.GetStringAsync("/account"), Does.Contain("Original bio"));
+    }
+
+    [Test]
+    public async Task AnonymousProfilePostCannotChangeAnAccount()
+    {
+        await Register();
+        await PostForm("/account", "logout");
+        var response = await PostForm("/account", "profile", ("profileModel.DisplayName", "Forged name"));
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+        Assert.That(await client.GetStringAsync("/users/authuser"), Does.Not.Contain("Forged name"));
+    }
+
+    [TestCase("/register", "register")]
+    [TestCase("/login", "login")]
+    [TestCase("/account", "logout")]
+    [TestCase("/account", "profile")]
+    public async Task FormsRejectMissingAntiforgeryToken(string path, string handler)
+    {
+        var response = await client.PostAsync(path, new FormUrlEncodedContent(new Dictionary<string, string> { ["_handler"] = handler }));
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+    }
+}
