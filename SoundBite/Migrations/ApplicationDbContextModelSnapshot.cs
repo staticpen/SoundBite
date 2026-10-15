@@ -392,7 +392,10 @@ namespace SoundBite.Migrations
                     b.HasIndex("TrackId", "UserId")
                         .IsUnique();
 
-                    b.ToTable("Reviews");
+                    b.ToTable("Reviews", t =>
+                        {
+                            t.HasCheckConstraint("CK_Reviews_Rating", "\"Rating\" >= 1 AND \"Rating\" <= 5");
+                        });
                 });
 
             modelBuilder.Entity("SoundBite.Models.Track", b =>

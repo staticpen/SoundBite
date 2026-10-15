@@ -1,8 +1,14 @@
 @page "/tracks/{Id:int}"
 @attribute [StreamRendering]
+@using System.ComponentModel.DataAnnotations
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
 @using SoundBite.Interfaces
 @using SoundBite.Models
+@using SoundBite.Services
 @inject IMusicCatalog Catalog
+@inject ReviewService Reviews
+@inject AuthenticationStateProvider AuthenticationStateProvider
 @inject ILogger<TrackDetails> Logger
 
 <PageTitle>@(track?.Title ?? "Track details") - SoundBite</PageTitle>
@@ -67,6 +73,92 @@ else
             }
         </div>
     </article>
+
+    <section class="mt-4" aria-labelledby="reviews-heading">
+        <h2 id="reviews-heading">Reviews (@reviews.Count)</h2>
+
+        @if (reviewLoadFailed)
+        {
+            <div class="alert alert-danger" role="alert">Reviews couldn't be loaded. Please try again later.</div>
+        }
+        else if (string.IsNullOrWhiteSpace(currentUserId))
+        {
+            <p><a href="/login">Log in</a> to rate and review this track.</p>
+        }
+        else
+        {
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h3 class="h5">@(currentUserReview is null ? "Write a review" : "Edit your review")</h3>
+                    <EditForm Model="reviewInput" OnValidSubmit="SaveReviewAsync">
+                        <DataAnnotationsValidator />
+                        <ValidationSummary />
+
+                        <div class="mb-3">
+                            <label class="form-label" for="review-rating">Rating</label>
+                            <InputSelect id="review-rating" @bind-Value="reviewInput.Rating" class="form-select">
+                                <option value="0">Choose a rating</option>
+                                @for (var rating = 1; rating <= 5; rating++)
+                                {
+                                    <option value="@rating">@rating / 5 stars</option>
+                                }
+                            </InputSelect>
+                            <ValidationMessage For="@(() => reviewInput.Rating)" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label" for="review-comment">Written review (optional)</label>
+                            <InputTextArea id="review-comment" @bind-Value="reviewInput.Comment" class="form-control" maxlength="2000" rows="4" />
+                            <ValidationMessage For="@(() => reviewInput.Comment)" />
+                        </div>
+
+                        <button type="submit" class="btn btn-primary" disabled="@savingReview">
+                            @(savingReview ? "Saving..." : currentUserReview is null ? "Submit review" : "Update review")
+                        </button>
+                        @if (!string.IsNullOrWhiteSpace(reviewMessage))
+                        {
+                            <p class="mt-3 mb-0" role="status">@reviewMessage</p>
+                        }
+                    </EditForm>
+                </div>
+            </div>
+        }
+
+        @if (reviews.Count == 0 && !reviewLoadFailed)
+        {
+            <p class="text-muted">No reviews yet. Be the first to rate this track.</p>
+        }
+        else if (reviews.Count > 0)
+        {
+            <div class="list-group">
+                @foreach (var review in reviews)
+                {
+                    var reviewerName = string.IsNullOrWhiteSpace(review.User?.DisplayName)
+                        ? review.User?.UserName ?? "SoundBite user"
+                        : review.User.DisplayName;
+                    <article class="list-group-item">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <h3 class="h6 mb-1">
+                                @if (!string.IsNullOrWhiteSpace(review.User?.UserName))
+                                {
+                                    <a href="@($"/users/{Uri.EscapeDataString(review.User.UserName)}")">@reviewerName</a>
+                                }
+                                else
+                                {
+                                    @reviewerName
+                                }
+                            </h3>
+                            <span class="badge text-bg-warning">@review.Rating / 5 stars</span>
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(review.Comment))
+                        {
+                            <p class="mb-0 mt-2">@review.Comment</p>
+                        }
+                    </article>
+                }
+            </div>
+        }
+    </section>
 }
 
 @code {
@@ -76,12 +168,26 @@ else
     private bool loading;
     private bool failed;
     private int loadVersion;
+    private IReadOnlyList<Review> reviews = [];
+    private Review? currentUserReview;
+    private string? currentUserId;
+    private bool reviewLoadFailed;
+    private bool savingReview;
+    private string? reviewMessage;
+    private readonly ReviewInput reviewInput = new();
 
     protected override async Task OnParametersSetAsync()
     {
         var version = ++loadVersion;
         track = null;
         failed = false;
+        reviews = [];
+        currentUserReview = null;
+        currentUserId = null;
+        reviewLoadFailed = false;
+        reviewMessage = null;
+        reviewInput.Rating = 0;
+        reviewInput.Comment = string.Empty;
         loading = Id > 0;
         if (!loading) return;
 
@@ -89,7 +195,34 @@ else
         try
         {
             var result = await Catalog.GetTrackAsync(requestedId);
-            if (version == loadVersion) track = result;
+            if (version != loadVersion) return;
+            track = result;
+            if (track is null) return;
+
+            try
+            {
+                var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+                var userId = authState.User.FindFirstValue(ClaimTypes.NameIdentifier);
+                var trackReviews = await Reviews.GetReviewsForTrackAsync(requestedId);
+                var userReview = string.IsNullOrWhiteSpace(userId)
+                    ? null
+                    : await Reviews.GetUserReviewForTrackAsync(userId, requestedId);
+
+                if (version != loadVersion) return;
+                currentUserId = userId;
+                reviews = trackReviews;
+                currentUserReview = userReview;
+                if (userReview is not null)
+                {
+                    reviewInput.Rating = userReview.Rating;
+                    reviewInput.Comment = userReview.Comment;
+                }
+            }
+            catch (Exception exception)
+            {
+                Logger.LogError(exception, "Unable to load reviews for track {TrackId}", requestedId);
+                if (version == loadVersion) reviewLoadFailed = true;
+            }
         }
         catch (Exception exception)
         {
@@ -102,6 +235,55 @@ else
         }
     }
 
+    private async Task SaveReviewAsync()
+    {
+        if (string.IsNullOrWhiteSpace(currentUserId) || track is null)
+            return;
+
+        savingReview = true;
+        reviewMessage = null;
+        try
+        {
+            if (currentUserReview is null)
+            {
+                currentUserReview = await Reviews.CreateReviewAsync(
+                    currentUserId, track.Id, reviewInput.Rating, reviewInput.Comment);
+                reviewMessage = "Your review was submitted.";
+            }
+            else
+            {
+                currentUserReview = await Reviews.UpdateReviewAsync(
+                    currentUserReview.Id, currentUserId, reviewInput.Rating, reviewInput.Comment);
+                reviewMessage = "Your review was updated.";
+            }
+
+            reviews = await Reviews.GetReviewsForTrackAsync(track.Id);
+        }
+        catch (InvalidOperationException exception)
+        {
+            Logger.LogInformation(exception, "Review operation was rejected for track {TrackId}", track.Id);
+            reviewMessage = exception.Message;
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Unable to save review for track {TrackId}", track.Id);
+            reviewMessage = "Your review couldn't be saved. Please try again.";
+        }
+        finally
+        {
+            savingReview = false;
+        }
+    }
+
     private static string SpotifyUrl(string type, string id) =>
         $"https://open.spotify.com/{type}/{Uri.EscapeDataString(id)}";
+
+    private sealed class ReviewInput
+    {
+        [Range(1, 5, ErrorMessage = "Choose a rating from 1 to 5.")]
+        public int Rating { get; set; }
+
+        [MaxLength(2000)]
+        public string Comment { get; set; } = string.Empty;
+    }
 }
