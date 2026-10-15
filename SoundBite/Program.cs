@@ -3,12 +3,16 @@ using Microsoft.EntityFrameworkCore;
 using SoundBite.Components;
 using SoundBite.Data;
 using SoundBite.Endpoints;
+using SoundBite.Interfaces;
+using SoundBite.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddDbContext<ApplicationDbContext>(options =>
+builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
     options.UseSqlite(
         builder.Configuration.GetConnectionString("DefaultConnection")));
+
+builder.Services.AddScoped<IMusicCatalog, CatalogueService>();
 
 builder.Services
     .AddAuthentication(options =>
