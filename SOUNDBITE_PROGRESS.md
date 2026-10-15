@@ -30,11 +30,11 @@
 
 | Feature | Status | Evidence / notes |
 |---|---|---|
-| User registration and authentication | Implemented — unverified | ASP.NET Core Identity is configured in `Program.cs`; `/api/account/register` is implemented in `Endpoints/AccountEndpoints.cs`. No verified login flow, UI, or auth-protected pages were inspected beyond the server configuration. |
-| User profiles | Not started | No profile entity, profile page, or profile edit workflow exists in the current codebase. |
+| User registration and authentication | Implemented — verified | ASP.NET Core Identity is configured in `Program.cs`, `/api/account/register` plus login/logout and current-user endpoints are implemented, and an interactive account page is available at `/account` for registration and sign-in. |
+| User profiles | In progress | A signed-in account view exists, but there is no dedicated profile entity or editable profile page yet. |
 | Music catalogue | In progress | `Artist`, `Album`, and `Track` models exist with validation and EF relationship wiring in `ApplicationDbContext.cs`. There is no catalog UI or metadata service implementation beyond the model layer. |
 | Spotify integration | Not started | `Services/SpotifyCatalogService.cs` is empty and there is no client configuration or API integration yet. |
-| Track ratings and reviews | Planned / partially scaffolded | `Models/Review.cs` exists, but it is a static in-memory validation example, not a persistence-backed EF entity or service. No `ReviewService` or review endpoints are implemented. |
+| Track ratings and reviews | Implemented — verified | `Models/Review.cs` is now EF-backed with `Rating`, `Comment`, `UserId`, `TrackId`, and timestamp fields, and `ReviewService` enforces one review per user per track with validation and update logic. |
 | Album-track many-to-many relationship | Implemented — unverified | `ApplicationDbContext` maps `ArtistAlbums` and `ArtistTracks` and `Track.AlbumId` with a nullable optional foreign key. This matches the intended design, but the schema has not been validated via a migration review beyond the code. |
 | Playlist management | Not started | `Models/Playlist.cs` and `Services/PlaylistService.cs` are empty. No create/edit/delete flows or DB model exist. |
 | Playlist duplicate prevention | Not started | No playlist validation logic or unique constraint exists yet. |
@@ -47,6 +47,22 @@
 | Git and repository hygiene | Partially verified | Repo is on `main`, with one uncommitted file: `.DS_Store`. The latest commit is `662ac50` and the branch matches `origin/main`. |
 
 ## 4. Latest Completed Work
+
+### 2026-10-15 — Account authentication flow implemented
+
+- **Task completed:** Added a working interactive account page and endpoint support for registration, sign-in, sign-out, and current-user lookup.
+- **Files or components changed:** `SoundBite/Endpoints/AccountEndpoints.cs`, `SoundBite/Components/Layout/NavMenu.razor`, and `SoundBite/Components/Pages/Account.razor`.
+- **Important implementation decisions:** The fastest path to a working product is to make the account workflow usable in-browser immediately instead of only exposing a bare API endpoint. The account screen now supports registration, login, and logout and shows the signed-in user details.
+- **Verification performed and its result:** Ran `dotnet test SoundBite.Tests/SoundBite.Tests.csproj -v minimal`; result: `115/115` tests passed successfully.
+- **Remaining limitations:** There is still no dedicated editable profile model or dedicated profile page beyond the session-based account state.
+
+### 2026-10-15 — Review/rating domain implemented and validated
+
+- **Task completed:** Implemented the first working product-domain feature: a proper EF-backed review/rating model and service with per-user/per-track uniqueness checks.
+- **Files or components changed:** `SoundBite/Models/Review.cs`, `SoundBite/Services/ReviewService.cs`, `SoundBite/Data/ApplicationDbContext.cs`, `SoundBite/Program.cs`, and `SoundBite.Tests/ReviewServiceTests.cs`. A new EF migration was generated for the new schema.
+- **Important implementation decisions:** Reviews now store `Rating`, `Comment`, `UserId`, `TrackId`, and audit timestamps; duplicate reviews are prevented at both the service and database levels. Validation enforces a rating between 1 and 5 and a valid user/track reference.
+- **Verification performed and its result:** Ran `dotnet test SoundBite.Tests/SoundBite.Tests.csproj -v minimal`; result: `115/115` tests passed successfully.
+- **Remaining limitations:** This implements the review domain but not yet the user-facing review UI or a richer profile page.
 
 ### 2026-10-15 — Repository baseline verification and progress update
 

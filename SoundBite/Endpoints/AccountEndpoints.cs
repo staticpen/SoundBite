@@ -11,7 +11,8 @@ public static class AccountEndpoints
         endpoints.MapPost("/api/account/register",
             async (
                 RegisterRequest request,
-                UserManager<ApplicationUser> userManager) =>
+                UserManager<ApplicationUser> userManager,
+                SignInManager<ApplicationUser> signInManager) =>
             {
                 if (string.IsNullOrWhiteSpace(request.UserName) ||
                     string.IsNullOrWhiteSpace(request.Email) ||
@@ -44,9 +45,77 @@ public static class AccountEndpoints
                                     .ToArray()));
                 }
 
+                await signInManager.SignInAsync(user, isPersistent: false);
+
                 return Results.Ok(new
                 {
-                    message = "Account created successfully."
+                    message = "Account created successfully.",
+                    userName = user.UserName,
+                    email = user.Email
+                });
+            });
+
+        endpoints.MapPost("/api/account/login",
+            async (
+                LoginRequest request,
+                SignInManager<ApplicationUser> signInManager,
+                UserManager<ApplicationUser> userManager) =>
+            {
+                if (string.IsNullOrWhiteSpace(request.UserNameOrEmail) ||
+                    string.IsNullOrWhiteSpace(request.Password))
+                {
+                    return Results.BadRequest(new
+                    {
+                        message = "Username/email and password are required."
+                    });
+                }
+
+                var user = await userManager.FindByNameAsync(request.UserNameOrEmail)
+                    ?? await userManager.FindByEmailAsync(request.UserNameOrEmail);
+
+                if (user is null)
+                {
+                    return Results.Unauthorized();
+                }
+
+                var result = await signInManager.PasswordSignInAsync(
+                    user,
+                    request.Password,
+                    isPersistent: false,
+                    lockoutOnFailure: false);
+
+                if (!result.Succeeded)
+                    return Results.Unauthorized();
+
+                return Results.Ok(new
+                {
+                    message = "Signed in successfully.",
+                    userName = user.UserName,
+                    email = user.Email
+                });
+            });
+
+        endpoints.MapPost("/api/account/logout",
+            async (SignInManager<ApplicationUser> signInManager) =>
+            {
+                await signInManager.SignOutAsync();
+                return Results.Ok(new { message = "Signed out successfully." });
+            });
+
+        endpoints.MapGet("/api/account/me",
+            async (
+                HttpContext context,
+                UserManager<ApplicationUser> userManager) =>
+            {
+                var user = await userManager.GetUserAsync(context.User);
+
+                if (user is null)
+                    return Results.Unauthorized();
+
+                return Results.Ok(new
+                {
+                    userName = user.UserName,
+                    email = user.Email
                 });
             });
 
@@ -57,5 +126,9 @@ public static class AccountEndpoints
 public sealed record RegisterRequest(
     string UserName,
     string Email,
+    string Password);
+
+public sealed record LoginRequest(
+    string UserNameOrEmail,
     string Password);
 
