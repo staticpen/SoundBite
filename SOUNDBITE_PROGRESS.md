@@ -22,7 +22,7 @@
 
 - **Overall status:** In progress
 - **Current development phase:** Building working catalogue and social product features
-- **Current focus:** Persisted playlist management, public discovery, and owner-only changes
+- **Current focus:** Duplicate registration route fixed; existing authentication UI failures documented
 - **Last verified:** 2026-10-15
 - **Current blocker:** Social interactions and external catalogue integration are not yet implemented
 
@@ -30,7 +30,7 @@
 
 | Feature | Status | Evidence / notes |
 |---|---|---|
-| User registration and authentication | Implemented — verified | ASP.NET Core Identity is configured in `Program.cs`, `/api/account/register` plus login/logout and current-user endpoints are implemented, and an interactive account page is available at `/account` for registration and sign-in. |
+| User registration and authentication | Partially verified — UI blocked | Registration, login by username/email, logout and current-user API checks passed against a temporary migrated database. `/register`, `/login` and `/account` load; registration and login form submissions have existing failures documented below. |
 | User profiles | Implemented — verified | `ApplicationUser` stores a display name and bio; the account page can edit them, and `/users/{username}` displays the public profile without exposing account email. The migration and persistence round-trip are tested. |
 | Music catalogue | In progress | `Artist`, `Album`, and `Track` models exist with validation and EF relationship wiring in `ApplicationDbContext.cs`. There is no catalog UI or metadata service implementation beyond the model layer. |
 | Spotify integration | Not started | `Services/SpotifyCatalogService.cs` is empty and there is no client configuration or API integration yet. |
@@ -43,10 +43,22 @@
 | Activity feed | Not started | `Models/ActivityItem.cs`, `Services/FeedService.cs`, and social service classes are still empty or incomplete. |
 | Rankings and trends | Planned | `Services/RankingService.cs`, `Services/TrendService.cs`, `Strategies/PopularityRankingStrategy.cs`, and `Strategies/RatingRankingStrategy.cs` exist, but no implemented ranking logic is visible in the current code. |
 | Administrative user management | Not started | `Services/AdminService.cs` is empty and there is no admin UI or authorization pattern beyond Identity setup. |
-| Automated tests | Complete — verified | The NUnit test project passed: 128 tests succeeded, 0 failed. |
-| Git and repository hygiene | Verified | The active branch is `Playlist`, tracking `origin/Playlist`; playlist implementation is committed in `7950666`. |
+| Automated tests | Complete — verified | The NUnit test project passed: 144 tests succeeded, 0 failed, 0 skipped (2026-10-15). |
+| Git and repository hygiene | Verified | `FixDuplicateRegisterRoute` starts at fetched `origin/main` (`1cd65a0`); route fix, regression tests and progress update are uncommitted. |
 
 ## 4. Latest Completed Work
+
+### 2026-10-15 — Duplicate registration route fixed and verified
+
+- Removed only `@page "/register"` from `SoundBite/Components/Pages/Account.razor`; the dedicated `Register.razor` owns `/register`, while Account retains `/login` and `/account`. No authentication logic changed.
+- Added `SoundBite.Tests/PageRouteTests.cs`: scans compiled component route attributes for duplicate templates (case-insensitive, ignoring trailing slashes) and checks the owners of all three authentication routes. This detects duplicate declarations, not every possible overlap between parameterized route patterns.
+- Regression proof: before the fix, 2 of the 4 new cases failed and explicitly identified Account and Register sharing `/register`; after the fix the full suite passed.
+- `dotnet build SoundBite/SoundBite.csproj --nologo`: passed, 0 warnings/errors. `dotnet test SoundBite.Tests/SoundBite.Tests.csproj --nologo`: 144 passed, 0 failed/skipped. `git diff --check`: passed.
+- Browser: `/register`, `/login`, `/account`, `/catalogue/search` all loaded without routing errors. Followed Register's Log in link successfully. Existing navigation targets Account, and review/playlist login links and account redirects remain valid; no link changes required.
+- Used a fresh SQLite database at `/tmp/soundbite-route-check.jPlMyn/test.db`, migrated through a temporary external console harness with `Database.MigrateAsync()` because `dotnet ef` was unavailable. Launched with an explicit `ConnectionStrings__DefaultConnection` override on localhost:5187. No application database migration was run.
+- API checks against temporary data: registration 200, authenticated `/api/account/me` 200, logout 200, unauthenticated `/me` 401, username and email login 200. An invalid-password request was rejected (observed final HTTP 400 with automatic redirects enabled; not asserted as the endpoint's original status).
+- Existing UI issues reproduced: Register submission displays “Unable to reach the server” (relative request URL with no HTTP client base address configured); valid Account login throws `InvalidOperationException: Headers are read-only, response has already started` when setting the cookie from the interactive circuit. These are separate from route resolution and were left unchanged under this task's authentication scope boundary.
+- Existing `SoundBite/soundbite.db` SHA-256 before/after: `ead1d21ea950e99cd6548f23d0b83159ac69c24b2bd4cbbf2dcac8376159eeaf`. Checkout was initially clean; only the three requested implementation/documentation files changed. No commit, push or merge performed.
 
 ### 2026-10-15 — Playlist persistence and management implemented
 
@@ -119,6 +131,8 @@
 
 | Issue | Impact | Evidence | Next action | Status |
 |---|---|---|---|---|
+| Registration form cannot reach endpoint | Dedicated registration submission fails | Browser message and unconfigured HttpClient base address | Repair request transport in a separate authentication task | Open |
+| Interactive login cannot set cookie | Valid login terminates circuit | Server reports read-only response headers in Account.LoginAsync | Move cookie issuance to an HTTP request in a separate authentication task | Open |
 | Social product features are not yet implemented | The app does not yet support the planned social discovery workflows | Empty follow, like, comment, and feed services/models | Implement follows and a basic activity feed | Open |
 | Social persistence layer is missing | Follows, likes, comments, and feed features cannot be used reliably | Empty `Follow.cs`, `Like.cs`, `Comment.cs`, `ActivityItem.cs`, and related services | Design and implement the social model and service layer | Open |
 | No Spotify client is configured | Music catalogue enrichment is not connected to external metadata | `SpotifyCatalogService.cs` is empty and no API client configuration exists | Add a service abstraction and integrate Spotify metadata access | Open |
@@ -128,29 +142,19 @@
 | Check | Result | Notes |
 |---|---|---|
 | Application build | Passed | `dotnet test SoundBite.Tests/SoundBite.Tests.csproj -v minimal` built the app and test project successfully. |
-| Automated tests | Passed | 128 tests discovered and executed; 128 succeeded; 0 failed; 0 skipped. |
+| Automated tests | Passed | 144 tests discovered and executed; 144 succeeded; 0 failed; 0 skipped. |
 | Application startup | Passed | Command: `dotnet run --project SoundBite --urls http://localhost:5080` → app reported `Now listening on: http://localhost:5080` and `Application started.` |
-| Relevant feature behaviour | Partially verified | Registration endpoint compiles and the app starts, but no browser-based login or registration flow was exercised. |
+| Relevant feature behaviour | Partially verified | All four requested routes loaded in-browser. API authentication passed against temporary data; registration/login form submission failures were reproduced (see latest work). |
 | Database migrations | Passed | Profile, review, and playlist migrations are exercised by SQLite persistence tests, including playlist creation and CRUD against the migrated schema. |
 
 ## 9. Git Status
 
-- **Working-tree status:** Playlist implementation is committed; this progress-file correction is the only uncommitted change.
-- **Uncommitted changes:** `SOUNDBITE_PROGRESS.md`
-- **Active branch:** `Playlist`, tracking `origin/Playlist`
-- **Latest relevant commit:** `7950666` — `add Playlists pages`
-- **Changes committed or pushed:** Playlist models, service, EF wiring, UI, migration, tests, and the original progress update are in the current HEAD. The branch is synchronized with its configured upstream.
-
-Suggested pull request title:
-
-- `Add playlist management workflow`
-
-Suggested pull request description:
-
-- Add public playlist listing and detail pages with owner-only management.
-- Support creating, editing, deleting playlists and adding/removing tracks.
-- Add the EF migration and tests for persistence, ownership, ordering, and duplicate prevention.
-- Record current branch status and verification results in the progress file.
+- **Active branch:** `FixDuplicateRegisterRoute`, created from latest fetched `origin/main`, `1cd65a04ca70b25181aa2666eb962136b57c980a`.
+- **Initial checkout:** Clean on `CatalogueIntegrationFinal`; no local changes needed stashing.
+- **Uncommitted changes:** `SoundBite/Components/Pages/Account.razor`, new `SoundBite.Tests/PageRouteTests.cs`, `SOUNDBITE_PROGRESS.md`.
+- **Commit/push/merge:** None performed. Review the diff before authorizing publication.
+- **Suggested commit title:** `Fix duplicate registration route and add route regression tests`
+- **Suggested description:** Keep registration on its dedicated page, preserve login/account aliases, add duplicate-route and route-ownership checks, and document build, NUnit and isolated browser/API verification plus existing authentication UI blockers.
 
 ## 10. Next Recommended Tasks
 
@@ -171,7 +175,7 @@ Suggested pull request description:
 - **Known errors or blockers:** No build or test failures remain. Browser-based playlist interaction and applying `AddPlaylists` to the configured application database are outstanding.
 - **Most relevant files for the next task:** `SoundBite/Models/Follow.cs`, `SoundBite/Services/FollowService.cs`, and feed model/service placeholders.
 - **Next recommended action:** Implement follow/unfollow and a basic activity feed.
-- **Verification that remains outstanding:** Browser-based authentication, profile, review, and playlist flows need explicit verification.
+- **Verification that remains outstanding:** Authentication UI requires the separately documented fixes; profile editing, review and playlist browser workflows remain unverified. Latest route and API checks are recorded in section 4.
 
 ## 12. Instructions for Updating This File
 
