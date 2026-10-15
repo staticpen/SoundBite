@@ -1,0 +1,53 @@
+@page "/users/{UserName}"
+@rendermode InteractiveServer
+
+@using Microsoft.AspNetCore.Identity
+@using SoundBite.Data
+@inject UserManager<ApplicationUser> UserManager
+
+<PageTitle>@(profile is null ? "Profile not found" : $"{ProfileTitle} — SoundBite")</PageTitle>
+
+@if (isLoading)
+{
+    <p role="status">Loading profile...</p>
+}
+else if (profile is null)
+{
+    <h1>Profile not found</h1>
+    <p>No user with that username could be found.</p>
+}
+else
+{
+    <article class="card">
+        <div class="card-body">
+            <h1>@ProfileTitle</h1>
+            <p class="text-muted">@@@profile.UserName</p>
+            @if (!string.IsNullOrWhiteSpace(profile.Bio))
+            {
+                <p class="mb-0">@profile.Bio</p>
+            }
+            else
+            {
+                <p class="text-muted mb-0">No bio added yet.</p>
+            }
+        </div>
+    </article>
+}
+
+@code {
+    [Parameter]
+    public string UserName { get; set; } = string.Empty;
+
+    private ApplicationUser? profile;
+    private bool isLoading = true;
+    private string ProfileTitle => profile is null || string.IsNullOrWhiteSpace(profile.DisplayName)
+        ? profile?.UserName ?? "Profile"
+        : profile.DisplayName;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        isLoading = true;
+        profile = await UserManager.FindByNameAsync(UserName);
+        isLoading = false;
+    }
+}
