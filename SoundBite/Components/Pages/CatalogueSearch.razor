@@ -75,7 +75,9 @@
                 <ul class="list-group">
                     @foreach (var track in results.Tracks)
                     {
-                        <li class="list-group-item text-break" @key="track.Id">@track.Title</li>
+                        <li class="list-group-item text-break" @key="track.Id">
+                            <a href="@($"/tracks/{track.Id}")">@track.Title</a>
+                        </li>
                     }
                 </ul>
             </section>
