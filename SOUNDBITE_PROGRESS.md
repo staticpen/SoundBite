@@ -34,7 +34,7 @@
 | User profiles | Not started | No profile entity, profile page, or profile edit workflow exists in the current codebase. |
 | Music catalogue | In progress | `Artist`, `Album`, and `Track` models exist with validation and EF relationship wiring in `ApplicationDbContext.cs`. There is no catalog UI or metadata service implementation beyond the model layer. |
 | Spotify integration | Not started | `Services/SpotifyCatalogService.cs` is empty and there is no client configuration or API integration yet. |
-| Track ratings and reviews | Planned / partially scaffolded | `Models/Review.cs` exists, but it is a static in-memory validation example, not a persistence-backed EF entity or service. No `ReviewService` or review endpoints are implemented. |
+| Track ratings and reviews | Implemented — verified | `Models/Review.cs` is now an EF-backed entity with `Rating`, `Comment`, `UserId`, `TrackId`, and audit timestamps. `Services/ReviewService.cs` implements create, read, and update rules with duplicate prevention. A migration was generated and the review tests pass. |
 | Album-track many-to-many relationship | Implemented — unverified | `ApplicationDbContext` maps `ArtistAlbums` and `ArtistTracks` and `Track.AlbumId` with a nullable optional foreign key. This matches the intended design, but the schema has not been validated via a migration review beyond the code. |
 | Playlist management | Not started | `Models/Playlist.cs` and `Services/PlaylistService.cs` are empty. No create/edit/delete flows or DB model exist. |
 | Playlist duplicate prevention | Not started | No playlist validation logic or unique constraint exists yet. |
@@ -43,10 +43,18 @@
 | Activity feed | Not started | `Models/ActivityItem.cs`, `Services/FeedService.cs`, and social service classes are still empty or incomplete. |
 | Rankings and trends | Planned | `Services/RankingService.cs`, `Services/TrendService.cs`, `Strategies/PopularityRankingStrategy.cs`, and `Strategies/RatingRankingStrategy.cs` exist, but no implemented ranking logic is visible in the current code. |
 | Administrative user management | Not started | `Services/AdminService.cs` is empty and there is no admin UI or authorization pattern beyond Identity setup. |
-| Automated tests | Complete — verified | The NUnit test project exists and passed: 70 tests succeeded, 0 failed. |
-| Git and repository hygiene | Partially verified | Repo is on `main`, with one uncommitted file: `.DS_Store`. The latest commit is `662ac50` and the branch matches `origin/main`. |
+| Automated tests | Complete — verified | The NUnit test project exists and passed: 118 tests succeeded, 0 failed. |
+| Git and repository hygiene | Partially verified | Repo is on `main`, with one uncommitted file: `.DS_Store`. The latest relevant commit is `7fc9aee` and the branch matches `origin/main`. |
 
 ## 4. Latest Completed Work
+
+### 2026-10-15 — Review/rating domain implemented and validated
+
+- **Task completed:** Implemented the first working product-domain feature: a proper EF-backed review/rating model and service with per-user/per-track uniqueness checks.
+- **Files or components changed:** `SoundBite/Models/Review.cs`, `SoundBite/Services/ReviewService.cs`, `SoundBite/Data/ApplicationDbContext.cs`, `SoundBite/Program.cs`, and `SoundBite.Tests/ReviewServiceTests.cs`. A new EF migration was generated for the new schema.
+- **Important implementation decisions:** Reviews now store `Rating`, `Comment`, `UserId`, `TrackId`, and audit timestamps; duplicate reviews are prevented at both the service and database levels. Validation enforces a rating between 1 and 5 and a valid user/track reference.
+- **Verification performed and its result:** Ran `dotnet test SoundBite.Tests/SoundBite.Tests.csproj -v minimal`; result: `118/118` tests passed successfully.
+- **Remaining limitations:** This implements the review domain but not yet the user-facing UI or review API endpoints; the next recommended milestone is the authentication/profile flow.
 
 ### 2026-10-15 — Repository baseline verification and progress update
 
@@ -64,9 +72,9 @@
 - `Album`, `Artist`, and `Track` models initialize empty navigation collections and enforce basic validation requirements.
 - `Endpoints/AccountEndpoints.cs` currently exposes only a registration endpoint at `POST /api/account/register` and validates required `UserName`, `Email`, and `Password` fields before creating a user.
 - `Data/ApplicationUser.cs` is a minimal Identity user model without custom profile properties.
-- Most remaining model and service classes are placeholders: `Playlist`, `Follow`, `Like`, `Comment`, `ActivityItem`, `SpotifyCatalogService`, `ReviewService`, `PlaylistService`, `AdminService`, `FeedService`, `FollowService`, `SocialInteractionService`, `UserService`, and the ranking/trend services are empty or only partially implemented.
+- Most remaining model and service classes are placeholders: `Playlist`, `Follow`, `Like`, `Comment`, `ActivityItem`, `SpotifyCatalogService`, `PlaylistService`, `AdminService`, `FeedService`, `FollowService`, `SocialInteractionService`, `UserService`, and the ranking/trend services are empty or only partially implemented, while the review/rating domain is now implemented and validated.
 - The NUnit test project is active and passes, and the app builds and starts successfully.
-- There are no migrations reviewed or applied during this verification pass; the migration history exists in `SoundBite/Migrations`, but its state has not been revalidated against current requirements.
+- The review model has an associated EF migration in `SoundBite/Migrations`, and that migration was generated so the database schema matches the new review/rating domain.
 
 ## 6. Important Decisions and Assumptions
 
@@ -80,9 +88,9 @@
   - **Impact:** Future catalogue features can extend this model without changing the core schema pattern.
   - **Status:** Confirmed
 
-- **Decision:** Treat the current `Review` implementation as a prototype rather than production-ready persistence logic.
-  - **Reason:** `Models/Review.cs` uses a static in-memory registry instead of EF Core persistence and does not represent the final app data model.
-  - **Impact:** Review / rating logic still needs proper EF mapping, validation, and service-level business rules before it can satisfy the product requirements.
+- **Decision:** Keep the review/rating feature as a small, EF-backed domain model rather than an in-memory placeholder.
+  - **Reason:** The review workflow is now represented in the data model and service layer, with database uniqueness and validation enforced through code and schema constraints.
+  - **Impact:** Product requirements for user reviews can now be satisfied with a stable domain and test coverage, and future work can build on the same pattern for other social features.
   - **Status:** Confirmed
 
 ## 7. Known Issues and Blockers
@@ -90,7 +98,7 @@
 | Issue | Impact | Evidence | Next action | Status |
 |---|---|---|---|---|
 | Core product features are mostly unimplemented | The app does not yet satisfy the planned social music platform behaviour | Empty service files and placeholder model classes in `Models/` and `Services/` | Implement the social and catalogue features in priority order | Open |
-| Review logic is not database-backed | Ratings and reviews cannot be persisted or validated at the application level | `Models/Review.cs` uses a static in-memory `HashSet` and `ReviewService.cs` is empty | Replace with EF-backed entity and service logic | Open |
+| Review feature was previously a placeholder | The review domain needed a persistence-backed implementation before it could support the product requirements | The old in-memory `Review` model and empty `ReviewService` were replaced with an EF-backed entity and service layer | Keep the review rules and tests as the baseline for future social features | Resolved |
 | No profile or social persistence layer exists | User profiles, follows, likes, comments, and feed features cannot be used reliably | Empty `Follow.cs`, `Like.cs`, `Comment.cs`, `ActivityItem.cs`, and related services | Design and implement the social model and service layer | Open |
 | No Spotify client is configured | Music catalogue enrichment is not connected to external metadata | `SpotifyCatalogService.cs` is empty and no API client configuration exists | Add a service abstraction and integrate Spotify metadata access | Open |
 | Repository has uncommitted `.DS_Store` changes | Working tree is not clean | `git status --short --branch` shows ` M .DS_Store` | Remove or ignore the file before finalizing work | Open |

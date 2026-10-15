@@ -16,6 +16,7 @@ namespace SoundBite.Data
         public DbSet<Artist> Artists => Set<Artist>();
         public DbSet<Album> Albums => Set<Album>();
         public DbSet<Track> Tracks => Set<Track>();
+        public DbSet<Review> Reviews => Set<Review>();
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -37,6 +38,22 @@ namespace SoundBite.Data
                 .HasForeignKey(track => track.AlbumId)
                 .IsRequired(false)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            builder.Entity<Review>()
+                .HasOne(review => review.Track)
+                .WithMany()
+                .HasForeignKey(review => review.TrackId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.Entity<Review>()
+                .HasOne(review => review.User)
+                .WithMany()
+                .HasForeignKey(review => review.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.Entity<Review>()
+                .HasIndex(review => new { review.TrackId, review.UserId })
+                .IsUnique();
 
             // SQLite unique indexes allow multiple NULLs for unknown external IDs.
             builder.Entity<Artist>().HasIndex(artist => artist.SpotifyId).IsUnique();
