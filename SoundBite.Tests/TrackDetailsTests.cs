@@ -85,6 +85,8 @@ public class TrackDetailsTests
     {
         public Func<int, Task<Track?>> Load { get; set; } = _ => Task.FromResult<Track?>(null);
         public List<int> RequestedIds { get; } = [];
+        public Task<CatalogueSearchResults> SearchAsync(string? query, CancellationToken cancellationToken = default)
+            => Task.FromResult(new CatalogueSearchResults());
         public Task<Track?> GetTrackAsync(int id, CancellationToken cancellationToken = default)
         {
             RequestedIds.Add(id);
