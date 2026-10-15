@@ -44,7 +44,7 @@
 | Rankings and trends | Planned | `Services/RankingService.cs`, `Services/TrendService.cs`, `Strategies/PopularityRankingStrategy.cs`, and `Strategies/RatingRankingStrategy.cs` exist, but no implemented ranking logic is visible in the current code. |
 | Administrative user management | Not started | `Services/AdminService.cs` is empty and there is no admin UI or authorization pattern beyond Identity setup. |
 | Automated tests | Complete — verified | The NUnit test project passed: 128 tests succeeded, 0 failed. |
-| Git and repository hygiene | Partially verified | The active branch is `Playlist`, tracking `origin/Playlist`. Playlist UI, migration, and tests are uncommitted; current HEAD is `b2978be`. |
+| Git and repository hygiene | Verified | The active branch is `Playlist`, tracking `origin/Playlist`; playlist implementation is committed in `7950666`. |
 
 ## 4. Latest Completed Work
 
@@ -119,7 +119,7 @@
 
 | Issue | Impact | Evidence | Next action | Status |
 |---|---|---|---|---|
-| Core product features are mostly unimplemented | The app does not yet satisfy the planned social music platform behaviour | Empty service files and placeholder model classes in `Models/` and `Services/` | Implement the social and catalogue features in priority order | Open |
+| Social product features are not yet implemented | The app does not yet support the planned social discovery workflows | Empty follow, like, comment, and feed services/models | Implement follows and a basic activity feed | Open |
 | Social persistence layer is missing | Follows, likes, comments, and feed features cannot be used reliably | Empty `Follow.cs`, `Like.cs`, `Comment.cs`, `ActivityItem.cs`, and related services | Design and implement the social model and service layer | Open |
 | No Spotify client is configured | Music catalogue enrichment is not connected to external metadata | `SpotifyCatalogService.cs` is empty and no API client configuration exists | Add a service abstraction and integrate Spotify metadata access | Open |
 
@@ -135,17 +135,17 @@
 
 ## 9. Git Status
 
-- **Working-tree status:** Modified by playlist UI, migration, tests, and this progress update
-- **Uncommitted changes:** `NavMenu.razor`, `ApplicationDbContextModelSnapshot.cs`, `PlaylistServiceTests.cs`, `Playlists.razor`, `PlaylistDetails.razor`, the `AddPlaylists` migration files, and `SOUNDBITE_PROGRESS.md`
+- **Working-tree status:** Playlist implementation is committed; this progress-file correction is the only uncommitted change.
+- **Uncommitted changes:** `SOUNDBITE_PROGRESS.md`
 - **Active branch:** `Playlist`, tracking `origin/Playlist`
-- **Latest relevant commit:** `b2978be` — `Add Playlist.cs PlaylistItem.cs`
-- **Changes committed or pushed:** Playlist models, service, and EF wiring are in the current HEAD; playlist UI, migration, tests, and documentation remain uncommitted.
+- **Latest relevant commit:** `7950666` — `add Playlists pages`
+- **Changes committed or pushed:** Playlist models, service, EF wiring, UI, migration, tests, and the original progress update are in the current HEAD. The branch is synchronized with its configured upstream.
 
-Suggested commit title for the remaining playlist implementation:
+Suggested pull request title:
 
-- `Complete playlist management workflow`
+- `Add playlist management workflow`
 
-Suggested commit description:
+Suggested pull request description:
 
 - Add public playlist listing and detail pages with owner-only management.
 - Support creating, editing, deleting playlists and adding/removing tracks.
