@@ -1,10 +1,15 @@
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Web;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using SoundBite.Components.Pages;
+using SoundBite.Data;
 using SoundBite.Interfaces;
 using SoundBite.Models;
+using SoundBite.Services;
+using System.Security.Claims;
 
 namespace SoundBite.Tests;
 
@@ -81,6 +86,76 @@ public class TrackDetailsTests
         });
     }
 
+    [Test]
+    public async Task AnonymousVisitorCanReadReviewsButMustLogInToSubmit()
+    {
+        var catalog = new CatalogStub { Load = _ => Task.FromResult<Track?>(new Track { Title = "Reviewed track" }) };
+        await RenderAsync(catalog, async renderer =>
+        {
+            var root = await renderer.RenderComponentAsync<TrackDetails>(Parameters(1));
+            var html = root.ToHtmlString();
+            Assert.That(html, Does.Contain("Reviews (1)")
+                .And.Contain("Alice")
+                .And.Contain("A great track")
+                .And.Contain("/login")
+                .And.Not.Contain("private@example.com"));
+        }, db =>
+        {
+            var user = new ApplicationUser { Id = "user-1", UserName = "alice", Email = "private@example.com", DisplayName = "Alice" };
+            db.Users.Add(user);
+            db.Tracks.Add(new Track { Id = 1, Title = "Reviewed track" });
+            db.Reviews.Add(new Review { UserId = user.Id, TrackId = 1, Rating = 5, Comment = "A great track" });
+        });
+    }
+
+    [Test]
+    public async Task SignedInVisitorSeesRatingFormAndExistingReviewAsEditable()
+    {
+        var catalog = new CatalogStub { Load = _ => Task.FromResult<Track?>(new Track { Title = "Reviewed track" }) };
+        var identity = new ClaimsIdentity(
+            [new Claim(ClaimTypes.NameIdentifier, "user-1"), new Claim(ClaimTypes.Name, "alice")],
+            authenticationType: "test");
+        var authStateProvider = new TestAuthenticationStateProvider(new ClaimsPrincipal(identity));
+
+        await RenderAsync(catalog, async renderer =>
+        {
+            var root = await renderer.RenderComponentAsync<TrackDetails>(Parameters(1));
+            var html = root.ToHtmlString();
+            Assert.That(html, Does.Contain("Edit your review")
+                .And.Contain("value=\"5\"")
+                .And.Contain("Update review")
+                .And.Contain("A great track"));
+        }, db =>
+        {
+            var user = new ApplicationUser { Id = "user-1", UserName = "alice", DisplayName = "Alice" };
+            db.Users.Add(user);
+            db.Tracks.Add(new Track { Id = 1, Title = "Reviewed track" });
+            db.Reviews.Add(new Review { UserId = user.Id, TrackId = 1, Rating = 5, Comment = "A great track" });
+        }, authStateProvider);
+    }
+
+    [Test]
+    public async Task SignedInVisitorWithoutReviewSeesNewReviewForm()
+    {
+        var catalog = new CatalogStub { Load = _ => Task.FromResult<Track?>(new Track { Title = "Unreviewed track" }) };
+        var identity = new ClaimsIdentity(
+            [new Claim(ClaimTypes.NameIdentifier, "user-1"), new Claim(ClaimTypes.Name, "alice")],
+            authenticationType: "test");
+        var authStateProvider = new TestAuthenticationStateProvider(new ClaimsPrincipal(identity));
+
+        await RenderAsync(catalog, async renderer =>
+        {
+            var root = await renderer.RenderComponentAsync<TrackDetails>(Parameters(1));
+            Assert.That(root.ToHtmlString(), Does.Contain("Write a review")
+                .And.Contain("Submit review")
+                .And.Contain("Choose a rating"));
+        }, db =>
+        {
+            db.Users.Add(new ApplicationUser { Id = "user-1", UserName = "alice" });
+            db.Tracks.Add(new Track { Id = 1, Title = "Unreviewed track" });
+        }, authStateProvider);
+    }
+
     private sealed class CatalogStub : IMusicCatalog
     {
         public Func<int, Task<Track?>> Load { get; set; } = _ => Task.FromResult<Track?>(null);
@@ -98,12 +173,50 @@ public class TrackDetailsTests
         public Task<IReadOnlyList<Album>> GetAlbumsAsync(CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
-    private static async Task RenderAsync(CatalogStub catalog, Func<HtmlRenderer, Task> assertion)
+    private static async Task RenderAsync(
+        CatalogStub catalog,
+        Func<HtmlRenderer, Task> assertion,
+        Action<ApplicationDbContext>? seed = null,
+        AuthenticationStateProvider? authStateProvider = null)
     {
-        await using var services = new ServiceCollection().AddLogging()
-            .AddSingleton<IMusicCatalog>(catalog).BuildServiceProvider();
+        await using var connection = new Microsoft.Data.Sqlite.SqliteConnection("DataSource=:memory:");
+        await connection.OpenAsync();
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseSqlite(connection)
+            .Options;
+        var factory = new TestDbContextFactory(options);
+        await using (var db = factory.CreateDbContext())
+        {
+            await db.Database.EnsureCreatedAsync();
+            seed?.Invoke(db);
+            await db.SaveChangesAsync();
+        }
+
+        var serviceCollection = new ServiceCollection()
+            .AddLogging()
+            .AddSingleton<IMusicCatalog>(catalog)
+            .AddSingleton<IDbContextFactory<ApplicationDbContext>>(factory)
+            .AddScoped<ReviewService>()
+            .AddSingleton<AuthenticationStateProvider>(
+                authStateProvider ?? new TestAuthenticationStateProvider(new ClaimsPrincipal(new ClaimsIdentity())));
+        await using var services = serviceCollection.BuildServiceProvider();
         await using var renderer = new HtmlRenderer(services, services.GetRequiredService<ILoggerFactory>());
         await renderer.Dispatcher.InvokeAsync(() => assertion(renderer));
+    }
+
+    private sealed class TestAuthenticationStateProvider(ClaimsPrincipal user) : AuthenticationStateProvider
+    {
+        public override Task<AuthenticationState> GetAuthenticationStateAsync() =>
+            Task.FromResult(new AuthenticationState(user));
+    }
+
+    private sealed class TestDbContextFactory(DbContextOptions<ApplicationDbContext> options)
+        : IDbContextFactory<ApplicationDbContext>
+    {
+        public ApplicationDbContext CreateDbContext() => new(options);
+
+        public ValueTask<ApplicationDbContext> CreateDbContextAsync(CancellationToken cancellationToken = default)
+            => ValueTask.FromResult(CreateDbContext());
     }
 
     private static ParameterView Parameters(int id) => ParameterView.FromDictionary(new Dictionary<string, object?> { [nameof(TrackDetails.Id)] = id });
