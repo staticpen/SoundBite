@@ -88,6 +88,30 @@ public class AuthenticationUiTests
     }
 
     [Test]
+    public async Task PublicProfileFollowPanelUsesActualProfileIdAndHidesSelfAndAnonymousActions()
+    {
+        await Register();
+        string actorId;
+        using (var scope = app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            actorId = (await db.Users.SingleAsync()).Id;
+            db.Users.Add(new ApplicationUser { Id = "other", UserName = "other", NormalizedUserName = "OTHER" });
+            db.Follows.Add(new SoundBite.Models.Follow { FollowerId = actorId, FollowingId = "other" });
+            await db.SaveChangesAsync();
+        }
+        var own = await client.GetStringAsync("/users/authuser");
+        Assert.That(own, Does.Not.Contain(">Follow</button>").And.Not.Contain(">Unfollow</button>"));
+        var other = await client.GetStringAsync("/users/other");
+        Assert.That(other, Does.Contain("Followers (1)").And.Contain(">Unfollow</button>"));
+        Assert.That(other, Does.Not.Contain("authuser@example.com"));
+        await PostForm("/account", "logout");
+        var anonymous = await client.GetStringAsync("/users/other");
+        Assert.That(anonymous, Does.Contain("Followers (1)").And.Contain("Log in to follow")
+            .And.Not.Contain(">Follow</button>").And.Not.Contain(">Unfollow</button>"));
+    }
+
+    [Test]
     public async Task InvalidCredentialsAndRegistrationAreRejected()
     {
         var mismatch = await Register("different");

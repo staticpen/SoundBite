@@ -15,7 +15,7 @@ namespace SoundBite.Migrations
         protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
-            modelBuilder.HasAnnotation("ProductVersion", "10.0.12");
+            modelBuilder.HasAnnotation("ProductVersion", "10.0.13");
 
             modelBuilder.Entity("ArtistAlbums", b =>
                 {
@@ -292,6 +292,24 @@ namespace SoundBite.Migrations
                     b.ToTable("Artists");
                 });
 
+            modelBuilder.Entity("SoundBite.Models.Follow", b =>
+                {
+                    b.Property<string>("FollowerId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("FollowingId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("FollowerId", "FollowingId");
+
+                    b.HasIndex("FollowingId", "FollowerId");
+
+                    b.ToTable("Follows", t =>
+                        {
+                            t.HasCheckConstraint("CK_Follows_NoSelfFollow", "\"FollowerId\" <> \"FollowingId\"");
+                        });
+                });
+
             modelBuilder.Entity("SoundBite.Models.Playlist", b =>
                 {
                     b.Property<int>("Id")
@@ -504,6 +522,25 @@ namespace SoundBite.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("SoundBite.Models.Follow", b =>
+                {
+                    b.HasOne("SoundBite.Data.ApplicationUser", "Follower")
+                        .WithMany()
+                        .HasForeignKey("FollowerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SoundBite.Data.ApplicationUser", "Following")
+                        .WithMany()
+                        .HasForeignKey("FollowingId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Follower");
+
+                    b.Navigation("Following");
                 });
 
             modelBuilder.Entity("SoundBite.Models.Playlist", b =>

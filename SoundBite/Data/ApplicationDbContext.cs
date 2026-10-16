@@ -20,6 +20,8 @@ namespace SoundBite.Data
         public DbSet<Playlist> Playlists => Set<Playlist>();
         public DbSet<PlaylistItem> PlaylistItems => Set<PlaylistItem>();
 
+        public DbSet<Follow> Follows => Set<Follow>();
+
         protected override void OnModelCreating(ModelBuilder builder)
         {
             base.OnModelCreating(builder);
@@ -85,6 +87,18 @@ namespace SoundBite.Data
 
             builder.Entity<PlaylistItem>()
                 .HasIndex(item => new { item.PlaylistId, item.Position });
+
+            builder.Entity<Follow>(entity =>
+            {
+                entity.HasKey(f => new { f.FollowerId, f.FollowingId });
+                entity.HasIndex(f => new { f.FollowingId, f.FollowerId });
+                entity.HasOne(f => f.Follower).WithMany().HasForeignKey(f => f.FollowerId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(f => f.Following).WithMany().HasForeignKey(f => f.FollowingId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.ToTable(table => table.HasCheckConstraint(
+                    "CK_Follows_NoSelfFollow", "\"FollowerId\" <> \"FollowingId\""));
+            });
 
             // SQLite unique indexes allow multiple NULLs for unknown external IDs.
             builder.Entity<Artist>().HasIndex(artist => artist.SpotifyId).IsUnique();
