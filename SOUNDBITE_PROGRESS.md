@@ -22,9 +22,9 @@
 
 - **Overall status:** In progress
 - **Current development phase:** Building working catalogue and social product features
-- **Current focus:** Authentication UI repaired, reviewed and verified for commit
-- **Last verified:** 2026-10-15
-- **Current blocker:** Social interactions and external catalogue integration are not yet implemented
+- **Current focus:** Follow/unfollow implemented, reviewed and verified for the authorized commit
+- **Last verified:** 2026-10-16
+- **Current blocker:** Likes, comments, activity feed and external catalogue integration remain incomplete
 
 ## 3. Feature Implementation Tracker
 
@@ -38,15 +38,38 @@
 | Album-track many-to-many relationship | Implemented — unverified | `ApplicationDbContext` maps `ArtistAlbums` and `ArtistTracks` and `Track.AlbumId` with a nullable optional foreign key. This matches the intended design, but the schema has not been validated via a migration review beyond the code. |
 | Playlist management | Implemented — verified | Users can create, edit, and delete playlists; add/remove tracks; and browse public playlist listings/details. Owner checks are enforced in the service. |
 | Playlist duplicate prevention | Implemented — verified | Service validation and a unique database index on playlist and track prevent duplicates. Playlist item positions preserve order. |
-| Following and followers | Not started | `Models/Follow.cs` is empty and no follow service or route has been implemented. |
+| Following and followers | Implemented — verified | Authenticated idempotent follow/unfollow, public counts and expandable 10-user pages; database constraints, concurrent requests, account deletion and browser flows verified. |
 | Likes and comments | Not started | `Models/Like.cs` and `Models/Comment.cs` are empty. No authorization or interaction logic is implemented. |
 | Activity feed | Not started | `Models/ActivityItem.cs`, `Services/FeedService.cs`, and social service classes are still empty or incomplete. |
 | Rankings and trends | Planned | `Services/RankingService.cs`, `Services/TrendService.cs`, `Strategies/PopularityRankingStrategy.cs`, and `Strategies/RatingRankingStrategy.cs` exist, but no implemented ranking logic is visible in the current code. |
 | Administrative user management | Not started | `Services/AdminService.cs` is empty and there is no admin UI or authorization pattern beyond Identity setup. |
-| Automated tests | Passed — verified | 153 NUnit tests passed, 0 failed/skipped (2026-10-15), including 9 HTTP authentication regression cases. |
-| Git and repository hygiene | Verified | `FixAuthenticationUI` at fetched `origin/main` (`168d967`, includes PR #13); authentication changes reviewed for the commit `Fix authentication UI and cookie handling`. Existing database unchanged. |
+| Automated tests | Passed — verified | 175 NUnit tests passed, 0 failed/skipped (2026-10-16), including 21 follow service/database cases and a rendered-profile integration regression. |
+| Git and repository hygiene | Verified | `FollowUnfollow` starts at fetched `origin/main` (`e507912`); follow changes reviewed for the authorized commit. Existing database unchanged. |
 
 ## 4. Latest Completed Work
+
+### 2026-10-16 — Follow/unfollow pre-commit review
+
+- Reviewed the full tracked diff and all four new files: only follow implementation, migration/designer/snapshot, tests, minimal profile integration and this progress record are included. No blocking findings or implementation edits were needed. Aaron's existing profile markup/loading logic and account editing remain intact; `UserProfile.razor` adds only the keyed follow panel.
+- Confirmed server-side authenticated actor resolution on every mutation, actor/target existence checks, actor-scoped deletion, parameterized insertion, and database-enforced unique pairs, no self-follows and valid user references. Migration designer matches the snapshot; only follow schema and EF-generated version metadata changed.
+- Reran `dotnet build SoundBite/SoundBite.csproj --nologo`: 0 warnings/errors. Reran `dotnet test SoundBite.Tests/SoundBite.Tests.csproj --nologo`: 175 passed, 0 failed/skipped, including existing profile/authentication regressions. CRLF-aware whitespace check passed; `Program.cs` retains its existing CRLF format.
+- Application database SHA-256 remains `ead1d21ea950e99cd6548f23d0b83159ac69c24b2bd4cbbf2dcac8376159eeaf`, identical to HEAD and before this review. WAL and SHM hashes also remained unchanged. Tests use isolated databases; no application migration was applied.
+- Prior implementation-session browser verification is retained below; browser checks were not repeated during this review. User authorized the commit title `Implement user follow and unfollow functionality`; no push or merge is authorized.
+
+### 2026-10-16 — Follow/unfollow implemented and verified
+
+- Rechecked `origin/main` before implementation: branch `FollowUnfollow` and remote both at `e507912e62c4da48e70e74a32eb749ef239c9fd6`. Initial working tree was clean. Read context and progress before editing. No commit, push, merge, reset or stash performed.
+- Added `Models/Follow.cs`, `Services/FollowService.cs`, `Components/Pages/ProfileFollowPanel.razor`, EF mapping and service registration. Aaron's `UserProfile.razor` has exactly one added integration line; its existing markup and profile-loading code remain intact.
+- Composite primary key enforces one relationship per pair. A reverse composite index supports incoming follows. A database check rejects self-following; both user foreign keys cascade only to follow rows, so deleting an account removes incoming/outgoing relationships while preserving other accounts and their relationships.
+- Mutations accept only the target user ID. The service resolves the actor from the server's `AuthenticationStateProvider` on every operation and checks the actor still exists. Anonymous, missing-claim, deleted-actor, self and missing-target requests are rejected. No new HTTP mutation endpoint or client-supplied actor ID was added.
+- Follow uses parameterized SQLite `INSERT ... ON CONFLICT (FollowerId, FollowingId) DO NOTHING`; unfollow deletes only the authenticated actor's matching row. Both are idempotent. Independent-connection concurrency tests verify repeated and mixed requests without duplicate relationships. Other database constraint failures are not swallowed.
+- Public counts and expandable follower/following lists use a fixed page size of 10, stable username/ID ordering, bounded offsets, and a public DTO exposing only username/display name. UI disables actions while busy, handles failures, hides self-follow controls, offers anonymous login, refreshes counts after mutations, and resets list state when navigating profiles.
+- Added migration `20261015102645_AddFollows` (plus designer and snapshot). Temporary SQLite tests cover fresh migrations, upgrade from `AddPlaylists` with existing users/tracks/playlists, rollback and re-upgrade, model/snapshot consistency, uniqueness, foreign keys, self-follow prevention and account deletion.
+- Verification: `dotnet build SoundBite/SoundBite.csproj --nologo` passed with **0 warnings, 0 errors**. `dotnet test SoundBite.Tests/SoundBite.Tests.csproj --nologo` passed **175/175**, 0 failed/skipped. Includes 21 new `FollowServiceTests` cases and one new `AuthenticationUiTests` rendered-profile integration case. Existing authentication, profile, review and playlist tests pass. `git -c core.whitespace=cr-at-eol diff --check` passed.
+- Browser verification on `http://localhost:5197` with two separately registered disposable accounts: Bob followed Alice; Alice's followers became 1, Bob's following became 1, and lists linked to the correct profiles. Signed out, verified anonymous expanded-list access and no mutation button; signed in as Alice, followed Bob, refreshed to verify persistence, then unfollowed Bob. Bob's follower count returned to 0 while his outgoing relationship remained. Own profiles showed no Follow button. Added 12 temporary fixture users to verify 13 followers across 10/3-item pages, Previous/Next boundaries and collapse. A Razor string-binding error discovered during browser verification was corrected and covered by the new HTTP regression test.
+- Isolation: browser database `/tmp/soundbite-follow-browser/test.db`; every automated follow test uses a separate temporary SQLite file. Existing `SoundBite/soundbite.db` SHA-256 before/after: `ead1d21ea950e99cd6548f23d0b83159ac69c24b2bd4cbbf2dcac8376159eeaf`, identical to HEAD. No migration was applied to the application database. EF CLI installed under `/tmp/soundbite-follow-tools`, without project/package changes; it reports an older tool patch than runtime, but generation and migration execution succeeded.
+- Outstanding: application database must be migrated in a separately authorized deployment step before using the feature there. Counts refresh on page load, list actions and local mutations; there is no live cross-session count broadcast. Existing authentication circuit revalidation behavior was preserved. No implementation blocker remains.
+- Changed files: `Models/Follow.cs`, `Services/FollowService.cs`, `Data/ApplicationDbContext.cs`, `Program.cs`, `Components/Pages/ProfileFollowPanel.razor`, `Components/Pages/UserProfile.razor`, migration/designer/snapshot, `SoundBite.Tests/FollowServiceTests.cs`, `SoundBite.Tests/AuthenticationUiTests.cs`, and this progress file.
 
 ### 2026-10-15 — Authentication UI repaired and verified
 
@@ -122,7 +145,7 @@
 - `Album`, `Artist`, and `Track` models initialize empty navigation collections and enforce basic validation requirements.
 - `Endpoints/AccountEndpoints.cs` exposes registration, login, logout, and current-user endpoints.
 - `Data/ApplicationUser.cs` includes `DisplayName` and optional `Bio`. The account page edits these fields; `/users/{username}` displays a public profile without exposing email.
-- Most remaining model and service classes are placeholders: `Follow`, `Like`, `Comment`, `ActivityItem`, `SpotifyCatalogService`, `AdminService`, `FeedService`, `FollowService`, `SocialInteractionService`, `UserService`, and the ranking/trend services.
+- Remaining model and service placeholders include `Like`, `Comment`, `ActivityItem`, `SpotifyCatalogService`, `AdminService`, `FeedService`, `SocialInteractionService`, `UserService`, and the ranking/trend services. Follow persistence and `FollowService` are implemented.
 - The NUnit test project is active and passes, and the app builds and starts successfully.
 - `20261015074342_AddUserProfiles` migrates the display-name and bio fields; the playlist migration adds playlists and ordered track items.
 
@@ -149,8 +172,8 @@
 |---|---|---|---|---|
 | Registration form cannot reach endpoint | Resolved | Replaced server-side loopback HTTP call with static SSR form processing | Verified in browser and HTTP tests | Closed |
 | Interactive login cannot set cookie | Resolved | Cookie operations now execute during HTTP form requests before rendering | Verified registration, login and logout | Closed |
-| Social product features are not yet implemented | The app does not yet support the planned social discovery workflows | Empty follow, like, comment, and feed services/models | Implement follows and a basic activity feed | Open |
-| Social persistence layer is missing | Follows, likes, comments, and feed features cannot be used reliably | Empty `Follow.cs`, `Like.cs`, `Comment.cs`, `ActivityItem.cs`, and related services | Design and implement the social model and service layer | Open |
+| Remaining social features | Likes, comments and activity feed are incomplete | Their services/models remain placeholders; follows are implemented | Implement a basic activity feed and remaining interactions | Open |
+| Remaining social persistence | Likes, comments and feed persistence are missing | Empty `Like.cs`, `Comment.cs`, `ActivityItem.cs` and related services | Design remaining social entities | Open |
 | No Spotify client is configured | Music catalogue enrichment is not connected to external metadata | `SpotifyCatalogService.cs` is empty and no API client configuration exists | Add a service abstraction and integrate Spotify metadata access | Open |
 
 ## 8. Verification Record
@@ -158,25 +181,24 @@
 | Check | Result | Notes |
 |---|---|---|
 | Application build | Passed | `dotnet test SoundBite.Tests/SoundBite.Tests.csproj -v minimal` built the app and test project successfully. |
-| Automated tests | Passed — verified | 153 NUnit tests passed, 0 failed/skipped (2026-10-15), including 9 HTTP authentication regression cases. |
+| Automated tests | Passed — verified | 175 NUnit tests passed, 0 failed/skipped (2026-10-16), including 21 follow service/database cases and a rendered-profile integration regression. |
 | Application startup | Passed | Command: `dotnet run --project SoundBite --urls http://localhost:5080` → app reported `Now listening on: http://localhost:5080` and `Application started.` |
 | Relevant feature behaviour | Passed | Website authentication, profile editing, refresh/navigation and authenticated/anonymous review/playlist access verified; see latest work. |
 | Database migrations | Passed | Profile, review, and playlist migrations are exercised by SQLite persistence tests, including playlist creation and CRUD against the migrated schema. |
 
 ## 9. Git Status
 
-- **Active branch:** `FixAuthenticationUI`, already based on latest fetched `origin/main`, `168d967faf1de9efc3619e34d2e0bddb041be903` (PR #13 included).
+- **Active branch:** `FollowUnfollow`, based on fetched `origin/main` at `e507912e62c4da48e70e74a32eb749ef239c9fd6`.
 - **Initial checkout:** Clean. No unrelated changes or stashing required.
-- **Authentication commit scope:** Seven files listed in the latest authentication entry above.
-- **Commit:** `Fix authentication UI and cookie handling`. **Push/merge:** Not performed.
-- **Commit title:** `Fix authentication UI and cookie handling`
-- **Suggested description:** Render account routes statically so Identity can issue cookies during HTTP requests, consolidate registration, preserve profile editing, and add isolated HTTP regression coverage.
+- **Current work:** Follow implementation, migration, regression tests and progress update reviewed and verified for the authorized commit. No push or merge performed.
+- **Authorized commit title:** `Implement user follow and unfollow functionality` (commit identity is recorded in Git history).
+- **Suggested description:** Add idempotent follow/unfollow, public paginated profile lists, SQLite constraints and cascading relationship cleanup, with migration, concurrency, authorization and UI regression coverage.
 
 ## 10. Next Recommended Tasks
 
-1. **Task:** Implement follow/unfollow and a basic activity feed.
+1. **Task:** Implement a basic activity feed and remaining social interactions.
    - **Reason:** The application’s core differentiation is social discovery, and the current models/services are still empty.
-   - **Dependencies:** Finalize the user, follow, like, comment, and activity schema.
+   - **Dependencies:** Build on the verified follow model; finalize like, comment and activity schemas.
    - **Acceptance criteria:** Users can follow others, like content, comment, and see feed activity without duplicate or invalid entries.
 
 2. **Task:** Build the Spotify metadata abstraction and catalogue service.
@@ -186,9 +208,9 @@
 
 ## 11. Handover for the Next Chat Session
 
-- Authentication UI fixes are implemented and verified, with 153 passing tests and browser evidence recorded in section 4. Reviewed for commit on `FixAuthenticationUI`; do not push or merge without authorization.
-- Existing database remains unchanged and unmigrated by this session. Temporary browser data is separate under `/tmp/soundbite-auth-browser`.
-- Social features, Spotify integration and profile activity remain incomplete. Those are independent of the resolved authentication UI bugs.
+- Follow/unfollow implementation is verified on `FollowUnfollow` with 175 passing tests and two-account browser checks. Full diff reviewed and build/tests rerun for the authorized commit. Do not push or merge without authorization.
+- Existing database remains unchanged and unmigrated. Browser fixtures are isolated at `/tmp/soundbite-follow-browser/test.db`.
+- Apply the migration only as a separately authorized database/deployment step. Likes, comments, feed, Spotify integration and profile activity remain independent future work.
 
 ## 12. Instructions for Updating This File
 

@@ -1,0 +1,103 @@
+@using SoundBite.Services
+@using Microsoft.AspNetCore.Components.Authorization
+@inject FollowService FollowService
+@inject ILogger<ProfileFollowPanel> Logger
+
+<section class="mt-3" aria-label="Profile follows" aria-busy="@busy">
+    @if (error is not null)
+    {
+        <p class="alert alert-danger" role="alert">@error</p>
+    }
+    @if (summary is not null)
+    {
+        <div class="d-flex gap-2 mb-3">
+            <button class="btn btn-outline-secondary" disabled="@busy" aria-expanded="@(expanded == true)" @onclick="() => ExpandAsync(true)">Followers (@summary.Followers)</button>
+            <button class="btn btn-outline-secondary" disabled="@busy" aria-expanded="@(expanded == false)" @onclick="() => ExpandAsync(false)">Following (@summary.Following)</button>
+            @if (summary.CanFollow)
+            {
+                <button class="btn btn-primary" disabled="@busy" @onclick="ToggleAsync">@(summary.IsFollowing ? "Unfollow" : "Follow")</button>
+            }
+            <AuthorizeView><NotAuthorized><a href="/login">Log in to follow</a></NotAuthorized></AuthorizeView>
+        </div>
+        @if (expanded is not null && results is not null)
+        {
+            <h2 class="h5">@(expanded.Value ? "Followers" : "Following")</h2>
+            @if (results.Users.Count == 0)
+            {
+                <p>No users to show.</p>
+            }
+            <ul>
+                @foreach (var user in results.Users)
+                {
+                    <li><a href="@($"/users/{Uri.EscapeDataString(user.UserName)}")">@(string.IsNullOrWhiteSpace(user.DisplayName) ? user.UserName : user.DisplayName) (@@@user.UserName)</a></li>
+                }
+            </ul>
+            <div class="d-flex gap-2 align-items-center">
+                <button class="btn btn-outline-secondary" disabled="@(busy || page == 0)" @onclick="() => ChangePageAsync(-1)">Previous</button>
+                <span>Page @(page + 1)</span>
+                <button class="btn btn-outline-secondary" disabled="@(busy || !results.HasNext)" @onclick="() => ChangePageAsync(1)">Next</button>
+            </div>
+        }
+    }
+</section>
+
+@code {
+    [Parameter, EditorRequired] public string UserId { get; set; } = string.Empty;
+    private FollowSummary? summary;
+    private FollowPage? results;
+    private bool? expanded;
+    private int page;
+    private bool busy;
+    private string? error;
+
+    protected override Task OnInitializedAsync() => RunAsync(RefreshAsync);
+
+    private async Task RefreshAsync()
+    {
+        summary = await FollowService.GetSummaryAsync(UserId);
+        if (expanded is not null)
+        {
+            results = await FollowService.GetPageAsync(UserId, expanded.Value, page);
+            if (page > 0 && results.Users.Count == 0)
+            {
+                page = 0;
+                results = await FollowService.GetPageAsync(UserId, expanded.Value, page);
+            }
+        }
+    }
+
+    private Task ExpandAsync(bool followers) => RunAsync(async () =>
+    {
+        expanded = expanded == followers ? null : followers;
+        page = 0;
+        await RefreshAsync();
+    });
+
+    private Task ChangePageAsync(int offset) => RunAsync(async () =>
+    {
+        page += offset;
+        await RefreshAsync();
+    });
+
+    private Task ToggleAsync() => RunAsync(async () =>
+    {
+        if (summary!.IsFollowing) await FollowService.UnfollowAsync(UserId);
+        else await FollowService.FollowAsync(UserId);
+        await RefreshAsync();
+    });
+
+    private async Task RunAsync(Func<Task> action)
+    {
+        if (busy) return;
+        busy = true;
+        error = null;
+        try { await action(); }
+        catch (UnauthorizedAccessException) { error = "Please log in again to follow users."; }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Unable to update profile follows");
+            error = "Unable to load or update follows. Refresh the page and try again.";
+        }
+        finally { busy = false; }
+    }
+}
