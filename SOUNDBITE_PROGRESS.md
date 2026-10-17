@@ -49,6 +49,17 @@
 
 ## 4. Latest Completed Work
 
+### 2026-10-17 — A1: notification paging (committed in da572bf; refresh-recovery fix uncommitted)
+
+- **Task completed:** Users can load notifications older than the newest 30 via a "Load more" button on `/notifications`. Notification category preferences (A2/A3) are not started.
+- **Files changed:** `Models/Notification.cs` (`NotificationPage` gains `HasMore`, default false), `Services/NotificationService.cs`, `Components/Pages/Notifications.razor`, `SoundBite.Tests/NotificationTests.cs`, new `SoundBite.Tests/NotificationsPageTests.cs`, and this progress file. No schema, migration, `Program.cs` or application-database changes.
+- **Decisions:** Keyset paging (`CreatedAt`, then `Id`) rather than Skip, so a notification arriving between loads cannot duplicate or skip items. `GetPageAsync(CancellationToken)` keeps its signature; older pages use the overload `GetPageAsync(beforeCreatedAt, beforeId, cancellationToken)`, which rejects `beforeId <= 0`. The recipient filter is applied before the cursor and paging. Unread count and mark-read stay independent of the displayed page.
+- **Page refresh (after review):** Any refresh (live event, reconnect, mark-read) replaces the list with the newest page and resets paging, so read states and deleted notifications always match the database; users press Load more again. A `loadGeneration` counter is bumped by every refresh, and a Load more request that began earlier discards its result if a refresh has started since. Load more is ignored while a refresh is running, and a successful refresh clears any Load more error.
+- **Refresh-recovery fix (after Codex review of da572bf):** a failed live refresh that overlapped an in-flight Load more used to leave `loadingMore` stuck (the abandoned Load more skipped its cleanup, and only a successful refresh cleared it) and hid the list behind the error. `LoadAsync` now clears the Load more state when a refresh starts and re-renders so Load more shows as disabled during a refresh. If a refresh fails after a successful load, the previous list stays visible with a "couldn't be refreshed" banner and a Try again button; a failed first load also shows Try again. Stale Load more/refresh results are still ignored by `loadGeneration`.
+- **Tests:** `NotificationTests` has 9 paging/authorization tests (the cross-user cursor test now asserts exact expected IDs). `NotificationsPageTests` renders the real page using the same `StaticHtmlRenderer` + reflection approach as `CatalogueIntegrationTests` (no new framework) and covers: Load more without duplicates, live refresh reset with current read states and deleted/new items, Load more failure then retry, refresh clearing the error, and a stale Load more result being ignored. Added for the fix: a failed refresh overlapping Load more keeps the list and recovers on retry, initial-load failure offers retry, and Load more is disabled during a refresh; the live-refresh test also checks older-page read states after Load more. The three new tests fail against da572bf's page. Removing the generation check or the reset in a scratch copy also made the matching tests fail.
+- **Verification:** On this machine only SDK 10.0.302 (no .NET 9 runtime) is installed, so the repo's `global.json` pin blocked builds here; verification used a scratch copy of the working tree with `global.json` removed, built by SDK 10.0.302 for `net9.0` and run with `DOTNET_ROLL_FORWARD=Major`. Release build: 0 warnings, 0 errors. Notification tests: 22/22. Full suite: **242/242 passed**, 0 failed/skipped (225 previous + 17 new). The developer separately ran the pinned .NET 9 build and the earlier 234-test suite successfully; the final 242 total has not been re-run under the pinned SDK. No browser test of the Load more button.
+- **Git:** original A1 work is committed (`da572bf`); the refresh-recovery fix is uncommitted on `feature/notification-preferences-paging`. Suggested commit: `fix: recover notification page from failed live refresh`.
+
 ### 2026-10-17 — Live-notification main update integrated and verified for PR #16
 
 - Started clean on `Net9Compatibility` at `ad96f2c`; fetched and merged `origin/main` at `07f9aabad86b72f453c61d4adb8324e568f83e29` using a normal merge, without rebase or force-push. Only this progress document conflicted; retained latest feature records and compatibility history. Commit/push authorized after verification; PR merge is not authorized.
@@ -320,7 +331,7 @@
 
 ## 10. Next Recommended Tasks
 
-1. **Task:** Add notification paging and user preferences.
+1. **Task:** Notification user preferences (A2/A3); paging (A1) is implemented but uncommitted.
    - **Reason:** The notification page currently returns only the latest 30 and sends every supported notification type without user controls.
    - **Dependencies:** Preserve recipient scoping, unread-count correctness, and existing read-state behavior when filtering or loading more notifications.
    - **Acceptance criteria:** Users can load older notifications and independently disable selected notification categories; persistence, authorization, unread counts, and UI are covered by tests.

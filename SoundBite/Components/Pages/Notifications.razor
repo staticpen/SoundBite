@@ -22,15 +22,26 @@ else if (!signedIn)
 {
     <p><a href="/login">Log in</a> to view your notifications.</p>
 }
-else if (loadFailed)
+else if (loadFailed && !loaded)
 {
-    <div class="alert alert-danger" role="alert">Notifications couldn't be loaded. Please try again later.</div>
+    <div class="alert alert-danger" role="alert">
+        Notifications couldn't be loaded.
+        <button type="button" class="btn btn-sm btn-outline-danger ms-2" @onclick="LoadAsync">Try again</button>
+    </div>
 }
-else if (notificationPage is not null)
+else if (loaded)
 {
+    @if (loadFailed)
+    {
+        <div class="alert alert-danger" role="alert">
+            Notifications couldn't be refreshed. The list below may be out of date.
+            <button type="button" class="btn btn-sm btn-outline-danger ms-2" @onclick="LoadAsync">Try again</button>
+        </div>
+    }
+
     <div class="d-flex justify-content-between align-items-center mb-3">
-        <p class="mb-0">@notificationPage.UnreadCount unread</p>
-        @if (notificationPage.UnreadCount > 0)
+        <p class="mb-0">@unreadCount unread</p>
+        @if (unreadCount > 0)
         {
             <button type="button" class="btn btn-sm btn-outline-primary" @onclick="MarkAllReadAsync" disabled="@busy">
                 Mark all as read
@@ -38,14 +49,14 @@ else if (notificationPage is not null)
         }
     </div>
 
-    @if (notificationPage.Items.Count == 0)
+    @if (items.Count == 0)
     {
         <p class="text-muted">You don't have any notifications yet.</p>
     }
     else
     {
         <ul class="list-group">
-            @foreach (var item in notificationPage.Items)
+            @foreach (var item in items)
             {
                 <li class="list-group-item @(item.ReadAt is null ? "list-group-item-primary" : string.Empty)" @key="item.Id">
                     <div class="d-flex justify-content-between align-items-start gap-3">
@@ -101,6 +112,17 @@ else if (notificationPage is not null)
                 </li>
             }
         </ul>
+
+        @if (hasMore)
+        {
+            <button type="button" class="btn btn-outline-primary mt-3" @onclick="LoadMoreAsync" disabled="@(loadingMore || refreshing || busy)">
+                @(loadingMore ? "Loading..." : "Load more")
+            </button>
+            @if (loadMoreFailed)
+            {
+                <p class="alert alert-danger mt-2" role="alert">Older notifications couldn't be loaded. Please try again.</p>
+            }
+        }
     }
 
     @if (!string.IsNullOrWhiteSpace(message))
@@ -110,7 +132,14 @@ else if (notificationPage is not null)
 }
 
 @code {
-    private NotificationPage? notificationPage;
+    private readonly List<NotificationItem> items = [];
+    private int unreadCount;
+    private bool hasMore;
+    private bool loaded;
+    private bool loadingMore;
+    private bool loadMoreFailed;
+    private bool refreshing;
+    private int loadGeneration; // bumped by every refresh so older requests can be ignored
     private bool loading = true;
     private bool loadFailed;
     private bool signedIn;
@@ -141,17 +170,70 @@ else if (notificationPage is not null)
         StateHasChanged();
     }
 
+    // Replaces the list with the newest page. Anything loaded with "Load more" is dropped,
+    // so read states and deleted notifications always match the database.
+    // If the refresh fails, the list that was already shown is kept and an error with a retry is displayed.
     private async Task LoadAsync()
     {
+        var generation = ++loadGeneration;
+        refreshing = true;
         loadFailed = false;
+        // Any "Load more" still running is now out of date (its result will be ignored),
+        // so clear its state here rather than relying on this refresh succeeding.
+        loadingMore = false;
+        loadMoreFailed = false;
+        StateHasChanged(); // show that a refresh is running (Load more is disabled)
         try
         {
-            notificationPage = await NotificationService.GetPageAsync();
+            var result = await NotificationService.GetPageAsync();
+            if (generation != loadGeneration) return; // a newer refresh has started
+
+            items.Clear();
+            items.AddRange(result.Items);
+            unreadCount = result.UnreadCount;
+            hasMore = result.HasMore;
+            loaded = true;
         }
         catch (Exception exception)
         {
             Logger.LogError(exception, "Unable to load notifications");
-            loadFailed = true;
+            if (generation == loadGeneration)
+                loadFailed = true;
+        }
+        finally
+        {
+            if (generation == loadGeneration)
+                refreshing = false;
+        }
+    }
+
+    private async Task LoadMoreAsync()
+    {
+        if (loadingMore || refreshing || !hasMore || items.Count == 0) return;
+        var generation = loadGeneration;
+        loadingMore = true;
+        loadMoreFailed = false;
+        try
+        {
+            var last = items[^1];
+            var result = await NotificationService.GetPageAsync(last.CreatedAt, last.Id);
+            if (generation != loadGeneration) return; // a refresh replaced the list while this was loading
+
+            var shownIds = items.Select(item => item.Id).ToHashSet();
+            items.AddRange(result.Items.Where(item => !shownIds.Contains(item.Id)));
+            unreadCount = result.UnreadCount;
+            hasMore = result.HasMore;
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Unable to load older notifications");
+            if (generation == loadGeneration)
+                loadMoreFailed = true;
+        }
+        finally
+        {
+            if (generation == loadGeneration)
+                loadingMore = false;
         }
     }
 
