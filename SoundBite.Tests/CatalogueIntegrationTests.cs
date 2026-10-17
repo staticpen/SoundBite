@@ -56,11 +56,15 @@ public class CatalogueIntegrationTests
             var html = search.ToHtmlString();
             Assert.That(html, Does.Contain("Echo artist").And.Contain("Echo album"));
             var links = Regex.Matches(html, "href=\"([^\"]+)\"").Select(m => m.Groups[1].Value).ToArray();
-            Assert.That(links, Is.EqualTo(new[] { "/tracks/42", "/tracks/907" }));
+            Assert.That(links, Is.EqualTo(new[] { "/artists/11", "/albums/23", "/tracks/42", "/tracks/907" }));
+            Assert.That(typeof(ArtistDetails).GetCustomAttributes<RouteAttribute>().Select(r => r.Template),
+                Does.Contain("/artists/{Id:int}"));
+            Assert.That(typeof(AlbumDetails).GetCustomAttributes<RouteAttribute>().Select(r => r.Template),
+                Does.Contain("/albums/{Id:int}"));
             Assert.That(html, Does.Contain("Echo &lt;track&gt;"));
             Assert.That(typeof(TrackDetails).GetCustomAttributes<RouteAttribute>().Select(r => r.Template),
                 Does.Contain("/tracks/{Id:int}"));
-            foreach (var link in links)
+            foreach (var link in links.Where(link => link.StartsWith("/tracks/", StringComparison.Ordinal)))
             {
                 var id = int.Parse(link.Split('/').Last());
                 var details = await renderer.RenderComponentAsync<TrackDetails>(ParameterView.FromDictionary(
@@ -74,6 +78,39 @@ public class CatalogueIntegrationTests
                     .And.Not.Contain(id == 42 ? "Second track review" : "First track review"));
                 Assert.That(detailHtml, Does.Contain(id == 42 ? "4 / 5 stars" : "2 / 5 stars"));
             }
+        });
+    }
+
+    [Test]
+    public async Task ArtistAndAlbumDetailsLinkThroughTheirRelatedCatalogueRecords()
+    {
+        await WithCatalogue(async renderer =>
+        {
+            var artist = await renderer.RenderComponentAsync<ArtistDetails>(ParameterView.FromDictionary(
+                new Dictionary<string, object?> { [nameof(ArtistDetails.Id)] = 11 }));
+            Assert.That(artist.ToHtmlString(), Does.Contain("Echo artist")
+                .And.Contain("href=\"/albums/23\"")
+                .And.Contain("href=\"/tracks/42\""));
+
+            var album = await renderer.RenderComponentAsync<AlbumDetails>(ParameterView.FromDictionary(
+                new Dictionary<string, object?> { [nameof(AlbumDetails.Id)] = 23 }));
+            Assert.That(album.ToHtmlString(), Does.Contain("Echo album")
+                .And.Contain("href=\"/artists/11\"")
+                .And.Contain("href=\"/tracks/42\""));
+        });
+    }
+
+    [Test]
+    public async Task HomePageProvidesCatalogueAndCommunityEntryPoints()
+    {
+        await WithCatalogue(async renderer =>
+        {
+            var home = await renderer.RenderComponentAsync<Home>(ParameterView.Empty);
+            var html = home.ToHtmlString();
+            Assert.That(html, Does.Contain("Discover music")
+                .And.Contain("href=\"/catalogue/search\"")
+                .And.Contain("href=\"/playlists\"")
+                .And.Contain("href=\"/feed\""));
         });
     }
 
@@ -111,7 +148,7 @@ public class CatalogueIntegrationTests
         {
             await db.Database.MigrateAsync();
             var artist = new Artist { Id = 11, Name = "Echo artist" };
-            var album = new Album { Id = 23, Title = "Echo album" };
+            var album = new Album { Id = 23, Title = "Echo album", Artists = [artist] };
             db.AddRange(artist, album,
                 new Track { Id = 42, Title = "Echo <track>", SpotifyId = "spotify-first", Album = album, Artists = [artist] },
                 new Track { Id = 907, Title = "Echo <track>", SpotifyId = "spotify-second" });

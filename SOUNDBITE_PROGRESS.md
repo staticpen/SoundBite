@@ -22,9 +22,9 @@
 
 - **Overall status:** In progress
 - **Current development phase:** Building working catalogue and social product features
-- **Current focus:** Likes now support reviews, tracks, playlists, and comments; catalogue discovery is the next product milestone
+- **Current focus:** Completing catalogue discovery with linked artist/album detail pages and a discovery-oriented home page
 - **Last verified:** 2026-10-17
-- **Current blocker:** Comments and feed events remain review-based; artist/album navigation and external metadata integration remain incomplete
+- **Current blocker:** External music metadata integration is not implemented; comments and feed events remain review-based
 
 ## 3. Feature Implementation Tracker
 
@@ -32,7 +32,7 @@
 |---|---|---|
 | Authentication | Implemented — verified | Website registration, username/email login, logout, profile editing, cookie persistence and authorization checks pass using isolated migrated databases; see latest work. |
 | User profiles | Implemented — verified | `ApplicationUser` stores a display name and bio; the account page can edit them, and `/users/{username}` displays the public profile without exposing account email. The migration and persistence round-trip are tested. |
-| Music catalogue | In progress | EF-backed search is available at `/catalogue/search`, and track details are available at `/tracks/{id}`. Artist/album search results are not linked to details; catalogue editing and external metadata integration are absent. |
+| Music catalogue | In progress — core discovery verified | EF-backed search links to track, artist, and album details at `/tracks/{id}`, `/artists/{id}`, and `/albums/{id}`. Detail pages link related catalogue records, and the home page offers search, playlist, and feed entry points. Catalogue editing and external metadata integration are absent. |
 | Spotify integration | Not started | `Services/SpotifyCatalogService.cs` is empty and there is no client configuration or API integration yet. |
 | Track ratings and reviews | Implemented — verified | Reviews persist through EF Core; the service supports create/read/update, the database enforces one review per user per track and valid 1–5 ratings, and track details support public review reading plus authenticated submission/editing. |
 | Album-track many-to-many relationship | Implemented — unverified | `ApplicationDbContext` maps `ArtistAlbums` and `ArtistTracks` and `Track.AlbumId` with a nullable optional foreign key. This matches the intended design, but the schema has not been validated via a migration review beyond the code. |
@@ -43,10 +43,18 @@
 | Activity feed | Implemented — verified | `/feed` shows paginated reviews and comments from the signed-in user and followed users, links back to the track review, and prompts anonymous visitors to log in. |
 | Rankings and trends | Planned | `Services/RankingService.cs`, `Services/TrendService.cs`, `Strategies/PopularityRankingStrategy.cs`, and `Strategies/RatingRankingStrategy.cs` exist, but no implemented ranking logic is visible in the current code. |
 | Administrative user management | Not started | `Services/AdminService.cs` is empty and there is no admin UI or authorization pattern beyond Identity setup. |
-| Automated tests | Passed — verified | 192 NUnit tests passed, 0 failed/skipped (2026-10-17). |
-| Git and repository hygiene | In progress | Extended like support and its migration are uncommitted on `main` at `29847d6`. |
+| Automated tests | Passed — verified | 196 NUnit tests passed, 0 failed/skipped (2026-10-17), including the catalogue detail and route coverage. |
+| Git and repository hygiene | In progress | Catalogue discovery changes are uncommitted on `main` at `2a87687`. |
 
 ## 4. Latest Completed Work
+
+### 2026-10-17 — Artist/album catalogue details and discovery landing page
+
+- **Task completed:** Made artist and album search results navigable, added artist and album detail pages, and replaced the scaffold home page with entry points into catalogue search, playlists, and the activity feed.
+- **Files or components changed:** `Components/Pages/CatalogueSearch.razor`, `Components/Pages/ArtistDetails.razor`, `Components/Pages/AlbumDetails.razor`, `Components/Pages/Home.razor`, `CatalogueIntegrationTests.cs`, and `PageRouteTests.cs`.
+- **Important implementation decisions:** Reused the existing `IMusicCatalog` and EF-backed artist/album queries; no schema or migration changes were needed. Detail pages handle invalid IDs, missing records, and load failures, and link available related entities and tracks.
+- **Verification performed and its result:** Focused catalogue and route tests passed 13/13. Full NUnit suite passed 196/196. `git diff --check` passed after normalizing the Home page line endings.
+- **Remaining limitations:** Catalogue content is local only; external music metadata integration, catalogue editing, and broader discovery such as rankings remain future work. Changes are not committed.
 
 ### 2026-10-17 — Like support extended to all planned targets
 
@@ -197,52 +205,47 @@
 | Interactive login cannot set cookie | Resolved | Cookie operations now execute during HTTP form requests before rendering | Verified registration, login and logout | Closed |
 | Remaining social interaction scope | Comments are review-only and flat; likes are not feed events | `SocialInteractionService` stores comments against `ReviewId`; feed selects reviews/comments | Consider threaded replies and like activity events | Open |
 | No Spotify client is configured | Music catalogue enrichment is not connected to external metadata | `SpotifyCatalogService.cs` is empty and no API client configuration exists | Add a service abstraction and integrate Spotify metadata access | Open |
-| Catalogue discovery is basic | Artist/album results are not navigable, and the home page remains the default scaffold | Search results link to tracks only; ranking and trend services are empty | Add artist/album detail routes and discovery views | Open |
+| Catalogue data and discovery remain limited | Search and artist/album/track details use the local catalogue; the home page links into current product areas | No external metadata source or catalogue editing; ranking and trend services are placeholders | Integrate a permitted metadata provider, then implement tested discovery rankings | Open |
 | Administration is absent | No protected user-management workflow is available | `AdminService.cs` is empty and no admin UI/authorization policy is configured | Define roles and implement server-authorized admin workflows | Open |
 
 ## 8. Verification Record
 
 | Check | Result | Notes |
 |---|---|---|
-| Application build | Passed | `dotnet test SoundBite.Tests/SoundBite.Tests.csproj -v minimal` built the app and test project successfully. |
-| Automated tests | Passed — verified | 192 NUnit tests passed, 0 failed/skipped (2026-10-17). |
+| Application build | Passed | `dotnet test SoundBite.Tests/SoundBite.Tests.csproj --nologo -v minimal` built the app and test project successfully. |
+| Automated tests | Passed — verified | 196 NUnit tests passed, 0 failed/skipped (2026-10-17). |
 | Application startup | Passed | Command: `dotnet run --project SoundBite --urls http://localhost:5080` → app reported `Now listening on: http://localhost:5080` and `Application started.` |
 | Relevant feature behaviour | Passed | Authentication/profile/review/playlist/follow flows were previously verified; rendered tests cover review interactions, feed, and track likes. |
 | Database migrations | Passed | Profile, review, playlist, follow, review-social, and expanded-like migrations are exercised by isolated SQLite tests, including preserving existing review likes. The configured app database is not migrated. |
 
 ## 9. Git Status
 
-- **Active branch:** `main` at `29847d6` (`Implement review liking, comment CRUD`).
-- **Working tree:** Like target expansion, migration, UI, tests, and progress updates are uncommitted.
-- **Latest verification:** Full NUnit suite passed 192/192; EF reported no pending model changes; isolated migration tests preserved existing review likes and verified target-specific cascade behavior. The configured application database was not migrated.
+- **Active branch:** `main` at `2a87687` (`Extend likes to tracks, playlists and comments`), synchronized with `origin/main` at the last check.
+- **Working tree:** Catalogue search/home updates, artist/album detail pages, tests, and this progress update are uncommitted.
+- **Latest verification:** Focused catalogue and route tests passed 13/13; full NUnit suite passed 196/196. No data model changes were made, so no migration was required.
 
 ## 10. Next Recommended Tasks
 
-1. **Task:** Complete catalogue browsing and discovery.
-   - **Reason:** Local search is basic; artist/album results are not navigable and the home page is still the default scaffold.
-   - **Dependencies:** Add artist/album detail routes and decide how catalogue data is populated.
-   - **Acceptance criteria:** Search results link to useful details and the home page offers a basic path into music discovery.
-
-2. **Task:** Integrate an external music metadata provider.
+1. **Task:** Integrate an external music metadata provider.
    - **Reason:** The catalogue currently depends on records already in the local database.
    - **Dependencies:** Choose an approved provider and comply with its metadata, artwork, and attribution rules.
    - **Acceptance criteria:** A service abstraction fetches and maps allowed music metadata without coupling external calls to UI components.
 
-3. **Task:** Implement rankings and trends.
+2. **Task:** Implement rankings and trends.
    - **Reason:** Ranking and trend services are placeholders; these would support discovery once catalogue and activity data exist.
    - **Dependencies:** Define transparent metrics based on SoundBite ratings and activity.
    - **Acceptance criteria:** Tested ranking views for tracks, albums, or artists clearly describe their metrics.
 
-4. **Task:** Add administrative user management.
+3. **Task:** Add administrative user management.
    - **Reason:** There are no admin workflows or authorization policies yet.
    - **Dependencies:** Define admin roles and protected operations.
    - **Acceptance criteria:** Admin-only user management is enforced server-side and covered by authorization tests.
 
 ## 11. Handover for the Next Chat Session
 
-- Follow/unfollow and review likes/comments/feed are committed on `main` through `29847d6`. Expanded likes for tracks, playlists, and comments are implemented locally with migration `20261017005729_ExpandLikeTargets`.
-- The full test suite passed 192/192 on 2026-10-17. Isolated migration tests confirm existing review likes survive the schema upgrade and related likes cascade when targets are deleted; EF reports no pending model changes.
-- Like expansion and progress updates are uncommitted. The configured application database was not migrated. Remaining work includes artist/album catalogue discovery, external metadata, rankings, administration, and optionally threaded comments/feed likes.
+- Follow/unfollow and review likes/comments/feed are committed on `main`; likes across tracks, playlists, and comments are included in commit `2a87687`.
+- Catalogue search, artist/album/track detail navigation, and the discovery-oriented home page are implemented locally. Focused tests passed 13/13 and the full suite passed 196/196 on 2026-10-17.
+- Catalogue UI, its tests, and progress updates are uncommitted. No migration was needed. Remaining work includes external metadata, rankings, administration, and optionally threaded comments/feed likes.
 
 ## 12. Instructions for Updating This File
 

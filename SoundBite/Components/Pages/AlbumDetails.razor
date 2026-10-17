@@ -1,0 +1,105 @@
+@page "/albums/{Id:int}"
+@attribute [StreamRendering]
+@using SoundBite.Interfaces
+@using SoundBite.Models
+@inject IMusicCatalog Catalog
+@inject ILogger<AlbumDetails> Logger
+
+<PageTitle>@(album?.Title ?? "Album details") - SoundBite</PageTitle>
+
+@if (loading)
+{
+    <p role="status">Loading album...</p>
+}
+else if (Id <= 0)
+{
+    <div class="alert alert-warning" role="alert">Invalid album ID. Please use a positive whole number.</div>
+}
+else if (loadFailed)
+{
+    <div class="alert alert-danger" role="alert">The album couldn't be loaded. Please try again later.</div>
+}
+else if (album is null)
+{
+    <div class="alert alert-info" role="status">Album not found.</div>
+}
+else
+{
+    <article>
+        <p><a href="/catalogue/search">Catalogue search</a></p>
+        <h1>@album.Title</h1>
+        <section class="mt-3" aria-labelledby="album-artists">
+            <h2 id="album-artists" class="h4">Artists</h2>
+            @if (album.Artists.Count == 0)
+            {
+                <p class="text-muted">No artist information available.</p>
+            }
+            else
+            {
+                <ul class="list-inline">
+                    @foreach (var artist in album.Artists.OrderBy(artist => artist.Name).ThenBy(artist => artist.Id))
+                    {
+                        <li class="list-inline-item" @key="artist.Id"><a href="@($"/artists/{artist.Id}")">@artist.Name</a></li>
+                    }
+                </ul>
+            }
+        </section>
+
+        @if (!string.IsNullOrWhiteSpace(album.SpotifyId))
+        {
+            <a class="btn btn-outline-success mb-3" href="@SpotifyUrl(album.SpotifyId)">Open album on Spotify</a>
+        }
+
+        <section class="mt-3" aria-labelledby="album-tracks">
+            <h2 id="album-tracks">Tracks (@album.Tracks.Count)</h2>
+            @if (album.Tracks.Count == 0)
+            {
+                <p class="text-muted">No tracks are linked to this album yet.</p>
+            }
+            else
+            {
+                <ol class="list-group list-group-numbered">
+                    @foreach (var track in album.Tracks.OrderBy(track => track.Title).ThenBy(track => track.Id))
+                    {
+                        <li class="list-group-item" @key="track.Id">
+                            <a href="@($"/tracks/{track.Id}")">@track.Title</a>
+                        </li>
+                    }
+                </ol>
+            }
+        </section>
+    </article>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private Album? album;
+    private bool loading;
+    private bool loadFailed;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        album = null;
+        loadFailed = false;
+        loading = Id > 0;
+        if (!loading) return;
+
+        try
+        {
+            album = await Catalog.GetAlbumAsync(Id);
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Unable to load album {AlbumId}", Id);
+            loadFailed = true;
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private static string SpotifyUrl(string id) =>
+        $"https://open.spotify.com/album/{Uri.EscapeDataString(id)}";
+}
