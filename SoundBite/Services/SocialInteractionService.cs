@@ -29,7 +29,8 @@ public sealed record LikeSummary(int Count, bool IsLiked);
 
 public sealed class SocialInteractionService(
     IDbContextFactory<ApplicationDbContext> contextFactory,
-    AuthenticationStateProvider authenticationStateProvider)
+    AuthenticationStateProvider authenticationStateProvider,
+    NotificationEventDispatcher notificationEvents)
 {
     public const int MaximumCommentLength = 2000;
 
@@ -186,6 +187,8 @@ public sealed class SocialInteractionService(
         }
         await db.SaveChangesAsync(cancellationToken);
 
+        if (recipientUserId is not null && recipientUserId != user.Id)
+            await notificationEvents.PublishAsync(recipientUserId);
         return ToReviewComment(comment, user, true, parentUser);
     }
 
@@ -282,6 +285,8 @@ public sealed class SocialInteractionService(
                     await db.SaveChangesAsync(cancellationToken);
             }
             await transaction.CommitAsync(cancellationToken);
+            if (inserted > 0 && notificationRecipientId is not null && notificationRecipientId != user.Id)
+                await notificationEvents.PublishAsync(notificationRecipientId);
         }
         else
         {

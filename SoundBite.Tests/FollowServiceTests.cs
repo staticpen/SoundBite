@@ -4,6 +4,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.Extensions.Logging.Abstractions;
 using SoundBite.Data;
 using SoundBite.Models;
 using SoundBite.Services;
@@ -25,7 +26,10 @@ public class FollowServiceTests
         factory = new Factory(new DbContextOptionsBuilder<ApplicationDbContext>()
             .UseSqlite($"Data Source={directory}/test.db;Pooling=False").Options);
         authentication = new TestAuthentication("alice");
-        service = new FollowService(factory, authentication);
+        service = new FollowService(
+            factory,
+            authentication,
+            new NotificationEventDispatcher(NullLogger<NotificationEventDispatcher>.Instance));
         await using var db = factory.CreateDbContext();
         await db.Database.MigrateAsync();
         db.Users.AddRange(Enumerable.Range(0, 23).Select(i => new ApplicationUser

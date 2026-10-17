@@ -29,6 +29,10 @@ builder.Services.AddScoped<FollowService>();
 builder.Services.AddScoped<SocialInteractionService>();
 builder.Services.AddScoped<FeedService>();
 builder.Services.AddScoped<NotificationService>();
+builder.Services.AddSingleton<NotificationEventDispatcher>();
+builder.Services.AddScoped<NotificationCircuitHandler>();
+builder.Services.AddScoped<Microsoft.AspNetCore.Components.Server.Circuits.CircuitHandler>(
+    services => services.GetRequiredService<NotificationCircuitHandler>());
 builder.Services.AddScoped<AdminService>();
 builder.Services.AddScoped<IRankingStrategy, RatingRankingStrategy>();
 builder.Services.AddScoped<IRankingStrategy, PopularityRankingStrategy>();

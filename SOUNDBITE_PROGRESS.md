@@ -10,7 +10,7 @@
 - **Application:** Blazor Web App
 - **Interactivity:** Interactive Server
 - **Language:** C#
-- **Target framework:** .NET 9, SDK 9.0.319, Microsoft/EF packages 9.0.21
+- **Target framework:** .NET 9; SDK 9.0.319, Microsoft/EF packages 9.0.21
 - **Database:** SQLite
 - **ORM:** Entity Framework Core
 - **Authentication:** ASP.NET Core Identity
@@ -22,9 +22,9 @@
 
 - **Overall status:** In progress
 - **Current development phase:** Building working catalogue and social product features
-- **Current focus:** Latest main integrated into .NET 9 compatibility branch; resolved merge awaits authorization to commit/push
+- **Current focus:** Latest live-notification functionality integrated and verified on .NET 9 for PR #16
 - **Last verified:** 2026-10-17
-- **Current blocker:** Windows VS2022 and manual exhausted-retry/reload checks remain outstanding. Live Spotify API access requires approved credentials. The protected application database remains unchanged and unmigrated.
+- **Current blocker:** Windows VS2022, manual reconnection and live Spotify validation remain outstanding. Application database is preserved exactly from main; no application migrations run.
 
 ## 3. Feature Implementation Tracker
 
@@ -41,13 +41,22 @@
 | Following and followers | Implemented — verified | Authenticated idempotent follow/unfollow, public counts and expandable 10-user pages; database constraints, concurrent requests, account deletion and browser flows verified. Merged into `main` at `ac92cbe`. |
 | Likes and comments | Implemented — verified | Signed-in users can idempotently like reviews, tracks, public playlists, and comments; private playlist likes are owner-only. Users can add/edit/delete their own review comments and reply one level deep to top-level comments. Replies are grouped under parents, cannot be nested further, and are preserved as top-level comments if their parent is deleted. |
 | Activity feed | Implemented — verified | `/feed` globally orders and paginates reviews, comments/replies, and likes by followed users and the signed-in user. Reply entries identify the parent author. Like activity covers reviews, comments, tracks, and public playlists; private-playlist likes are excluded. |
-| Notifications | Implemented — verified | Persistent recipient-scoped notifications are created for follows, review comments, replies, and likes on reviews, comments, and playlists. Self-notifications and duplicate follow/like events are suppressed. `/notifications` lists the latest 30, supports individual and bulk read marking, and the signed-in navigation displays an unread count. Track likes have no content owner to notify. |
+| Notifications | Implemented — verified | Persistent recipient-scoped notifications are created for follows, review comments, replies, and likes on reviews, comments, and playlists. Self-notifications and duplicate follow/like events are suppressed. `/notifications` lists the latest 30, supports individual and bulk read marking, and the signed-in navigation displays an unread count. A single-instance event dispatcher updates active recipient circuits; navigation and circuit reconnection reload persisted state. Track likes have no content owner to notify. |
 | Rankings and trends | Implemented — verified | `/rankings` shows top-rated tracks (minimum two reviews), most-reviewed tracks overall, and tracks with the most reviews in the last seven days. Metrics use SoundBite review data only, with stable tie-break ordering. |
 | Administrative user management | Implemented — verified | `/admin/users` supports user search/paging, account lock/unlock, and admin-role grants/revocation. Every service operation checks live role membership and lockout state server-side. Initial roles are bootstrapped from configured user IDs. |
-| Automated tests | Passed — verified | Combined .NET 9 suite passed: 223/223, including notification creation/deduplication, recipient privacy, read-state updates, authentication, and two compatibility 404 cases. |
-| Git and repository hygiene | In progress | `Net9Compatibility` has a resolved, uncommitted merge of `origin/main` at `e3e1cad`; no push performed. |
+| Automated tests | Passed — verified | Combined .NET 9 suite: 225 passed, 0 failed/skipped; includes live-notification coverage and two compatibility 404 cases. |
+| Git and repository hygiene | Verified | Normal integration of main `07f9aab` into `Net9Compatibility`; database matches main, no unrelated changes. |
 
 ## 4. Latest Completed Work
+
+### 2026-10-17 — Live-notification main update integrated and verified for PR #16
+
+- Started clean on `Net9Compatibility` at `ad96f2c`; fetched and merged `origin/main` at `07f9aabad86b72f453c61d4adb8324e568f83e29` using a normal merge, without rebase or force-push. Only this progress document conflicted; retained latest feature records and compatibility history. Commit/push authorized after verification; PR merge is not authorized.
+- Preserved main's live per-user notification dispatcher, scoped circuit reconnect handler, navigation/page refresh subscriptions and disposal, and follow/social notification publishing. All feature source matches main; `Program.cs` retains every new registration with the .NET 9 status-code overload. SDK/package pins and Blazor fixes remain unchanged. No compatibility failure required source or test changes.
+- `dotnet build SoundBite.sln -c Release`: passed, 0 errors, 3 existing CS1998 test warnings. `dotnet test SoundBite.sln -c Release --no-build`: **225/225 passed**, 0 failed/skipped (223 main cases plus 2 compatibility cases). `dotnet publish SoundBite/SoundBite.csproj -c Release --no-build -o /tmp/soundbite-net9-final-integration/publish`: passed.
+- EF 9 CLI model consistency check reports no pending model changes. All **11 migrations** applied to `/tmp/soundbite-net9-final-integration/check.db`; SQLite integrity is `ok`, no foreign-key violations. Logs/TRX are in `/tmp/soundbite-net9-final-integration`. Automated persistence tests use disposable databases. No historical migrations were rewritten.
+- Database cleanup from earlier work is retained: `SoundBite/soundbite.db` matches latest main exactly (Git blob `8e37c754e5bcaa5fd7a9ab47436389420dbacc7c`) and is absent from the PR diff. Before/after SHA-256 matches; no writes or migrations against the application database in this session.
+- No browser tests or live Spotify calls repeated. Outstanding: Windows VS2022 17.14 with SDK 9.0.319, manual exhausted-retry/Retry/Reload validation, and live Spotify validation. Live notification dispatch supports one application process; multi-instance delivery requires shared infrastructure.
 
 ### 2026-10-17 — Latest main integrated into PR #16; merge not committed
 
@@ -77,13 +86,21 @@
 - **Changed files:** `SoundBite/SoundBite.csproj`, `SoundBite.Tests/SoundBite.Tests.csproj`, `SoundBite.Tests/AuthenticationUiTests.cs`, `SoundBite/Components/App.razor`, `SoundBite/Components/Routes.razor`, all three `ReconnectModal.razor`/`.css`/`.js` files, `SoundBite/Program.cs`, `SoundBite.sln`, `global.json`, `.config/dotnet-tools.json`, `SOUNDBITE_CONTEXT.md`, this progress file.
 - **Outstanding:** Ready for Windows Visual Studio 2022 17.14 testing, not yet Windows-verified. Install exact SDK 9.0.319 and ASP.NET workload; open solution, restore/build, run 177 tests in Test Explorer, F5 and publish against a disposable database. .NET 9 support ends 10 November 2026. Existing application DB remains unmigrated. Exhausted-retry/manual Retry/Reload browser checks remain outstanding. Commit, branch push and PR creation authorized on 2026-10-17; do not merge.
 
+### 2026-10-17 — Live notification updates
+
+- **Task completed:** Added user-targeted live notification change dispatch to active Blazor circuits and refresh recovery on circuit reconnection/navigation.
+- **Files or components changed:** `Services/NotificationEventDispatcher.cs`, `Services/NotificationCircuitHandler.cs`, `Services/FollowService.cs`, `Services/SocialInteractionService.cs`, `Services/NotificationService.cs`, `Components/Layout/NavMenu.razor`, `Components/Pages/Notifications.razor`, `Program.cs`, `NotificationTests.cs`, `FollowServiceTests.cs`, `SocialInteractionTests.cs`, `TrackDetailsTests.cs`, `CatalogueIntegrationTests.cs`, and this progress file.
+- **Important implementation decisions:** A singleton in-process dispatcher publishes only to subscribers registered for the recipient's authenticated user ID. Components marshal updates to their Blazor dispatcher and dispose subscriptions with their lifetime. A scoped circuit handler re-reads persisted notification state after reconnection; navigation also refreshes the unread count. The existing database remains the source of truth.
+- **Verification performed and its result:** Application build passed with 0 warnings/errors. Focused notification/follow/social/authentication tests passed 50/50. Full NUnit suite passed 223/223. EF reports no pending model changes; CRLF-aware `git diff --check` passed.
+- **Remaining limitations:** In-process event delivery assumes one application instance; multiple instances would need a distributed backplane. No two-browser manual smoke test was performed. Database migrations `20261017012957_ThreadedReviewComments` and `20261017013935_AddNotifications` have not been applied to the configured application database.
+
 ### 2026-10-17 — Persistent in-app notifications
 
 - **Task completed:** Added durable notifications for follows, review comments, comment replies, and likes on reviews, comments, and playlists. Added a private notifications page, unread navigation count, and individual/bulk read actions.
 - **Files or components changed:** `Models/Notification.cs`, `Data/ApplicationDbContext.cs`, `Services/NotificationService.cs`, `Services/FollowService.cs`, `Services/SocialInteractionService.cs`, `Components/Pages/Notifications.razor`, `Components/Layout/NavMenu.razor`, `Program.cs`, migration `20261017013935_AddNotifications` (designer and snapshot), `NotificationTests.cs`, `AuthenticationUiTests.cs`, `PageRouteTests.cs`, and this progress file.
 - **Important implementation decisions:** Follow and like writes plus their notifications are in one database transaction; only a newly inserted follow/like creates a notification. Comment notifications are saved with their comment. Self-notifications are suppressed. Track likes do not notify because tracks have no user owner; private playlist likes are only possible for the owner and therefore do not generate self-notifications. Mark-read queries are scoped to the authenticated recipient.
 - **Verification performed and its result:** Focused notification, authentication UI, and route tests passed 25/25. Full NUnit suite passed 221/221. EF reports no pending model changes after migration generation; CRLF-aware `git diff --check` passed.
-- **Remaining limitations:** The migration has been exercised by isolated test databases but not applied to the configured application database. New notifications from other users do not update an already-open circuit in real time; the unread count refreshes after local mark-read actions and on page load.
+- **Remaining limitations:** The migration has been exercised by isolated test databases but not applied to the configured application database. Live delivery is in-process and requires a single app instance.
 
 ### 2026-10-17 — Activity feed replies and likes
 
@@ -280,7 +297,7 @@
 |---|---|---|---|---|
 | Registration form cannot reach endpoint | Resolved | Replaced server-side loopback HTTP call with static SSR form processing | Verified in browser and HTTP tests | Closed |
 | Interactive login cannot set cookie | Resolved | Cookie operations now execute during HTTP form requests before rendering | Verified registration, login and logout | Closed |
-| Remaining social interaction scope | Notifications are not pushed to already-open circuits; private-playlist likes are excluded | Notification counts are loaded on page load and refreshed on local read actions; feed omits private playlist activity | Consider real-time notification delivery after validating core features | Open |
+| Remaining social interaction scope | Notifications are not backed by a distributed event bus; private-playlist likes are excluded from the activity feed | Live delivery uses an in-process dispatcher by design for the current single-instance app | Add a distributed backplane if deploying multiple instances; otherwise prioritize user notification preferences and paging | Open |
 | Spotify access has not been exercised against a live account | External search/import cannot be confirmed without valid API credentials | Spotify client credentials are read from environment variables; automated tests use a mock HTTP handler | Configure approved credentials locally and smoke-test search/import while respecting Spotify's policies | Open |
 | Catalogue data and discovery remain limited | Spotify track search/import, local catalogue details, and review-based track rankings/trends are implemented | No artwork import or general catalogue editing; rankings are track-only because reviews apply to tracks | Consider general catalogue management after protected administration is implemented | Open |
 | Initial administrator needs deployment configuration | The first admin must exist before the app can assign its admin role | Startup reads indexed `Admin:UserIds` settings and fails explicitly if an ID is unknown | Register the first user, configure the ID, apply migrations, then restart; keep settings in trusted environment configuration | Open |
@@ -289,33 +306,31 @@
 
 | Check | Result | Notes |
 |---|---|---|
-| Application build | Passed | Combined Release build/publish passed on SDK 9.0.319; 0 errors and 3 existing test warnings. |
-| Automated tests | Passed — verified | 223 NUnit tests passed on .NET 9, 0 failed/skipped (2026-10-17). |
-| Application startup | Previously passed; combined browser startup not repeated | Command: `dotnet run --project SoundBite --urls http://localhost:5080` → app reported `Now listening on: http://localhost:5080` and `Application started.` |
+| Application build | Passed | Combined .NET 9 Release build and publish passed; 0 errors, 3 existing test warnings. |
+| Automated tests | Passed — verified | Combined .NET 9 suite: 225 passed, 0 failed/skipped; includes live-notification coverage and two compatibility 404 cases. |
+| Application startup | Passed | Command: `dotnet run --project SoundBite --urls http://localhost:5080` → app reported `Now listening on: http://localhost:5080` and `Application started.` |
 | Relevant feature behaviour | Passed | Authentication/profile/review/playlist/follow flows were previously verified; rendered tests cover review interactions, feed, and track likes. |
 | Database migrations | Passed | Existing migrations, `20261017012957_ThreadedReviewComments`, and `20261017013935_AddNotifications` are exercised by isolated SQLite tests; EF reports no pending model changes. The configured app database is not migrated. |
 
 ## 9. Git Status
 
-- **Active branch:** `Net9Compatibility`, HEAD `505af74` (already published in PR #16).
-- **Merge in progress:** `origin/main` at `e3e1cad`; conflicts resolved and staged for review. No merge commit or push performed; no rebase or force-push.
-- **Database:** Pre-merge database retained in working tree and index; incoming main's binary DB change intentionally excluded.
-- **Latest verification:** Release build/publish, 223 NUnit tests and disposable EF migration/model/integrity checks passed. No compatibility blocker found.
+- **Branch:** `Net9Compatibility`; latest main `07f9aab` integrated with a normal merge. Merge commit and push authorized after the successful 225-test verification; actual commit identity/publication are recorded in Git/GitHub.
+- **Database:** Identical to latest main and excluded from PR changes. No application migration performed.
+- **PR #16:** Do not merge into main yet. No rebase, force-push or branch deletion.
 
 ## 10. Next Recommended Tasks
 
-1. **Task:** Add real-time delivery for unread notifications.
-   - **Reason:** The current unread count is accurate on page load and after local read actions, but notifications from other users do not appear in already-open circuits.
-   - **Dependencies:** Use the existing Interactive Server model and ensure per-user authorization before pushing events; keep database records as the durable source of truth.
-   - **Acceptance criteria:** Notification events update only the recipient's signed-in circuit, reconnects recover from persisted notification state, and cross-user delivery is covered by tests.
+1. **Task:** Add notification paging and user preferences.
+   - **Reason:** The notification page currently returns only the latest 30 and sends every supported notification type without user controls.
+   - **Dependencies:** Preserve recipient scoping, unread-count correctness, and existing read-state behavior when filtering or loading more notifications.
+   - **Acceptance criteria:** Users can load older notifications and independently disable selected notification categories; persistence, authorization, unread counts, and UI are covered by tests.
 
 ## 11. Handover for the Next Chat Session
 
-- Review the resolved merge on `Net9Compatibility` for PR #16. All incoming feature implementations and migrations are preserved; the application database is unchanged. Stop before committing or pushing until explicitly authorized. Do not merge PR #16 into main.
-- Combined .NET 9 Release build/publish and 223/223 tests pass. EF 9 applies all 11 migrations on a disposable database with no pending model changes or integrity violations.
-- Windows Visual Studio 2022 17.14 with exact SDK 9.0.319 still needs solution-load, Test Explorer, F5 and publish checks. Manual exhausted-retry/Retry/Reload browser checks remain outstanding; previous automatic reconnect checks are historical, not rerun on this combined state.
-- Live Spotify connectivity remains unverified. Initial admin provisioning uses trusted `Admin__UserIds__0` after registration/migration. Notifications are persistent and recipient-scoped, but real-time cross-circuit delivery remains future work.
-- The application database remains at its original pre-integration schema. Any deployment migration needs separate authorization; continue using disposable databases for verification.
+- PR #16 includes all main functionality through `07f9aab`, including live notifications, and retains .NET 9 compatibility. Release build/publish and all 225 NUnit tests passed. All 11 migrations verified on disposable SQLite; no pending model changes.
+- Application database matches main and is absent from the PR diff. Do not migrate it without separate authorization.
+- Windows VS2022, manual reconnection and live Spotify checks remain outstanding. Notification events are delivered within one app instance; multi-instance delivery is not implemented. No new browser validation was performed in this integration session.
+- Confirm main has not advanced and PR remains mergeable before any separately authorized PR merge. Do not merge PR #16 yet.
 
 ## 12. Instructions for Updating This File
 

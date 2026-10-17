@@ -8,10 +8,10 @@ namespace SoundBite.Services;
 
 public sealed class NotificationService(
     IDbContextFactory<ApplicationDbContext> contextFactory,
-    AuthenticationStateProvider authenticationStateProvider)
+    AuthenticationStateProvider authenticationStateProvider,
+    NotificationEventDispatcher notificationEvents)
 {
     public const int PageSize = 30;
-    public event Action? UnreadCountChanged;
 
     public async Task<NotificationPage> GetPageAsync(CancellationToken cancellationToken = default)
     {
@@ -69,7 +69,7 @@ public sealed class NotificationService(
                 .ExecuteUpdateAsync(
                     update => update.SetProperty(item => item.ReadAt, (DateTime?)DateTime.UtcNow),
                     cancellationToken);
-            UnreadCountChanged?.Invoke();
+            await notificationEvents.PublishAsync(userId);
         }
     }
 
@@ -83,7 +83,7 @@ public sealed class NotificationService(
                 update => update.SetProperty(notification => notification.ReadAt, (DateTime?)DateTime.UtcNow),
                 cancellationToken);
         if (updated > 0)
-            UnreadCountChanged?.Invoke();
+            await notificationEvents.PublishAsync(userId);
         return updated;
     }
 

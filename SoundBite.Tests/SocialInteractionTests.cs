@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.Extensions.Logging.Abstractions;
 using SoundBite.Data;
 using SoundBite.Models;
 using SoundBite.Services;
@@ -29,7 +30,10 @@ public class SocialInteractionTests
         var options = new DbContextOptionsBuilder<ApplicationDbContext>().UseSqlite(connection).Options;
         factory = new TestFactory(options);
         authentication = new TestAuthentication("alice");
-        service = new SocialInteractionService(factory, authentication);
+        service = new SocialInteractionService(
+            factory,
+            authentication,
+            new NotificationEventDispatcher(NullLogger<NotificationEventDispatcher>.Instance));
 
         await using var db = factory.CreateDbContext();
         await db.Database.MigrateAsync();
