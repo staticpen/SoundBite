@@ -10,7 +10,7 @@
 - **Application:** Blazor Web App
 - **Interactivity:** Interactive Server
 - **Language:** C#
-- **Target framework:** .NET 10 (verified in `SoundBite/SoundBite.csproj`)
+- **Target framework:** .NET 9 for Visual Studio 2022 compatibility (verified in `SoundBite/SoundBite.csproj`)
 - **Database:** SQLite
 - **ORM:** Entity Framework Core
 - **Authentication:** ASP.NET Core Identity
@@ -47,6 +47,14 @@
 | Git and repository hygiene | Verified | `FollowUnfollow` starts at fetched `origin/main` (`e507912`); follow changes reviewed for the authorized commit. Existing database unchanged. |
 
 ## 4. Latest Completed Work
+
+### 2026-10-17 — Step 2: Visual Studio 2022 compatibility (retarget to net9.0)
+
+- **Finding:** Microsoft's SDK/MSBuild/VS version table states net10.0 can only be targeted from Visual Studio 18.0+; VS 2022 (17.x) targets up to net9.0. The code also used .NET 10-only APIs: `<ResourcePreloader />` (`App.razor`), `Router NotFoundPage=` (`Routes.razor`), `createScopeForStatusCodePages` (`Program.cs`) and the `BlazorDisableThrowNavigationException` property. Decision: net10.0 is **NO-GO** for VS 2022, so the projects were retargeted to net9.0 (**GO**, see limitations below).
+- **Baseline before the retarget (net10.0, SDK 10.0.302):** app and test builds 0 warnings/0 errors; `dotnet test` **175 passed, 0 failed, 0 skipped**; smoke test `/` 200, `/not-found` 200, unknown URL 404, `/login` 200.
+- **Changes (minimal, group-approved):** both projects `net10.0`→`net9.0`; `Identity.EntityFrameworkCore`, `EntityFrameworkCore.Design`, `EntityFrameworkCore.Sqlite`, `Mvc.Testing` `10.0.*`→`9.0.*`; removed `BlazorDisableThrowNavigationException`; removed `<ResourcePreloader />`; removed the custom `<ReconnectModal />` and its unreferenced `Components/Layout/ReconnectModal.razor`, `.razor.css` and `.razor.js` (the template relies on .NET 10-only `components-reconnect-state-changed` and `Blazor.resumeCircuit()`), so Blazor's built-in .NET 9 reconnection UI is used; `Routes.razor` now uses the .NET 9 `<NotFound><LayoutView>` form; `Program.cs` calls `UseStatusCodePagesWithReExecute("/not-found")`; added `SoundBite.sln` (classic `.sln`, both projects). Migrations and the model snapshot are untouched. Added two regression tests in `AuthenticationUiTests.cs` (app shell serves every stylesheet/script URL it references with 200, has no `Link` preload header and no custom reconnect element; unknown route returns 404 with the Not Found page).
+- **Results on net9.0:** SDK 9.0.319 (user-local `~/.dotnet9`): solution build 0 errors, `dotnet test SoundBite.sln` **177 passed, 0 failed, 0 skipped** (175 existing + 2 new; re-run after the reconnect removal with the same totals). SDK 10.0.302: solution build 0 errors, also with `-p:LangVersion=13` (VS 2022 C# level); net9.0 tests run only via `DOTNET_ROLL_FORWARD=Major` (no .NET 9 runtime in the system install): 177 passed. Smoke test on net9: all routes as in the baseline, static assets 200, 404 shows the Not Found content, no `Link` preload header. `soundbite.db` SHA-256 unchanged (`ead1d21e…eeaf`).
+- **Not verified / limitations:** Visual Studio 2022 itself is unavailable (macOS); CLI success is not proof. A Windows team member must open `SoundBite.sln` in VS 2022 17.12+, Build, run Test Explorer (expect 177) and launch the `https` profile. In Development, net9 does not fingerprint `blazor.web.js`/`ReconnectModal.razor.js` (cosmetic). Reconnection after removing `ReconnectModal`: in headless Chrome against `/playlists` (an `InteractiveServer` page), stopping the server made Blazor's built-in handler create its own `#components-reconnect-modal`, and restarting the server reloaded the page onto a new working circuit. It could not be confirmed that the built-in dialog is **visibly displayed** (the host element stayed `display: none` in the headless probe), so a person should check this once in a normal browser: open `/playlists`, stop the app, and confirm a reconnect dialog appears. The default `soundbite.db` is unmigrated (`no such table: Playlists`), so `/playlists` shows its error banner when run against it; this is the existing, documented state, not a regression. .NET 9 support ends 2026-11-10.
 
 ### 2026-10-16 — Follow/unfollow pre-commit review
 

@@ -167,4 +167,27 @@ public class AuthenticationUiTests
         var response = await client.PostAsync(path, new FormUrlEncodedContent(new Dictionary<string, string> { ["_handler"] = handler }));
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
     }
+
+    [Test]
+    public async Task AppShellServesStylesheetsAndScriptWithoutCustomReconnectUi()
+    {
+        var response = await client.GetAsync("/");
+        var html = await response.Content.ReadAsStringAsync();
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That(response.Headers.Contains("Link"), Is.False, "No preload headers are expected without ResourcePreloader.");
+        Assert.That(html, Does.Not.Contain("components-reconnect-modal"), "The built-in .NET 9 reconnect UI must not be suppressed by a custom element.");
+        var assets = Regex.Matches(html, "<(?:link rel=\"stylesheet\" href|script src)=\"([^\"]+\\.(?:css|js))\"")
+            .Select(m => WebUtility.HtmlDecode(m.Groups[1].Value)).ToList();
+        Assert.That(assets, Has.Some.Contain("bootstrap.min").And.Some.Contain("blazor.web"));
+        foreach (var asset in assets)
+            Assert.That((await client.GetAsync("/" + asset)).StatusCode, Is.EqualTo(HttpStatusCode.OK), asset);
+    }
+
+    [Test]
+    public async Task UnknownRouteReturns404WithNotFoundPage()
+    {
+        var response = await client.GetAsync("/no-such-page");
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
+        Assert.That(await response.Content.ReadAsStringAsync(), Does.Contain("the content you are looking for does not exist"));
+    }
 }

@@ -93,14 +93,14 @@ The current intended stack is:
 - **Framework:** Blazor Web App
 - **Rendering and interactivity:** Interactive Server
 - **Language:** C#
-- **Target framework:** .NET 10
+- **Target framework:** .NET 9 (`net9.0`). The assessment mandates Visual Studio 2022, which targets up to net9.0 (net10.0 requires Visual Studio 18.0+); net9.0 needs VS 2022 17.12+. Avoid .NET 10-only APIs (for example `ResourcePreloader`, `Router.NotFoundPage`, the custom `ReconnectModal` template, `BlazorDisableThrowNavigationException`); the default Blazor reconnection UI is used.
 - **Database:** SQLite
 - **Data access:** Entity Framework Core
 - **Authentication:** ASP.NET Core Identity
 - **Testing:** NUnit
 - **UI:** Razor components, Bootstrap, and custom CSS
 - **Music metadata:** Spotify API integration, subject to API access and applicable restrictions
-- **Development environment:** VS Code
+- **Development environment:** VS Code locally; Visual Studio 2022 (17.12+) for assessment, opened through `SoundBite.sln`
 - **Version control:** Git and GitHub
 
 Treat this as the intended baseline, not proof that every component is correctly configured. Inspect the current project files before changing framework versions, packages, registrations, or configuration.
