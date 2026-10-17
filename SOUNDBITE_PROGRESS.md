@@ -10,7 +10,7 @@
 - **Application:** Blazor Web App
 - **Interactivity:** Interactive Server
 - **Language:** C#
-- **Target framework:** .NET 10 (verified in `SoundBite/SoundBite.csproj`)
+- **Target framework:** .NET 9, SDK 9.0.319, Microsoft/EF packages 9.0.21
 - **Database:** SQLite
 - **ORM:** Entity Framework Core
 - **Authentication:** ASP.NET Core Identity
@@ -22,7 +22,7 @@
 
 - **Overall status:** In progress
 - **Current development phase:** Building working catalogue and social product features
-- **Current focus:** Follow/unfollow implemented, reviewed and verified for the authorized commit
+- **Current focus:** .NET 9 compatibility implemented on `Net9Compatibility`; Windows Visual Studio 2022 verification outstanding
 - **Last verified:** 2026-10-16
 - **Current blocker:** Likes, comments, activity feed and external catalogue integration remain incomplete
 
@@ -32,7 +32,7 @@
 |---|---|---|
 | Authentication | Implemented — verified | Website registration, username/email login, logout, profile editing, cookie persistence and authorization checks pass using isolated migrated databases; see latest work. |
 | User profiles | Implemented — verified | `ApplicationUser` stores a display name and bio; the account page can edit them, and `/users/{username}` displays the public profile without exposing account email. The migration and persistence round-trip are tested. |
-| Music catalogue | In progress | `Artist`, `Album`, and `Track` models exist with validation and EF relationship wiring in `ApplicationDbContext.cs`. There is no catalog UI or metadata service implementation beyond the model layer. |
+| Music catalogue | In progress | `Artist`, `Album`, and `Track` models exist with validation and EF relationship wiring in `ApplicationDbContext.cs`. Local `CatalogueService`, catalogue search UI and track details are implemented and regression verified; external metadata integration remains outstanding. |
 | Spotify integration | Not started | `Services/SpotifyCatalogService.cs` is empty and there is no client configuration or API integration yet. |
 | Track ratings and reviews | Implemented — verified | Reviews persist through EF Core; the service supports create/read/update, the database enforces one review per user per track and valid 1–5 ratings, and track details support public review reading plus authenticated submission/editing. |
 | Album-track many-to-many relationship | Implemented — unverified | `ApplicationDbContext` maps `ArtistAlbums` and `ArtistTracks` and `Track.AlbumId` with a nullable optional foreign key. This matches the intended design, but the schema has not been validated via a migration review beyond the code. |
@@ -43,10 +43,24 @@
 | Activity feed | Not started | `Models/ActivityItem.cs`, `Services/FeedService.cs`, and social service classes are still empty or incomplete. |
 | Rankings and trends | Planned | `Services/RankingService.cs`, `Services/TrendService.cs`, `Strategies/PopularityRankingStrategy.cs`, and `Strategies/RatingRankingStrategy.cs` exist, but no implemented ranking logic is visible in the current code. |
 | Administrative user management | Not started | `Services/AdminService.cs` is empty and there is no admin UI or authorization pattern beyond Identity setup. |
-| Automated tests | Passed — verified | 175 NUnit tests passed, 0 failed/skipped (2026-10-16), including 21 follow service/database cases and a rendered-profile integration regression. |
-| Git and repository hygiene | Verified | `FollowUnfollow` starts at fetched `origin/main` (`e507912`); follow changes reviewed for the authorized commit. Existing database unchanged. |
+| Automated tests | Passed — verified | 177 NUnit tests passed on .NET 9, 0 failed/skipped (2026-10-16), including all 175 original cases and two direct-route 404 regressions. |
+| Git and repository hygiene | Verified | `Net9Compatibility` starts at fetched `origin/main` (`ac92cbe`); compatibility changes reviewed for the authorized commit and PR. Existing database unchanged. |
 
 ## 4. Latest Completed Work
+
+### 2026-10-16 — .NET 9 compatibility
+
+- Created `Net9Compatibility` from freshly fetched `origin/main` (`ac92cbe056983dba7ba8226455d9b2b71c964018`). Initial tracked/untracked checkout was clean; ignored local files preserved. No commits, pushes or merges.
+- **.NET 10 baseline:** SDK 10.0.401; `dotnet build SoundBite/SoundBite.csproj -c Release` succeeded, 0 warnings/errors. `dotnet test SoundBite.Tests/SoundBite.Tests.csproj -c Release` passed 175/175, 0 failed/skipped. Logs and TRX are in `/tmp/soundbite-net9-verification`.
+- Installed official .NET SDK 9.0.319 alongside 10.0.401 without removing .NET 10. `global.json` pins 9.0.319 exactly (`rollForward: disable`, previews off). Both projects target `net9.0`; removed test `LangVersion=latest` to use C# 13. Four Microsoft package references are pinned to 9.0.21; existing NUnit/test SDK/coverage versions retained. Added `SoundBite.sln` and `.config/dotnet-tools.json` (EF CLI 9.0.21).
+- Blazor adaptations: replaced .NET 10 `ResourcePreloader`, framework script asset lookup, `Router.NotFoundPage`, status-code scope overload and SSR redirect opt-out property with .NET 9 equivalents. Retained `MapStaticAssets`, `ImportMap`, app asset fingerprinting and static SSR account forms. Reconnect UI observes .NET 9 CSS class changes and supports retry/reload; unsupported .NET 10 pause/resume hooks were replaced by reload for lost circuits. Existing domain/UI features, models, services and migration history were preserved.
+- Compatibility issue found and fixed: short `<Pages.NotFound />` markup was not resolved as a Razor component; fully qualified the component and reran validation. Two pre-existing test methods emit CS1998 under a full .NET 9 rebuild (`PlaylistServiceTests:87`, `ReviewServiceTests:88`); left unrelated tests unchanged.
+- **Final automated validation:** `dotnet build SoundBite.sln -c Release --no-restore` passed (incremental: 0 warnings/errors). Explicit `-t:Rebuild` passed with the two existing test warnings and 0 errors. `dotnet test SoundBite.sln -c Release --no-build` passed **177/177**, 0 failed/skipped. All 175 existing tests retained; two added HTTP cases assert unknown routes return 404 and the application Not Found content. `dotnet publish SoundBite/SoundBite.csproj -c Release --no-restore -o /tmp/soundbite-net9-verification/publish` passed.
+- **EF Core 9 verification:** full suite exercises fresh SQLite migration, upgrade from `AddPlaylists` with existing users/tracks/playlists, rollback/re-upgrade, constraints, CRUD and model/snapshot consistency. EF CLI `migrations has-pending-model-changes` reports no changes; `database update --connection 'Data Source=/tmp/soundbite-net9-verification/cli.db'` applies all historical migrations successfully. Browser seed harness also migrates a fresh disposable database and reports no pending model changes. No historical migrations or snapshot were rewritten.
+- **Published-app browser validation:** Production environment on localhost, using only `/tmp/soundbite-net9-verification/browser.db`. Passed registration/auto-login, cookie-backed profile save and refresh, email login/logout, interactive catalogue search, track details/review submission, playlist creation/add-track persistence, owner versus anonymous/other-user controls, follow/unfollow persistence and follower lists. Pagination verified with 12 disposable followers over 10/2-item pages, disabled boundaries and Previous navigation. Missing URL renders Not Found and returns HTTP 404. All six referenced local CSS/JS/image assets return HTTP 200. Reconnection after server restart displays the modal and reloads a lost circuit; counter interaction works afterward. Suspending/resuming the test server also verified transient-disconnect recovery with counter state preserved (3, then incremented to 4). Intentional outages produce expected network console errors. HTTP-only local launch logs the expected missing HTTPS-port warning; HTTPS cookie/antiforgery behavior is covered by integration tests.
+- **Protected state:** `SoundBite/soundbite.db` SHA-256 remains `ead1d21ea950e99cd6548f23d0b83159ac69c24b2bd4cbbf2dcac8376159eeaf`. Only disposable SQLite databases were migrated or written during verification. No data/model/service/migration source changes.
+- **Changed files:** `SoundBite/SoundBite.csproj`, `SoundBite.Tests/SoundBite.Tests.csproj`, `SoundBite.Tests/AuthenticationUiTests.cs`, `SoundBite/Components/App.razor`, `SoundBite/Components/Routes.razor`, all three `ReconnectModal.razor`/`.css`/`.js` files, `SoundBite/Program.cs`, `SoundBite.sln`, `global.json`, `.config/dotnet-tools.json`, `SOUNDBITE_CONTEXT.md`, this progress file.
+- **Outstanding:** Ready for Windows Visual Studio 2022 17.14 testing, not yet Windows-verified. Install exact SDK 9.0.319 and ASP.NET workload; open solution, restore/build, run 177 tests in Test Explorer, F5 and publish against a disposable database. .NET 9 support ends 10 November 2026. Existing application DB remains unmigrated. Exhausted-retry/manual Retry/Reload browser checks remain outstanding. Commit, branch push and PR creation authorized on 2026-10-17; do not merge.
 
 ### 2026-10-16 — Follow/unfollow pre-commit review
 
@@ -180,19 +194,19 @@
 
 | Check | Result | Notes |
 |---|---|---|
-| Application build | Passed | `dotnet test SoundBite.Tests/SoundBite.Tests.csproj -v minimal` built the app and test project successfully. |
-| Automated tests | Passed — verified | 175 NUnit tests passed, 0 failed/skipped (2026-10-16), including 21 follow service/database cases and a rendered-profile integration regression. |
-| Application startup | Passed | Command: `dotnet run --project SoundBite --urls http://localhost:5080` → app reported `Now listening on: http://localhost:5080` and `Application started.` |
+| Application build | Passed | Release solution rebuild passed on SDK 9.0.319 with 0 errors and 2 existing test warnings; Release publish passed. |
+| Automated tests | Passed — verified | 177 NUnit tests passed on .NET 9, 0 failed/skipped (2026-10-16), including all 175 original cases and two direct-route 404 regressions. |
+| Application startup | Passed | Published .NET 9 output launched in Production on localhost:5199/5200 with an explicit disposable SQLite connection. |
 | Relevant feature behaviour | Passed | Website authentication, profile editing, refresh/navigation and authenticated/anonymous review/playlist access verified; see latest work. |
-| Database migrations | Passed | Profile, review, and playlist migrations are exercised by SQLite persistence tests, including playlist creation and CRUD against the migrated schema. |
+| Database migrations | Passed | EF 9 fresh migration, data-preserving upgrade, rollback/re-upgrade, constraints and model/snapshot checks passed on disposable SQLite databases; historical files untouched. |
 
 ## 9. Git Status
 
-- **Active branch:** `FollowUnfollow`, based on fetched `origin/main` at `e507912e62c4da48e70e74a32eb749ef239c9fd6`.
-- **Initial checkout:** Clean. No unrelated changes or stashing required.
-- **Current work:** Follow implementation, migration, regression tests and progress update reviewed and verified for the authorized commit. No push or merge performed.
-- **Authorized commit title:** `Implement user follow and unfollow functionality` (commit identity is recorded in Git history).
-- **Suggested description:** Add idempotent follow/unfollow, public paginated profile lists, SQLite constraints and cascading relationship cleanup, with migration, concurrency, authorization and UI regression coverage.
+- **Active branch:** `Net9Compatibility`, created from freshly fetched `origin/main` at `ac92cbe056983dba7ba8226455d9b2b71c964018`.
+- **Initial checkout:** Clean on `FollowUnfollow`; no unrelated changes, stashing or cleanup required. Ignored files were preserved.
+- **Current work:** Compatibility changes reviewed for the authorized commit, branch push and PR on 2026-10-17. Commit identity and publication status are recorded in Git/GitHub. Merge is not authorized.
+- **Authorized commit title:** `Add .NET 9 and Visual Studio 2022 compatibility`.
+- **Suggested description:** Retarget app/tests and pin SDK/EF tooling, adapt Blazor routing/assets/reconnection, preserve migrations and features, add 404 regressions and record validation.
 
 ## 10. Next Recommended Tasks
 
@@ -208,9 +222,11 @@
 
 ## 11. Handover for the Next Chat Session
 
-- Follow/unfollow implementation is verified on `FollowUnfollow` with 175 passing tests and two-account browser checks. Full diff reviewed and build/tests rerun for the authorized commit. Do not push or merge without authorization.
-- Existing database remains unchanged and unmigrated. Browser fixtures are isolated at `/tmp/soundbite-follow-browser/test.db`.
-- Apply the migration only as a separately authorized database/deployment step. Likes, comments, feed, Spotify integration and profile activity remain independent future work.
+- Commit, branch push and PR creation are authorized for `Net9Compatibility`; do not merge. Windows VS2022 and exhausted-retry/manual Retry/Reload checks remain outstanding.
+- Open `SoundBite.sln` on Windows in Visual Studio 2022 17.14 with SDK 9.0.319 and the ASP.NET workload. Restore/build, run all 177 tests in Test Explorer, launch with F5 and verify publish. These Windows checks have not run on this macOS host.
+- Use a disposable SQLite connection override for Windows testing. The existing application database remains unchanged and unmigrated; database deployment is a separately authorized step.
+- .NET 9 support ends 10 November 2026, after the submission deadline of 19 October 2026 at 11:59 pm Sydney time.
+- Likes/comments/feed/Spotify integration and profile activity remain independent future work.
 
 ## 12. Instructions for Updating This File
 

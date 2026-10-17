@@ -57,6 +57,16 @@ public class AuthenticationUiTests
         ("model.UserName", "authuser"), ("model.Email", "authuser@example.com"),
         ("model.Password", "TestPass123!"), ("model.ConfirmPassword", confirm));
 
+    [TestCase("/missing-net9-page")]
+    [TestCase("/missing/deep/link")]
+    public async Task UnknownRouteReturns404AndApplicationNotFoundContent(string path)
+    {
+        var response = await client.GetAsync(path);
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
+        Assert.That(await response.Content.ReadAsStringAsync(),
+            Does.Contain("Sorry, the content you are looking for does not exist."));
+    }
+
     [Test]
     public async Task WebsiteRegistrationProfileLogoutAndLoginPersistCookie()
     {

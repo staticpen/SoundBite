@@ -93,15 +93,27 @@ The current intended stack is:
 - **Framework:** Blazor Web App
 - **Rendering and interactivity:** Interactive Server
 - **Language:** C#
-- **Target framework:** .NET 10
+- **Target framework:** .NET 9 (`net9.0`)
 - **Database:** SQLite
 - **Data access:** Entity Framework Core
 - **Authentication:** ASP.NET Core Identity
 - **Testing:** NUnit
 - **UI:** Razor components, Bootstrap, and custom CSS
 - **Music metadata:** Spotify API integration, subject to API access and applicable restrictions
-- **Development environment:** VS Code
+- **Development environment:** VS Code or Visual Studio 2022 17.14 (Windows validation required)
 - **Version control:** Git and GitHub
+
+### .NET 9 submission compatibility
+
+- Open `SoundBite.sln`, which contains the application and NUnit test projects.
+- Install SDK **9.0.319** alongside other SDKs. `global.json` selects that exact SDK with roll-forward disabled and previews excluded; update the pin deliberately when adopting a serviced SDK.
+- Microsoft ASP.NET Core/Identity/EF Core packages and local `dotnet-ef` are pinned to **9.0.21**. Run `dotnet tool restore` before EF CLI commands. C# uses the target framework's default language version (C# 13).
+- Prefer Visual Studio 2022 **17.14**, with the ASP.NET and web development workload and SDK 9.0.319 installed. CLI verification on macOS does not replace Windows project-load, Test Explorer, F5 and publish checks.
+- .NET 9 uses `Router.NotFound`, status-code re-execution, the standard `_framework/blazor.web.js` URL, and CSS-class-based circuit reconnection. Static SSR authentication redirects use the framework's `NavigationException`; do not catch and suppress it. Static asset mapping, import maps and fingerprinted app assets remain enabled.
+- Circuit retry and reload are supported. .NET 10 circuit pause/resume APIs are unavailable on .NET 9; a circuit that the server no longer retains reloads the page.
+- Keep all historical migrations and the model snapshot unchanged for this compatibility change. Verify migrations only on disposable SQLite databases, with explicit connection overrides. Do not apply tooling to the existing application database without separate authorization.
+- Submission deadline: **19 October 2026, 11:59 pm Australia/Sydney**. .NET 9 support ends **10 November 2026**; plan a supported target/tooling upgrade after submission.
+- References: [Microsoft SDK/Visual Studio matrix](https://learn.microsoft.com/en-us/dotnet/core/porting/versioning-sdk-msbuild-vs), [official .NET 9 release metadata](https://builds.dotnet.microsoft.com/dotnet/release-metadata/9.0/releases.json).
 
 Treat this as the intended baseline, not proof that every component is correctly configured. Inspect the current project files before changing framework versions, packages, registrations, or configuration.
 
