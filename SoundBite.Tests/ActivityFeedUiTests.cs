@@ -24,7 +24,10 @@ public class ActivityFeedUiTests
                 .And.Contain("Bob")
                 .And.Contain("reviewed")
                 .And.Contain("Test track")
-                .And.Contain("A recent review"));
+                .And.Contain("A recent review")
+                .And.Contain("replied to")
+                .And.Contain("liked a review by")
+                .And.Contain("liked the track"));
         });
     }
 
@@ -55,6 +58,21 @@ public class ActivityFeedUiTests
             var track = await db.Tracks.SingleAsync();
             db.Follows.Add(new Follow { FollowerId = "alice", FollowingId = "bob" });
             db.Reviews.Add(new Review { UserId = "bob", TrackId = track.Id, Rating = 4, Comment = "A recent review" });
+            await db.SaveChangesAsync();
+            var review = await db.Reviews.SingleAsync();
+            var parent = new Comment { ReviewId = review.Id, UserId = "bob", Content = "A top-level comment" };
+            db.Comments.Add(parent);
+            await db.SaveChangesAsync();
+            db.Comments.Add(new Comment
+            {
+                ReviewId = review.Id,
+                UserId = "alice",
+                ParentCommentId = parent.Id,
+                Content = "A reply in the feed"
+            });
+            db.Likes.AddRange(
+                new Like { UserId = "bob", ReviewId = review.Id },
+                new Like { UserId = "bob", TrackId = track.Id });
             await db.SaveChangesAsync();
         }
 

@@ -34,9 +34,9 @@ public sealed class FeedService(
             .ToListAsync(cancellationToken);
         userIds.Add(actorId);
 
-        var reviews = db.Reviews.AsNoTracking()
+        IQueryable<ActivityRow> rows = db.Reviews.AsNoTracking()
             .Where(review => userIds.Contains(review.UserId))
-            .Select(review => new
+            .Select(review => new ActivityRow
             {
                 Type = (int)ActivityType.Review,
                 Id = review.Id,
@@ -47,12 +47,20 @@ public sealed class FeedService(
                 TrackTitle = review.Track!.Title,
                 Rating = (int?)review.Rating,
                 Content = review.Comment,
-                CreatedAt = review.CreatedAt
+                CreatedAt = review.CreatedAt,
+                TargetType = null,
+                TargetUserName = null,
+                TargetDisplayName = null,
+                ParentCommentId = null,
+                ParentUserName = null,
+                ParentDisplayName = null,
+                PlaylistId = null,
+                PlaylistName = null
             });
 
-        var comments = db.Comments.AsNoTracking()
+        rows = rows.Concat(db.Comments.AsNoTracking()
             .Where(comment => userIds.Contains(comment.UserId))
-            .Select(comment => new
+            .Select(comment => new ActivityRow
             {
                 Type = (int)ActivityType.Comment,
                 Id = comment.Id,
@@ -63,26 +71,162 @@ public sealed class FeedService(
                 TrackTitle = comment.Review.Track!.Title,
                 Rating = (int?)comment.Review.Rating,
                 Content = comment.Content,
-                CreatedAt = comment.CreatedAt
-            });
+                CreatedAt = comment.CreatedAt,
+                ParentCommentId = comment.ParentCommentId,
+                ParentUserName = comment.ParentComment == null ? null : comment.ParentComment.User!.UserName,
+                ParentDisplayName = comment.ParentComment == null ? null : comment.ParentComment.User!.DisplayName,
+                TargetType = null,
+                TargetUserName = null,
+                TargetDisplayName = null,
+                PlaylistId = null,
+                PlaylistName = null
+            }));
 
-        var rows = await reviews.Concat(comments)
+        rows = rows.Concat(db.Likes.AsNoTracking()
+            .Where(like => userIds.Contains(like.UserId) && like.ReviewId != null)
+            .Select(like => new ActivityRow
+            {
+                Type = (int)ActivityType.Like,
+                Id = like.Id,
+                ReviewId = like.Review!.Id,
+                UserName = like.User!.UserName!,
+                DisplayName = like.User.DisplayName,
+                TrackId = like.Review.TrackId,
+                TrackTitle = like.Review.Track!.Title,
+                Rating = (int?)like.Review.Rating,
+                Content = like.Review.Comment,
+                CreatedAt = like.CreatedAt,
+                TargetType = (int)LikeTargetType.Review,
+                TargetUserName = like.Review.User!.UserName,
+                TargetDisplayName = like.Review.User.DisplayName,
+                ParentCommentId = null,
+                ParentUserName = null,
+                ParentDisplayName = null,
+                PlaylistId = null,
+                PlaylistName = null
+            }));
+
+        rows = rows.Concat(db.Likes.AsNoTracking()
+            .Where(like => userIds.Contains(like.UserId) && like.CommentId != null)
+            .Select(like => new ActivityRow
+            {
+                Type = (int)ActivityType.Like,
+                Id = like.Id,
+                ReviewId = like.Comment!.ReviewId,
+                UserName = like.User!.UserName!,
+                DisplayName = like.User.DisplayName,
+                TrackId = like.Comment.Review!.TrackId,
+                TrackTitle = like.Comment.Review.Track!.Title,
+                Rating = (int?)like.Comment.Review.Rating,
+                Content = like.Comment.Content,
+                CreatedAt = like.CreatedAt,
+                TargetType = (int)LikeTargetType.Comment,
+                TargetUserName = like.Comment.User!.UserName,
+                TargetDisplayName = like.Comment.User.DisplayName,
+                ParentCommentId = like.Comment.ParentCommentId,
+                ParentUserName = like.Comment.ParentComment == null ? null : like.Comment.ParentComment.User!.UserName,
+                ParentDisplayName = like.Comment.ParentComment == null ? null : like.Comment.ParentComment.User!.DisplayName,
+                PlaylistId = null,
+                PlaylistName = null
+            }));
+
+        rows = rows.Concat(db.Likes.AsNoTracking()
+            .Where(like => userIds.Contains(like.UserId) && like.TrackId != null)
+            .Select(like => new ActivityRow
+            {
+                Type = (int)ActivityType.Like,
+                Id = like.Id,
+                UserName = like.User!.UserName!,
+                DisplayName = like.User.DisplayName,
+                TrackId = like.Track!.Id,
+                TrackTitle = like.Track.Title,
+                ReviewId = null,
+                Rating = null,
+                Content = string.Empty,
+                CreatedAt = like.CreatedAt,
+                TargetType = (int)LikeTargetType.Track,
+                TargetUserName = null,
+                TargetDisplayName = null,
+                ParentCommentId = null,
+                ParentUserName = null,
+                ParentDisplayName = null,
+                PlaylistId = null,
+                PlaylistName = null
+            }));
+
+        rows = rows.Concat(db.Likes.AsNoTracking()
+            .Where(like => userIds.Contains(like.UserId) && like.Playlist != null && like.Playlist.IsPublic)
+            .Select(like => new ActivityRow
+            {
+                Type = (int)ActivityType.Like,
+                Id = like.Id,
+                UserName = like.User!.UserName!,
+                DisplayName = like.User.DisplayName,
+                ReviewId = null,
+                TrackId = null,
+                TrackTitle = null,
+                Rating = null,
+                Content = string.Empty,
+                CreatedAt = like.CreatedAt,
+                TargetType = (int)LikeTargetType.Playlist,
+                PlaylistId = like.Playlist!.Id,
+                PlaylistName = like.Playlist.Name,
+                TargetUserName = like.Playlist.Owner!.UserName,
+                TargetDisplayName = like.Playlist.Owner.DisplayName,
+                ParentCommentId = null,
+                ParentUserName = null,
+                ParentDisplayName = null
+            }));
+
+        var results = await rows
             .OrderByDescending(item => item.CreatedAt).ThenByDescending(item => item.Type).ThenByDescending(item => item.Id)
             .Skip(page * PageSize)
             .Take(PageSize + 1)
             .ToListAsync(cancellationToken);
-        var entries = rows.Select(item => new ActivityItem(
-            (ActivityType)item.Type,
-            item.Id,
-            item.ReviewId,
-            item.UserName,
-            item.DisplayName,
-            item.TrackId,
-            item.TrackTitle,
-            item.Rating,
-            item.Content,
-            item.CreatedAt)).ToArray();
+        var entries = results.Select(item => item.ToActivityItem()).ToArray();
 
         return new ActivityPage(entries.Take(PageSize).ToArray(), entries.Length > PageSize);
+    }
+
+    private sealed class ActivityRow
+    {
+        public int Type { get; init; }
+        public int Id { get; init; }
+        public int? ReviewId { get; init; }
+        public string UserName { get; init; } = string.Empty;
+        public string DisplayName { get; init; } = string.Empty;
+        public int? TrackId { get; init; }
+        public string? TrackTitle { get; init; }
+        public int? Rating { get; init; }
+        public string Content { get; init; } = string.Empty;
+        public DateTime CreatedAt { get; init; }
+        public int? TargetType { get; init; }
+        public string? TargetUserName { get; init; }
+        public string? TargetDisplayName { get; init; }
+        public int? ParentCommentId { get; init; }
+        public string? ParentUserName { get; init; }
+        public string? ParentDisplayName { get; init; }
+        public int? PlaylistId { get; init; }
+        public string? PlaylistName { get; init; }
+
+        public ActivityItem ToActivityItem() => new(
+            (ActivityType)Type,
+            Id,
+            ReviewId,
+            UserName,
+            DisplayName,
+            TrackId,
+            TrackTitle,
+            Rating,
+            Content,
+            CreatedAt,
+            TargetType is int targetType ? (LikeTargetType)targetType : null,
+            TargetUserName,
+            TargetDisplayName,
+            ParentCommentId,
+            ParentUserName,
+            ParentDisplayName,
+            PlaylistId,
+            PlaylistName);
     }
 }

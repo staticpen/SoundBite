@@ -74,6 +74,60 @@ public class FeedServiceTests
     }
 
     [Test]
+    public async Task FeedIncludesReplyContextAndVisibleLikeTargetsButHidesPrivatePlaylistLikes()
+    {
+        await using (var db = factory.CreateDbContext())
+        {
+            var bobReview = await db.Reviews.SingleAsync(review => review.UserId == "bob");
+            var bobComment = await db.Comments.SingleAsync(comment => comment.UserId == "bob");
+            var aliceTrack = await db.Tracks.SingleAsync(track => track.Title == "Alice's track");
+            var now = DateTime.UtcNow;
+            var reply = new Comment
+            {
+                ReviewId = bobReview.Id,
+                UserId = "alice",
+                ParentCommentId = bobComment.Id,
+                Content = "Alice replied",
+                CreatedAt = now.AddSeconds(1)
+            };
+            db.Comments.Add(reply);
+            var playlists = new[]
+            {
+                new Playlist { OwnerId = "carol", Name = "Public playlist", IsPublic = true },
+                new Playlist { OwnerId = "carol", Name = "Private playlist", IsPublic = false }
+            };
+            db.Playlists.AddRange(playlists);
+            await db.SaveChangesAsync();
+
+            db.Likes.AddRange(
+                new Like { UserId = "bob", ReviewId = await db.Reviews.Where(review => review.UserId == "alice").Select(review => review.Id).SingleAsync(), CreatedAt = now.AddSeconds(5) },
+                new Like { UserId = "bob", CommentId = reply.Id, CreatedAt = now.AddSeconds(4) },
+                new Like { UserId = "bob", TrackId = aliceTrack.Id, CreatedAt = now.AddSeconds(3) },
+                new Like { UserId = "bob", PlaylistId = playlists[0].Id, CreatedAt = now.AddSeconds(2) },
+                new Like { UserId = "bob", PlaylistId = playlists[1].Id, CreatedAt = now.AddSeconds(6) });
+            await db.SaveChangesAsync();
+        }
+
+        var result = await service.GetPageAsync();
+        var replyItem = result.Items.Single(item => item.Type == ActivityType.Comment && item.Content == "Alice replied");
+        Assert.That(replyItem.ParentUserName, Is.EqualTo("bob"));
+
+        var likes = result.Items.Where(item => item.Type == ActivityType.Like).ToArray();
+        Assert.That(likes.Select(item => item.TargetType),
+            Is.EqualTo(new[]
+            {
+                LikeTargetType.Review,
+                LikeTargetType.Comment,
+                LikeTargetType.Track,
+                LikeTargetType.Playlist
+            }));
+        Assert.That(likes[0].TargetUserName, Is.EqualTo("alice"));
+        Assert.That(likes[1].ParentUserName, Is.EqualTo("bob"));
+        Assert.That(likes[3].PlaylistName, Is.EqualTo("Public playlist"));
+        Assert.That(likes.Any(item => item.PlaylistName == "Private playlist"), Is.False);
+    }
+
+    [Test]
     public void AnonymousAndInvalidPageRequestsAreRejected()
     {
         authentication.Set(null);
@@ -95,6 +149,13 @@ public class FeedServiceTests
                 Content = $"Comment {i}",
                 CreatedAt = DateTime.UtcNow.AddSeconds(i)
             }));
+            var aliceReviewId = await db.Reviews.Where(review => review.UserId == "alice").Select(review => review.Id).SingleAsync();
+            var bobCommentId = await db.Comments.Where(comment => comment.UserId == "bob").Select(comment => comment.Id).SingleAsync();
+            var aliceTrackId = await db.Tracks.Where(track => track.Title == "Alice's track").Select(track => track.Id).SingleAsync();
+            db.Likes.AddRange(
+                new Like { UserId = "bob", ReviewId = aliceReviewId },
+                new Like { UserId = "alice", CommentId = bobCommentId },
+                new Like { UserId = "bob", TrackId = aliceTrackId });
             await db.SaveChangesAsync();
         }
 
@@ -102,8 +163,12 @@ public class FeedServiceTests
         var second = await service.GetPageAsync(1);
         Assert.That(first.Items, Has.Count.EqualTo(FeedService.PageSize));
         Assert.That(first.HasNext, Is.True);
-        Assert.That(second.Items, Has.Count.EqualTo(4));
+        Assert.That(second.Items, Has.Count.EqualTo(7));
         Assert.That(second.HasNext, Is.False);
+        var allItems = first.Items.Concat(second.Items).ToArray();
+        Assert.That(allItems, Has.Length.EqualTo(FeedService.PageSize + 7));
+        Assert.That(allItems.Select(item => (item.Type, item.Id)).Distinct().Count(), Is.EqualTo(allItems.Length));
+        Assert.That(allItems.Count(item => item.Type == ActivityType.Like), Is.EqualTo(3));
     }
 
     private sealed class TestAuthentication(string? userId) : AuthenticationStateProvider
