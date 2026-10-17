@@ -29,6 +29,7 @@ public class PageRouteTests
     [TestCase("/login", typeof(Account))]
     [TestCase("/account", typeof(Account))]
     [TestCase("/feed", typeof(ActivityFeed))]
+    [TestCase("/notifications", typeof(Notifications))]
     [TestCase("/rankings", typeof(Rankings))]
     [TestCase("/admin/users", typeof(AdminUsers))]
     [TestCase("/artists/{Id:int}", typeof(ArtistDetails))]

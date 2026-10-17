@@ -28,6 +28,7 @@ builder.Services.AddScoped<PlaylistService>();
 builder.Services.AddScoped<FollowService>();
 builder.Services.AddScoped<SocialInteractionService>();
 builder.Services.AddScoped<FeedService>();
+builder.Services.AddScoped<NotificationService>();
 builder.Services.AddScoped<AdminService>();
 builder.Services.AddScoped<IRankingStrategy, RatingRankingStrategy>();
 builder.Services.AddScoped<IRankingStrategy, PopularityRankingStrategy>();

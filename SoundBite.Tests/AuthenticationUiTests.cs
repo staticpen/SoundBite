@@ -67,6 +67,8 @@ public class AuthenticationUiTests
         Assert.That(registration.Headers.Location!.OriginalString, Does.EndWith("/account"));
         Assert.That((await client.GetAsync("/api/account/me")).StatusCode, Is.EqualTo(HttpStatusCode.OK));
         Assert.That(await client.GetStringAsync("/account"), Does.Contain("Signed in"));
+        Assert.That(await client.GetStringAsync("/notifications"), Does.Contain("You don't have any notifications yet.")
+            .And.Contain("Notifications"));
         var saved = await PostForm("/account", "profile", ("profileModel.DisplayName", "Updated name"), ("profileModel.Bio", "My music biography"));
         Assert.That(await saved.Content.ReadAsStringAsync(), Does.Contain("Profile saved."));
         Assert.That(await client.GetStringAsync("/account"), Does.Contain("Updated name").And.Contain("My music biography"));
@@ -76,6 +78,8 @@ public class AuthenticationUiTests
         var logout = await PostForm("/account", "logout");
         Assert.That(logout.StatusCode, Is.EqualTo(HttpStatusCode.Redirect));
         Assert.That((await client.GetAsync("/api/account/me")).StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized));
+        Assert.That(await client.GetStringAsync("/notifications"), Does.Contain("Log in")
+            .And.Not.Contain("You don't have any notifications yet."));
         Assert.That(await client.GetStringAsync("/playlists"), Does.Contain("to create your own playlists").And.Not.Contain("Create a playlist"));
         Assert.That(await client.GetStringAsync("/tracks/1"), Does.Contain("to rate and review this track").And.Not.Contain("Submit review"));
         foreach (var identifier in new[] { "authuser", "authuser@example.com" })
@@ -109,6 +113,31 @@ public class AuthenticationUiTests
         var anonymous = await client.GetStringAsync("/users/other");
         Assert.That(anonymous, Does.Contain("Followers (1)").And.Contain("Log in to follow")
             .And.Not.Contain(">Follow</button>").And.Not.Contain(">Unfollow</button>"));
+    }
+
+    [Test]
+    public async Task NotificationsPageShowsRecipientActivityAndUnreadNavigationCount()
+    {
+        await Register();
+        using (var scope = app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var recipient = await db.Users.SingleAsync();
+            var actor = new ApplicationUser { Id = "other", UserName = "other", NormalizedUserName = "OTHER" };
+            db.Users.Add(actor);
+            db.Notifications.Add(new SoundBite.Models.Notification
+            {
+                RecipientUserId = recipient.Id,
+                ActorUserId = actor.Id,
+                Type = SoundBite.Models.NotificationType.Follow
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var notifications = await client.GetStringAsync("/notifications");
+        Assert.That(notifications, Does.Contain("other").And.Contain("followed you.")
+            .And.Contain("1 unread")
+            .And.Contain("Mark all as read"));
     }
 
     [Test]

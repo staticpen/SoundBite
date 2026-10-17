@@ -23,6 +23,7 @@ namespace SoundBite.Data
         public DbSet<Follow> Follows => Set<Follow>();
         public DbSet<Like> Likes => Set<Like>();
         public DbSet<Comment> Comments => Set<Comment>();
+        public DbSet<Notification> Notifications => Set<Notification>();
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -162,6 +163,40 @@ namespace SoundBite.Data
                 entity.ToTable(table => table.HasCheckConstraint(
                     "CK_Comments_NoSelfReply",
                     "\"ParentCommentId\" IS NULL OR \"ParentCommentId\" <> \"Id\""));
+            });
+
+            builder.Entity<Notification>(entity =>
+            {
+                entity.HasOne(notification => notification.Recipient)
+                    .WithMany()
+                    .HasForeignKey(notification => notification.RecipientUserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(notification => notification.Actor)
+                    .WithMany()
+                    .HasForeignKey(notification => notification.ActorUserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(notification => notification.Review)
+                    .WithMany()
+                    .HasForeignKey(notification => notification.ReviewId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(notification => notification.Comment)
+                    .WithMany()
+                    .HasForeignKey(notification => notification.CommentId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(notification => notification.Playlist)
+                    .WithMany()
+                    .HasForeignKey(notification => notification.PlaylistId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(notification => notification.Like)
+                    .WithMany()
+                    .HasForeignKey(notification => notification.LikeId)
+                    .OnDelete(DeleteBehavior.SetNull);
+                entity.HasIndex(notification => new { notification.RecipientUserId, notification.CreatedAt, notification.Id });
+                entity.HasIndex(notification => new { notification.RecipientUserId, notification.ReadAt });
+                entity.HasIndex(notification => notification.LikeId)
+                    .IsUnique().HasFilter("\"LikeId\" IS NOT NULL");
+                entity.HasIndex(notification => new { notification.CommentId, notification.RecipientUserId })
+                    .IsUnique().HasFilter("\"CommentId\" IS NOT NULL");
             });
 
             // SQLite unique indexes allow multiple NULLs for unknown external IDs.

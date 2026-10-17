@@ -1,4 +1,10 @@
 ﻿@using Microsoft.AspNetCore.Components.Authorization
+@using System.Security.Claims
+@implements IDisposable
+@using SoundBite.Services
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NotificationService NotificationService
+@inject ILogger<NavMenu> Logger
 
 <div class="top-row ps-3 navbar navbar-dark">
     <div class="container-fluid">
@@ -48,6 +54,22 @@
                 <span class="bi bi-activity" aria-hidden="true"></span> Activity feed
             </NavLink>
         </div>
+        @if (signedIn)
+        {
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="notifications">
+                    <span class="bi bi-bell" aria-hidden="true"></span> Notifications
+                    @if (notificationCount is int unread && unread > 0)
+                    {
+                        <span class="badge text-bg-primary ms-1" aria-label="@($"{unread} unread notifications")">@unread</span>
+                    }
+                    else if (notificationCountFailed)
+                    {
+                        <span class="badge text-bg-warning ms-1" title="Unread notification count unavailable">!</span>
+                    }
+                </NavLink>
+            </div>
+        }
         <div class="nav-item px-3">
             <NavLink class="nav-link" href="rankings">
                 <span class="bi bi-bar-chart-fill" aria-hidden="true"></span> Ratings & trends
@@ -64,3 +86,46 @@
         </AuthorizeView>
     </nav>
 </div>
+
+@code {
+    private bool signedIn;
+    private int? notificationCount;
+    private bool notificationCountFailed;
+
+    protected override async Task OnInitializedAsync()
+    {
+        NotificationService.UnreadCountChanged += RefreshUnreadCount;
+        var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+        signedIn = user.Identity?.IsAuthenticated == true &&
+            !string.IsNullOrWhiteSpace(user.FindFirstValue(ClaimTypes.NameIdentifier));
+        if (!signedIn)
+            return;
+
+        try
+        {
+            notificationCount = await NotificationService.GetUnreadCountAsync();
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Unable to load unread notification count");
+            notificationCountFailed = true;
+        }
+    }
+
+    private void RefreshUnreadCount() => _ = InvokeAsync(async () =>
+    {
+        try
+        {
+            notificationCount = await NotificationService.GetUnreadCountAsync();
+            notificationCountFailed = false;
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Unable to refresh unread notification count");
+            notificationCountFailed = true;
+        }
+        StateHasChanged();
+    });
+
+    public void Dispose() => NotificationService.UnreadCountChanged -= RefreshUnreadCount;
+}

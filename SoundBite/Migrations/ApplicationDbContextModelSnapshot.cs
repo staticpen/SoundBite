@@ -404,6 +404,64 @@ namespace SoundBite.Migrations
                         });
                 });
 
+            modelBuilder.Entity("SoundBite.Models.Notification", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ActorUserId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("CommentId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("LikeId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("PlaylistId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("ReadAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RecipientUserId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("ReviewId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActorUserId");
+
+                    b.HasIndex("LikeId")
+                        .IsUnique()
+                        .HasFilter("\"LikeId\" IS NOT NULL");
+
+                    b.HasIndex("PlaylistId");
+
+                    b.HasIndex("ReviewId");
+
+                    b.HasIndex("CommentId", "RecipientUserId")
+                        .IsUnique()
+                        .HasFilter("\"CommentId\" IS NOT NULL");
+
+                    b.HasIndex("RecipientUserId", "ReadAt");
+
+                    b.HasIndex("RecipientUserId", "CreatedAt", "Id");
+
+                    b.ToTable("Notifications");
+                });
+
             modelBuilder.Entity("SoundBite.Models.Playlist", b =>
                 {
                     b.Property<int>("Id")
@@ -700,6 +758,53 @@ namespace SoundBite.Migrations
                     b.Navigation("Track");
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("SoundBite.Models.Notification", b =>
+                {
+                    b.HasOne("SoundBite.Data.ApplicationUser", "Actor")
+                        .WithMany()
+                        .HasForeignKey("ActorUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SoundBite.Models.Comment", "Comment")
+                        .WithMany()
+                        .HasForeignKey("CommentId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("SoundBite.Models.Like", "Like")
+                        .WithMany()
+                        .HasForeignKey("LikeId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("SoundBite.Models.Playlist", "Playlist")
+                        .WithMany()
+                        .HasForeignKey("PlaylistId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("SoundBite.Data.ApplicationUser", "Recipient")
+                        .WithMany()
+                        .HasForeignKey("RecipientUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SoundBite.Models.Review", "Review")
+                        .WithMany()
+                        .HasForeignKey("ReviewId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.Navigation("Actor");
+
+                    b.Navigation("Comment");
+
+                    b.Navigation("Like");
+
+                    b.Navigation("Playlist");
+
+                    b.Navigation("Recipient");
+
+                    b.Navigation("Review");
                 });
 
             modelBuilder.Entity("SoundBite.Models.Playlist", b =>

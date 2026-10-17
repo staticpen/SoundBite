@@ -156,6 +156,11 @@ public sealed class SocialInteractionService(
         var user = await GetCurrentUserAsync(db, cancellationToken);
         if (!await db.Reviews.AnyAsync(review => review.Id == reviewId, cancellationToken))
             throw new InvalidOperationException("Review was not found.");
+        var recipientUserId = parentCommentId is not null
+            ? parentUser?.Id
+            : await db.Reviews.Where(review => review.Id == reviewId)
+                .Select(review => review.UserId)
+                .SingleAsync(cancellationToken);
 
         var now = DateTime.UtcNow;
         var comment = new Comment
@@ -168,6 +173,17 @@ public sealed class SocialInteractionService(
             UpdatedAt = now
         };
         db.Comments.Add(comment);
+        if (recipientUserId is not null && recipientUserId != user.Id)
+        {
+            db.Notifications.Add(new Notification
+            {
+                RecipientUserId = recipientUserId,
+                ActorUserId = user.Id,
+                Type = parentCommentId is null ? NotificationType.ReviewComment : NotificationType.CommentReply,
+                ReviewId = reviewId,
+                Comment = comment
+            });
+        }
         await db.SaveChangesAsync(cancellationToken);
 
         return ToReviewComment(comment, user, true, parentUser);
@@ -225,10 +241,13 @@ public sealed class SocialInteractionService(
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         var user = await GetCurrentUserAsync(db, cancellationToken);
         await EnsureTargetAvailableAsync(db, targetType, targetId, user.Id, cancellationToken);
+        var notificationRecipientId = await GetNotificationRecipientIdAsync(
+            db, targetType, targetId, cancellationToken);
 
         if (liked)
         {
-            await db.Database.ExecuteSqlInterpolatedAsync($"""
+            await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+            var inserted = await db.Database.ExecuteSqlInterpolatedAsync($"""
                 INSERT INTO "Likes" ("ReviewId", "TrackId", "PlaylistId", "CommentId", "UserId", "CreatedAt")
                 VALUES (
                     {(targetType == LikeTargetType.Review ? targetId : null)},
@@ -239,6 +258,30 @@ public sealed class SocialInteractionService(
                     {DateTime.UtcNow})
                 ON CONFLICT DO NOTHING
                 """, cancellationToken);
+            if (inserted > 0 && notificationRecipientId is not null && notificationRecipientId != user.Id)
+            {
+                var likeId = await LikeQuery(db.Likes, targetType, targetId)
+                    .Where(like => like.UserId == user.Id)
+                    .Select(like => like.Id)
+                    .SingleAsync(cancellationToken);
+                var notification = CreateLikeNotification(
+                    targetType,
+                    targetId,
+                    targetType == LikeTargetType.Review
+                        ? targetId
+                        : targetType == LikeTargetType.Comment
+                            ? await db.Comments.Where(comment => comment.Id == targetId)
+                                .Select(comment => (int?)comment.ReviewId).SingleAsync(cancellationToken)
+                            : null,
+                    likeId,
+                    notificationRecipientId,
+                    user.Id);
+                if (notification is not null)
+                    db.Notifications.Add(notification);
+                if (notification is not null)
+                    await db.SaveChangesAsync(cancellationToken);
+            }
+            await transaction.CommitAsync(cancellationToken);
         }
         else
         {
@@ -247,6 +290,67 @@ public sealed class SocialInteractionService(
                 .ExecuteDeleteAsync(cancellationToken);
         }
     }
+
+    private static async Task<string?> GetNotificationRecipientIdAsync(
+        ApplicationDbContext db,
+        LikeTargetType targetType,
+        int targetId,
+        CancellationToken cancellationToken) =>
+        targetType switch
+        {
+            LikeTargetType.Review => await db.Reviews
+                .Where(review => review.Id == targetId)
+                .Select(review => review.UserId)
+                .SingleAsync(cancellationToken),
+            LikeTargetType.Comment => await db.Comments
+                .Where(comment => comment.Id == targetId)
+                .Select(comment => comment.UserId)
+                .SingleAsync(cancellationToken),
+            LikeTargetType.Playlist => await db.Playlists
+                .Where(playlist => playlist.Id == targetId)
+                .Select(playlist => playlist.OwnerId)
+                .SingleAsync(cancellationToken),
+            LikeTargetType.Track => null,
+            _ => throw new ArgumentOutOfRangeException(nameof(targetType))
+        };
+
+    private static Notification? CreateLikeNotification(
+        LikeTargetType targetType,
+        int targetId,
+        int? reviewId,
+        int likeId,
+        string recipientId,
+        string actorId) =>
+        targetType switch
+        {
+            LikeTargetType.Review => new Notification
+            {
+                RecipientUserId = recipientId,
+                ActorUserId = actorId,
+                Type = NotificationType.ReviewLike,
+                ReviewId = targetId,
+                LikeId = likeId
+            },
+            LikeTargetType.Comment => new Notification
+            {
+                RecipientUserId = recipientId,
+                ActorUserId = actorId,
+                Type = NotificationType.CommentLike,
+                ReviewId = reviewId,
+                CommentId = targetId,
+                LikeId = likeId
+            },
+            LikeTargetType.Playlist => new Notification
+            {
+                RecipientUserId = recipientId,
+                ActorUserId = actorId,
+                Type = NotificationType.PlaylistLike,
+                PlaylistId = targetId,
+                LikeId = likeId
+            },
+            LikeTargetType.Track => null,
+            _ => throw new ArgumentOutOfRangeException(nameof(targetType))
+        };
 
     private static IQueryable<Like> LikeQuery(IQueryable<Like> likes, LikeTargetType targetType, int targetId) =>
         targetType switch
