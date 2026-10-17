@@ -48,4 +48,4 @@ public sealed record NotificationItem(
     public string ActorName => string.IsNullOrWhiteSpace(ActorDisplayName) ? ActorUserName : ActorDisplayName;
 }
 
-public sealed record NotificationPage(IReadOnlyList<NotificationItem> Items, int UnreadCount);
+public sealed record NotificationPage(IReadOnlyList<NotificationItem> Items, int UnreadCount, bool HasMore = false);

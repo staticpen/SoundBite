@@ -13,18 +13,47 @@ public sealed class NotificationService(
 {
     public const int PageSize = 30;
 
-    public async Task<NotificationPage> GetPageAsync(CancellationToken cancellationToken = default)
+    // Newest notifications (first page).
+    public Task<NotificationPage> GetPageAsync(CancellationToken cancellationToken = default) =>
+        GetPageCoreAsync(null, null, cancellationToken);
+
+    // Older notifications: the next page after the last item already shown (its CreatedAt and Id).
+    public Task<NotificationPage> GetPageAsync(
+        DateTime beforeCreatedAt,
+        int beforeId,
+        CancellationToken cancellationToken = default)
+    {
+        if (beforeId <= 0)
+            throw new ArgumentOutOfRangeException(nameof(beforeId));
+        return GetPageCoreAsync(beforeCreatedAt, beforeId, cancellationToken);
+    }
+
+    private async Task<NotificationPage> GetPageCoreAsync(
+        DateTime? beforeCreatedAt,
+        int? beforeId,
+        CancellationToken cancellationToken)
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         var userId = await GetCurrentUserIdAsync(db, cancellationToken);
         var unreadCount = await db.Notifications.CountAsync(
             notification => notification.RecipientUserId == userId && notification.ReadAt == null,
             cancellationToken);
-        var items = await db.Notifications.AsNoTracking()
-            .Where(notification => notification.RecipientUserId == userId)
+
+        // Only this user's notifications are ever queried, before paging is applied.
+        var query = db.Notifications.AsNoTracking()
+            .Where(notification => notification.RecipientUserId == userId);
+        if (beforeCreatedAt is DateTime createdAt && beforeId is int id)
+        {
+            query = query.Where(notification =>
+                notification.CreatedAt < createdAt ||
+                (notification.CreatedAt == createdAt && notification.Id < id));
+        }
+
+        // Take one extra row to learn whether an older page exists.
+        var items = await query
             .OrderByDescending(notification => notification.CreatedAt)
             .ThenByDescending(notification => notification.Id)
-            .Take(PageSize)
+            .Take(PageSize + 1)
             .Select(notification => new NotificationItem(
                 notification.Id,
                 notification.Type,
@@ -39,7 +68,8 @@ public sealed class NotificationService(
                 notification.Comment == null ? null : notification.Comment.Content))
             .ToListAsync(cancellationToken);
 
-        return new NotificationPage(items, unreadCount);
+        var hasMore = items.Count > PageSize;
+        return new NotificationPage(items.Take(PageSize).ToList(), unreadCount, hasMore);
     }
 
     public async Task<int> GetUnreadCountAsync(CancellationToken cancellationToken = default)

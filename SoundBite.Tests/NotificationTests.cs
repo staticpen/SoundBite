@@ -203,6 +203,169 @@ public class NotificationTests
         Assert.ThrowsAsync<UnauthorizedAccessException>(() => notificationService.MarkAllReadAsync());
     }
 
+    // Adds follow notifications for a recipient, created one minute apart starting at "newest" and going back in time.
+    // Returns their IDs in display order (newest first); the IDs themselves rise as the notifications get older.
+    private async Task<List<int>> SeedNotificationsAsync(string recipientId, string actorId, int count, DateTime? newest = null)
+    {
+        var newestTime = newest ?? new DateTime(2026, 10, 17, 12, 0, 0, DateTimeKind.Utc);
+        await using var db = factory.CreateDbContext();
+        var notifications = Enumerable.Range(0, count)
+            .Select(index => new Notification
+            {
+                RecipientUserId = recipientId,
+                ActorUserId = actorId,
+                Type = NotificationType.Follow,
+                CreatedAt = newestTime.AddMinutes(-index)
+            })
+            .ToList();
+        db.Notifications.AddRange(notifications);
+        await db.SaveChangesAsync();
+        return notifications.Select(notification => notification.Id).ToList();
+    }
+
+    [Test]
+    public async Task OlderNotificationsAreAvailableInPagesWithoutDuplicatesOrGaps()
+    {
+        var ids = await SeedNotificationsAsync("alice", "bob", NotificationService.PageSize + 1);
+
+        var first = await notificationService.GetPageAsync();
+        Assert.That(first.Items, Has.Count.EqualTo(NotificationService.PageSize));
+        Assert.That(first.HasMore, Is.True);
+        Assert.That(first.UnreadCount, Is.EqualTo(ids.Count));
+
+        var last = first.Items[^1];
+        var second = await notificationService.GetPageAsync(last.CreatedAt, last.Id);
+        Assert.That(second.Items, Has.Count.EqualTo(1));
+        Assert.That(second.HasMore, Is.False);
+
+        var allIds = first.Items.Concat(second.Items).Select(item => item.Id).ToList();
+        Assert.That(allIds, Is.EqualTo(ids));
+    }
+
+    [Test]
+    public async Task ExactlyOnePageOfNotificationsHasNoMore()
+    {
+        await SeedNotificationsAsync("alice", "bob", NotificationService.PageSize);
+
+        var page = await notificationService.GetPageAsync();
+
+        Assert.That(page.Items, Has.Count.EqualTo(NotificationService.PageSize));
+        Assert.That(page.HasMore, Is.False);
+    }
+
+    [Test]
+    public async Task PagingPastTheOldestNotificationReturnsAnEmptyPage()
+    {
+        await SeedNotificationsAsync("alice", "bob", 3);
+        var page = await notificationService.GetPageAsync();
+        var oldest = page.Items[^1];
+
+        var older = await notificationService.GetPageAsync(oldest.CreatedAt, oldest.Id);
+
+        Assert.That(older.Items, Is.Empty);
+        Assert.That(older.HasMore, Is.False);
+    }
+
+    [Test]
+    public async Task NotificationsWithTheSameTimestampArePagedByIdWithoutDuplicates()
+    {
+        var sameTime = new DateTime(2026, 10, 17, 9, 0, 0, DateTimeKind.Utc);
+        await using (var db = factory.CreateDbContext())
+        {
+            db.Notifications.AddRange(Enumerable.Range(0, NotificationService.PageSize + 5)
+                .Select(_ => new Notification
+                {
+                    RecipientUserId = "alice",
+                    ActorUserId = "bob",
+                    Type = NotificationType.Follow,
+                    CreatedAt = sameTime
+                }));
+            await db.SaveChangesAsync();
+        }
+
+        var first = await notificationService.GetPageAsync();
+        var last = first.Items[^1];
+        var second = await notificationService.GetPageAsync(last.CreatedAt, last.Id);
+
+        Assert.That(second.Items, Has.Count.EqualTo(5));
+        Assert.That(first.Items.Select(item => item.Id).Intersect(second.Items.Select(item => item.Id)), Is.Empty);
+        Assert.That(first.Items.Concat(second.Items).Select(item => item.Id), Is.Ordered.Descending);
+    }
+
+    [Test]
+    public async Task NotificationPagesNeverIncludeAnotherUsersNotifications()
+    {
+        var aliceIds = await SeedNotificationsAsync("alice", "bob", NotificationService.PageSize + 2);
+        var bobIds = await SeedNotificationsAsync("bob", "alice", 40);
+
+        var first = await notificationService.GetPageAsync();
+        var last = first.Items[^1];
+        var second = await notificationService.GetPageAsync(last.CreatedAt, last.Id);
+
+        Assert.That(first.Items.Select(item => item.Id), Is.EqualTo(aliceIds.Take(NotificationService.PageSize)));
+        Assert.That(second.Items.Select(item => item.Id), Is.EqualTo(aliceIds.Skip(NotificationService.PageSize)));
+
+        // Alice's cursor is her 30th notification (index 29). Used by Bob, it returns only Bob's own
+        // notifications older than that time: indexes 30 to 39. Bob's index 29 has the same time but a
+        // higher Id, so it is not "before" the cursor.
+        authentication.Set("bob");
+        var bobPage = await notificationService.GetPageAsync(last.CreatedAt, last.Id);
+        Assert.That(bobPage.Items.Select(item => item.Id), Is.EqualTo(bobIds.Skip(NotificationService.PageSize)));
+        Assert.That(bobPage.Items.Select(item => item.ActorUserName), Has.All.EqualTo("alice"));
+    }
+
+    [Test]
+    public async Task NewNotificationArrivingBetweenPagesDoesNotDuplicateOrSkipOlderItems()
+    {
+        var ids = await SeedNotificationsAsync("alice", "bob", NotificationService.PageSize + 5);
+        var first = await notificationService.GetPageAsync();
+        var last = first.Items[^1];
+
+        // A newer notification arrives after the first page was loaded.
+        await SeedNotificationsAsync("alice", "bob", 1, new DateTime(2026, 10, 18, 0, 0, 0, DateTimeKind.Utc));
+        var second = await notificationService.GetPageAsync(last.CreatedAt, last.Id);
+
+        Assert.That(second.Items.Select(item => item.Id), Is.EqualTo(ids.Skip(NotificationService.PageSize)));
+    }
+
+    [Test]
+    public void InvalidNotificationCursorIsRejected()
+    {
+        Assert.ThrowsAsync<ArgumentOutOfRangeException>(
+            () => notificationService.GetPageAsync(DateTime.UtcNow, 0));
+        Assert.ThrowsAsync<ArgumentOutOfRangeException>(
+            () => notificationService.GetPageAsync(DateTime.UtcNow, -5));
+    }
+
+    [Test]
+    public async Task AnonymousUserCannotLoadOlderNotifications()
+    {
+        authentication.Set(null);
+        Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => notificationService.GetPageAsync(DateTime.UtcNow, 1));
+        await Task.CompletedTask;
+    }
+
+    [Test]
+    public async Task UnreadCountAndMarkReadIgnoreWhichPageIsShown()
+    {
+        var ids = await SeedNotificationsAsync("alice", "bob", NotificationService.PageSize + 2);
+        var first = await notificationService.GetPageAsync();
+        var last = first.Items[^1];
+        var second = await notificationService.GetPageAsync(last.CreatedAt, last.Id);
+        Assert.That(second.UnreadCount, Is.EqualTo(ids.Count));
+
+        // Mark an item that only appears on the older page.
+        await notificationService.MarkReadAsync(second.Items[0].Id);
+        Assert.That(await notificationService.GetUnreadCountAsync(), Is.EqualTo(ids.Count - 1));
+        var secondAgain = await notificationService.GetPageAsync(last.CreatedAt, last.Id);
+        Assert.That(secondAgain.Items.Single(item => item.Id == second.Items[0].Id).ReadAt, Is.Not.Null);
+        Assert.That(secondAgain.Items.Single(item => item.Id == second.Items[1].Id).ReadAt, Is.Null);
+
+        await notificationService.MarkAllReadAsync();
+        Assert.That((await notificationService.GetPageAsync(last.CreatedAt, last.Id)).UnreadCount, Is.Zero);
+    }
+
     private sealed class TestAuthentication(string? userId) : AuthenticationStateProvider
     {
         public void Set(string? id) => userId = id;
