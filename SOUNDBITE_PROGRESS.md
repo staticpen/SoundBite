@@ -22,7 +22,7 @@
 
 - **Overall status:** In progress
 - **Current development phase:** Building working catalogue and social product features
-- **Current focus:** Completing product discovery, with rankings and trends now based on SoundBite reviews
+- **Current focus:** Protected user administration with role-based access, account lockout, and administrator provisioning
 - **Last verified:** 2026-10-17
 - **Current blocker:** Live Spotify API access is unverified until valid application credentials are configured; comments and feed events remain review-based
 
@@ -42,11 +42,19 @@
 | Likes and comments | Partially implemented — verified | Signed-in users can idempotently like reviews, tracks, public playlists, and comments; private playlist likes are owner-only. Users can add/edit/delete their own review comments. Database uniqueness, exactly-one-target checks, foreign keys, migration preservation, and authorization are tested. Threaded replies remain unimplemented. |
 | Activity feed | Implemented — verified | `/feed` shows paginated reviews and comments from the signed-in user and followed users, links back to the track review, and prompts anonymous visitors to log in. |
 | Rankings and trends | Implemented — verified | `/rankings` shows top-rated tracks (minimum two reviews), most-reviewed tracks overall, and tracks with the most reviews in the last seven days. Metrics use SoundBite review data only, with stable tie-break ordering. |
-| Administrative user management | Not started | `Services/AdminService.cs` is empty and there is no admin UI or authorization pattern beyond Identity setup. |
-| Automated tests | Passed — verified | 205 NUnit tests passed, 0 failed/skipped (2026-10-17), including ranking/trend persistence, rendered page, and route tests. |
-| Git and repository hygiene | In progress | Ranking/trend implementation is uncommitted on `main` at `aa67710`. |
+| Administrative user management | Implemented — verified | `/admin/users` supports user search/paging, account lock/unlock, and admin-role grants/revocation. Every service operation checks live role membership and lockout state server-side. Initial roles are bootstrapped from configured user IDs. |
+| Automated tests | Passed — verified | Full NUnit suite passed: 212/212, including administrator provisioning, authorization, account lockout/roles, anonymous access, and routing. |
+| Git and repository hygiene | In progress | Admin implementation is uncommitted on `main` at `d9776ca`. |
 
 ## 4. Latest Completed Work
+
+### 2026-10-17 — Protected administrator user management
+
+- **Task completed:** Added an admin user directory with search and paging, account lock/unlock, and administrator role management. Added configured administrator bootstrap and hid the admin navigation link from non-admin users.
+- **Files or components changed:** `Services/AdminService.cs`, `Services/AdminRoleBootstrapper.cs`, `Program.cs`, `Components/Pages/AdminUsers.razor`, `Components/Layout/NavMenu.razor`, `AdminServiceTests.cs`, `AuthenticationUiTests.cs`, and `PageRouteTests.cs`.
+- **Important implementation decisions:** Initial admins are configured using `Admin__UserIds__0` (and additional indexed IDs) after the account exists and database migrations are applied. Every admin service operation verifies live role membership and lockout status from the database rather than relying only on potentially stale role claims. Admins cannot lock or demote themselves, and the last admin cannot be demoted. No user deletion was added.
+- **Verification performed and its result:** Focused admin provisioning, service authorization, anonymous-page, and route tests passed 15/15. Full NUnit suite passed 212/212. CRLF-aware `git diff --check` passed.
+- **Remaining limitations:** Bootstrap behavior is tested through the bootstrapper but has not been exercised by starting the deployed app with production configuration. No schema change was needed because Identity role tables already exist.
 
 ### 2026-10-17 — Review-based rankings and trends
 
@@ -192,7 +200,7 @@
 - `Album`, `Artist`, and `Track` models initialize empty navigation collections and enforce basic validation requirements.
 - `Endpoints/AccountEndpoints.cs` exposes registration, login, logout, and current-user endpoints.
 - `Data/ApplicationUser.cs` includes `DisplayName` and optional `Bio`. The account page edits these fields; `/users/{username}` displays a public profile without exposing email.
-- Remaining model and service placeholders include `AdminService` and `UserService`. Rankings and trends use SoundBite review data; Spotify access is implemented but requires locally configured credentials. Likes support reviews, tracks, playlists, and comments; comments/feed entries remain review-scoped.
+- Remaining model and service placeholders include `UserService`. Rankings and trends use SoundBite review data; Spotify access is implemented but requires locally configured credentials. Likes support reviews, tracks, playlists, and comments; comments/feed entries remain review-scoped.
 - The NUnit test project is active and passes, and the app builds and starts successfully.
 - `20261015074342_AddUserProfiles` migrates the display-name and bio fields; the playlist migration adds playlists and ordered track items.
 
@@ -222,32 +230,27 @@
 | Remaining social interaction scope | Comments are review-only and flat; likes are not feed events | `SocialInteractionService` stores comments against `ReviewId`; feed selects reviews/comments | Consider threaded replies and like activity events | Open |
 | Spotify access has not been exercised against a live account | External search/import cannot be confirmed without valid API credentials | Spotify client credentials are read from environment variables; automated tests use a mock HTTP handler | Configure approved credentials locally and smoke-test search/import while respecting Spotify's policies | Open |
 | Catalogue data and discovery remain limited | Spotify track search/import, local catalogue details, and review-based track rankings/trends are implemented | No artwork import or general catalogue editing; rankings are track-only because reviews apply to tracks | Consider general catalogue management after protected administration is implemented | Open |
-| Administration is absent | No protected user-management workflow is available | `AdminService.cs` is empty and no admin UI/authorization policy is configured | Define roles and implement server-authorized admin workflows | Open |
+| Initial administrator needs deployment configuration | The first admin must exist before the app can assign its admin role | Startup reads indexed `Admin:UserIds` settings and fails explicitly if an ID is unknown | Register the first user, configure the ID, apply migrations, then restart; keep settings in trusted environment configuration | Open |
 
 ## 8. Verification Record
 
 | Check | Result | Notes |
 |---|---|---|
 | Application build | Passed | `dotnet test SoundBite.Tests/SoundBite.Tests.csproj --nologo -v minimal` built the app and test project successfully. |
-| Automated tests | Passed — verified | 205 NUnit tests passed, 0 failed/skipped (2026-10-17). |
+| Automated tests | Passed — verified | 212 NUnit tests passed, 0 failed/skipped (2026-10-17). |
 | Application startup | Passed | Command: `dotnet run --project SoundBite --urls http://localhost:5080` → app reported `Now listening on: http://localhost:5080` and `Application started.` |
 | Relevant feature behaviour | Passed | Authentication/profile/review/playlist/follow flows were previously verified; rendered tests cover review interactions, feed, and track likes. |
 | Database migrations | Passed | Profile, review, playlist, follow, review-social, and expanded-like migrations are exercised by isolated SQLite tests, including preserving existing review likes. The configured app database is not migrated. |
 
 ## 9. Git Status
 
-- **Active branch:** `main` at `aa67710` (`Add Spotify Catalogue search and track import`), synchronized with `origin/main` before the current changes.
-- **Working tree:** Ranking/trend services, strategies, page/navigation, tests, and this progress update are uncommitted. Earlier Spotify/catalogue discovery changes are included in the current main history.
-- **Latest verification:** Focused ranking/trend, route, and catalogue tests passed 20/20; full NUnit suite passed 205/205. No model/schema changes were needed, so no migration was required. Live Spotify API access was not tested.
+- **Active branch:** `main` at `d9776ca` (`Implement review-based track rankings and trends`), synchronized with `origin/main` before current changes.
+- **Working tree:** Administrator service, role bootstrap, UI/navigation, tests, and this progress update are uncommitted.
+- **Latest verification:** Focused admin tests passed 15/15; full NUnit suite passed 212/212. No model/schema changes were needed.
 
 ## 10. Next Recommended Tasks
 
-1. **Task:** Add administrative user management.
-   - **Reason:** There are no admin workflows or authorization policies yet.
-   - **Dependencies:** Define admin roles and protected operations.
-   - **Acceptance criteria:** Admin-only user management is enforced server-side and covered by authorization tests.
-
-2. **Task:** Extend review-based discovery.
+1. **Task:** Extend review-based discovery.
    - **Reason:** Current rankings and trends cover tracks; album/artist ratings can be added if aggregate discovery becomes useful.
    - **Dependencies:** Define how track ratings should roll up to albums and artists, including minimum review counts.
    - **Acceptance criteria:** Any aggregate ranking explains its calculation and is covered by tests.
@@ -255,8 +258,8 @@
 ## 11. Handover for the Next Chat Session
 
 - Follow/unfollow and review likes/comments/feed are committed on `main`; likes across tracks, playlists, and comments are included in the recent main history.
-- Catalogue discovery, Spotify-backed track search/import, and review-based track rankings/trends are implemented locally. Focused ranking/trend, route, and catalogue tests passed 20/20; full suite passed 205/205 on 2026-10-17.
-- Spotify API credentials are not configured or checked in; live Spotify connectivity remains unverified. No migration was needed. Remaining work includes protected administration, optional aggregate album/artist rankings, and threaded comments/feed likes.
+- Catalogue discovery, Spotify-backed track search/import, review-based track rankings/trends, and protected administrator user management are implemented locally. The full suite passed 212/212 on 2026-10-17.
+- Initial admin provisioning uses trusted `Admin__UserIds__0` configuration after registration and migration. Live Spotify connectivity remains unverified. No migration was needed. Remaining work includes optional aggregate album/artist rankings and threaded comments/feed likes.
 
 ## 12. Instructions for Updating This File
 

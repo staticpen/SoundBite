@@ -1,0 +1,199 @@
+@page "/admin/users"
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using SoundBite.Models
+@using SoundBite.Services
+@inject AdminService Admin
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ILogger<AdminUsers> Logger
+
+<PageTitle>User administration - SoundBite</PageTitle>
+
+<h1>User administration</h1>
+
+@if (isLoading)
+{
+    <p role="status">Loading users...</p>
+}
+else if (notAuthorized)
+{
+    <div class="alert alert-warning" role="alert">
+        Administrator access is required to view user management.
+        <a href="/account">Sign in</a> with an administrator account.
+    </div>
+}
+else if (loadFailed)
+{
+    <div class="alert alert-danger" role="alert">Users couldn't be loaded. Please try again later.</div>
+}
+else
+{
+    <form class="mb-3" @onsubmit="SearchAsync" @onsubmit:preventDefault>
+        <label for="admin-user-search" class="form-label">Search by username, display name, or email</label>
+        <div class="input-group">
+            <input id="admin-user-search" class="form-control" @bind="search" @bind:event="oninput" />
+            <button type="submit" class="btn btn-primary" disabled="@isBusy">Search</button>
+        </div>
+    </form>
+
+    @if (message is not null)
+    {
+        <p class="alert @(isError ? "alert-danger" : "alert-success")" role="status">@message</p>
+    }
+
+    <p role="status">@pageData.TotalCount users</p>
+    @if (pageData.Users.Count == 0)
+    {
+        <p>No users match this search.</p>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table align-middle">
+                <thead>
+                    <tr>
+                        <th scope="col">User</th>
+                        <th scope="col">Email</th>
+                        <th scope="col">Status</th>
+                        <th scope="col">Role</th>
+                        <th scope="col">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var user in pageData.Users)
+                    {
+                        <tr @key="user.Id">
+                            <td>
+                                <strong>@(string.IsNullOrWhiteSpace(user.DisplayName) ? user.UserName : user.DisplayName)</strong>
+                                <div class="small text-muted">@@@user.UserName</div>
+                            </td>
+                            <td>@(user.Email ?? "—")</td>
+                            <td>@(user.IsLocked ? "Locked" : "Active")</td>
+                            <td>@(user.IsAdministrator ? "Administrator" : "User")</td>
+                            <td>
+                                <div class="d-flex flex-wrap gap-2">
+                                    <button type="button" class="btn btn-sm btn-outline-secondary"
+                                            disabled="@isBusy"
+                                            @onclick="() => ToggleLockAsync(user)">
+                                        @(user.IsLocked ? "Unlock" : "Lock")
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-primary"
+                                            disabled="@(isBusy || user.Id == currentActorId)"
+                                            @onclick="() => ToggleAdministratorAsync(user)">
+                                        @(user.IsAdministrator ? "Remove admin" : "Make admin")
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+
+    <nav aria-label="User pages" class="d-flex align-items-center gap-3">
+        <button type="button" class="btn btn-outline-secondary" disabled="@(isBusy || pageData.Page == 0)"
+                @onclick="() => LoadPageAsync(pageData.Page - 1)">Previous</button>
+        <span>Page @(pageData.Page + 1)</span>
+        <button type="button" class="btn btn-outline-secondary" disabled="@(isBusy || !pageData.HasNextPage)"
+                @onclick="() => LoadPageAsync(pageData.Page + 1)">Next</button>
+    </nav>
+}
+
+@code {
+    private AdminUserPage pageData = new([], 0, 0, false);
+    private string search = string.Empty;
+    private string? currentActorId;
+    private string? message;
+    private bool isLoading = true;
+    private bool isBusy;
+    private bool loadFailed;
+    private bool notAuthorized;
+    private bool isError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var principal = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+        currentActorId = principal.FindFirstValue(ClaimTypes.NameIdentifier);
+        await LoadPageAsync(0);
+    }
+
+    private async Task SearchAsync()
+    {
+        await LoadPageAsync(0);
+    }
+
+    private async Task LoadPageAsync(int page)
+    {
+        isBusy = true;
+        loadFailed = false;
+        notAuthorized = false;
+        message = null;
+        try
+        {
+            pageData = await Admin.GetUsersAsync(search, page);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            notAuthorized = true;
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Unable to load the admin user list");
+            loadFailed = true;
+        }
+        finally
+        {
+            isBusy = false;
+            isLoading = false;
+        }
+    }
+
+    private async Task ToggleLockAsync(AdminUserSummary user)
+    {
+        await UpdateUserAsync(
+            user,
+            () => Admin.SetUserLockedAsync(user.Id, !user.IsLocked),
+            user.IsLocked ? "User unlocked." : "User locked.");
+    }
+
+    private async Task ToggleAdministratorAsync(AdminUserSummary user)
+    {
+        await UpdateUserAsync(
+            user,
+            () => Admin.SetUserAdministratorAsync(user.Id, !user.IsAdministrator),
+            user.IsAdministrator ? "Administrator role removed." : "Administrator role granted.");
+    }
+
+    private async Task UpdateUserAsync(AdminUserSummary user, Func<Task> operation, string successMessage)
+    {
+        if (isBusy)
+            return;
+
+        isBusy = true;
+        message = null;
+        isError = false;
+        try
+        {
+            await operation();
+            message = successMessage;
+            pageData = await Admin.GetUsersAsync(search, pageData.Page);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            notAuthorized = true;
+        }
+        catch (Exception exception)
+        {
+            Logger.LogWarning(exception, "Unable to update user {UserId}", user.Id);
+            message = exception is InvalidOperationException or KeyNotFoundException
+                ? exception.Message
+                : "The user couldn't be updated. Please try again.";
+            isError = true;
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+}

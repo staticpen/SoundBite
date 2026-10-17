@@ -28,6 +28,7 @@ builder.Services.AddScoped<PlaylistService>();
 builder.Services.AddScoped<FollowService>();
 builder.Services.AddScoped<SocialInteractionService>();
 builder.Services.AddScoped<FeedService>();
+builder.Services.AddScoped<AdminService>();
 builder.Services.AddScoped<IRankingStrategy, RatingRankingStrategy>();
 builder.Services.AddScoped<IRankingStrategy, PopularityRankingStrategy>();
 builder.Services.AddScoped<RankingService>();
@@ -51,6 +52,7 @@ builder.Services
         options.User.RequireUniqueEmail = true;
         options.Password.RequiredLength = 8;
     })
+    .AddRoles<IdentityRole>()
     .AddEntityFrameworkStores<ApplicationDbContext>()
     .AddSignInManager();
 
@@ -62,6 +64,10 @@ builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddHttpClient();
 
 var app = builder.Build();
+
+await AdminRoleBootstrapper.EnsureConfiguredAdministratorsAsync(
+    app.Services,
+    builder.Configuration.GetSection("Admin:UserIds").Get<string[]>() ?? []);
 
 if (!app.Environment.IsDevelopment())
 {

@@ -139,6 +139,17 @@ public class AuthenticationUiTests
     }
 
     [Test]
+    public async Task AnonymousVisitorCannotReadAdminUserDirectory()
+    {
+        var response = await client.GetAsync("/admin/users");
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        var html = await response.Content.ReadAsStringAsync();
+        Assert.That(html, Does.Contain("Administrator access is required")
+            .And.Not.Contain("authuser@example.com")
+            .And.Not.Contain("Search by username, display name, or email"));
+    }
+
+    [Test]
     public async Task InvalidProfileDoesNotOverwriteSavedValues()
     {
         await Register();
