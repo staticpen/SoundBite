@@ -49,6 +49,17 @@
 
 ## 4. Latest Completed Work
 
+### 2026-10-17 — A2: notification category preferences (implemented and verified; uncommitted)
+
+- **Design:** New `NotificationOptOut` (`UserId`, `Type`; composite key; cascade FK to the user). A row means that category is off; no rows means everything is on, so default delivery is unchanged and no backfill is needed. All six existing categories are optional social notifications (there is no security/system type), so none is marked required.
+- **Service:** `NotificationService` gains `GetDisabledTypesAsync`, `SetTypeEnabledAsync` (idempotent, rejects undefined enum values) and internal `IsEnabledAsync`. The check runs at the three creation points (`FollowService`, and the comment and like paths in `SocialInteractionService`) using the recipient's setting; when disabled, the follow/like/comment is still saved but no notification row or live event is created. No UI was added.
+- **History:** Future notifications only. Existing notifications, read states and unread counts are untouched; re-enabling does not backfill.
+- **Migration:** `20261017064453_AddNotificationOptOuts` (additive; `Down` drops only `NotificationOptOuts`). Generated with dotnet-ef 9.0.21 on SDK 9.0.319 using a disposable connection override. After review, `ProductVersion` is `9.0.21` in the new designer and in the model snapshot (the version of the EF tooling that generated them). Historical migrations are unchanged.
+- **Files changed:** `Models/NotificationOptOut.cs` (new), `Data/ApplicationDbContext.cs`, `Services/NotificationService.cs`, `Services/FollowService.cs`, `Services/SocialInteractionService.cs`, migration + designer (new), `Migrations/ApplicationDbContextModelSnapshot.cs`, `SoundBite.Tests/NotificationTests.cs` (10 new tests, including a disabled-comment test and migration rollback/upgrade).
+- **Verification (SDK 9.0.319 from `~/.dotnet9`):** focused `NotificationTests` + `NotificationsPageTests` 32/32 passed; full NUnit suite 252/252 passed (baseline 242). `migrations has-pending-model-changes`: no changes. Migration script is the single `CREATE TABLE`. `database update` on a disposable SQLite file applied all 12 migrations; down to `AddNotifications` (11, table dropped) and up again (12, table back) all gave `integrity_check` ok and no `foreign_key_check` rows.
+- **Protected state:** `SoundBite/soundbite.db` SHA-256 unchanged (`33a52d2d...e53c`). The migration has **not** been applied to it. Applying it (and the still-pending `ThreadedReviewComments` and `AddNotifications`) needs the DB owner's approval, a backup first, and a trial on a copy.
+- **Git:** nothing committed. Suggested commit: `feat: add notification category preferences`.
+
 ### 2026-10-17 — A1: notification paging (committed in da572bf; refresh-recovery fix uncommitted)
 
 - **Task completed:** Users can load notifications older than the newest 30 via a "Load more" button on `/notifications`. Notification category preferences (A2/A3) are not started.

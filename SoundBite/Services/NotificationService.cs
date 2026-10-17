@@ -117,6 +117,55 @@ public sealed class NotificationService(
         return updated;
     }
 
+    // Categories the current user has turned off. An empty list means every category is on.
+    public async Task<IReadOnlyList<NotificationType>> GetDisabledTypesAsync(
+        CancellationToken cancellationToken = default)
+    {
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        var userId = await GetCurrentUserIdAsync(db, cancellationToken);
+        return await db.NotificationOptOuts.AsNoTracking()
+            .Where(optOut => optOut.UserId == userId)
+            .OrderBy(optOut => optOut.Type)
+            .Select(optOut => optOut.Type)
+            .ToListAsync(cancellationToken);
+    }
+
+    // Applies to notifications created from now on. Existing notifications, their read state
+    // and the unread count are not touched. Calling it twice with the same value is safe.
+    public async Task SetTypeEnabledAsync(
+        NotificationType type,
+        bool enabled,
+        CancellationToken cancellationToken = default)
+    {
+        if (!Enum.IsDefined(type))
+            throw new ArgumentOutOfRangeException(nameof(type));
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        var userId = await GetCurrentUserIdAsync(db, cancellationToken);
+        if (enabled)
+        {
+            await db.NotificationOptOuts
+                .Where(optOut => optOut.UserId == userId && optOut.Type == type)
+                .ExecuteDeleteAsync(cancellationToken);
+        }
+        else
+        {
+            await db.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO "NotificationOptOuts" ("UserId", "Type") VALUES ({userId}, {(int)type})
+                ON CONFLICT ("UserId", "Type") DO NOTHING
+                """, cancellationToken);
+        }
+    }
+
+    // Used where notifications are created. Runs on the caller's context so it joins any open transaction.
+    internal static async Task<bool> IsEnabledAsync(
+        ApplicationDbContext db,
+        string recipientUserId,
+        NotificationType type,
+        CancellationToken cancellationToken = default) =>
+        !await db.NotificationOptOuts.AnyAsync(
+            optOut => optOut.UserId == recipientUserId && optOut.Type == type,
+            cancellationToken);
+
     private async Task<string> GetCurrentUserIdAsync(
         ApplicationDbContext db,
         CancellationToken cancellationToken)

@@ -174,21 +174,25 @@ public sealed class SocialInteractionService(
             UpdatedAt = now
         };
         db.Comments.Add(comment);
-        if (recipientUserId is not null && recipientUserId != user.Id)
+        // The comment is always saved; the notification only if the recipient has not turned it off.
+        var notificationType = parentCommentId is null ? NotificationType.ReviewComment : NotificationType.CommentReply;
+        var notify = recipientUserId is not null && recipientUserId != user.Id &&
+            await NotificationService.IsEnabledAsync(db, recipientUserId, notificationType, cancellationToken);
+        if (notify)
         {
             db.Notifications.Add(new Notification
             {
-                RecipientUserId = recipientUserId,
+                RecipientUserId = recipientUserId!,
                 ActorUserId = user.Id,
-                Type = parentCommentId is null ? NotificationType.ReviewComment : NotificationType.CommentReply,
+                Type = notificationType,
                 ReviewId = reviewId,
                 Comment = comment
             });
         }
         await db.SaveChangesAsync(cancellationToken);
 
-        if (recipientUserId is not null && recipientUserId != user.Id)
-            await notificationEvents.PublishAsync(recipientUserId);
+        if (notify)
+            await notificationEvents.PublishAsync(recipientUserId!);
         return ToReviewComment(comment, user, true, parentUser);
     }
 
@@ -249,6 +253,7 @@ public sealed class SocialInteractionService(
 
         if (liked)
         {
+            var notified = false;
             await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
             var inserted = await db.Database.ExecuteSqlInterpolatedAsync($"""
                 INSERT INTO "Likes" ("ReviewId", "TrackId", "PlaylistId", "CommentId", "UserId", "CreatedAt")
@@ -279,14 +284,18 @@ public sealed class SocialInteractionService(
                     likeId,
                     notificationRecipientId,
                     user.Id);
-                if (notification is not null)
+                // The like is always saved; the notification only if the recipient has not turned it off.
+                if (notification is not null && await NotificationService.IsEnabledAsync(
+                        db, notificationRecipientId, notification.Type, cancellationToken))
+                {
                     db.Notifications.Add(notification);
-                if (notification is not null)
                     await db.SaveChangesAsync(cancellationToken);
+                    notified = true;
+                }
             }
             await transaction.CommitAsync(cancellationToken);
-            if (inserted > 0 && notificationRecipientId is not null && notificationRecipientId != user.Id)
-                await notificationEvents.PublishAsync(notificationRecipientId);
+            if (notified)
+                await notificationEvents.PublishAsync(notificationRecipientId!);
         }
         else
         {

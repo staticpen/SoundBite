@@ -2,6 +2,8 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.Logging.Abstractions;
 using SoundBite.Data;
 using SoundBite.Models;
@@ -364,6 +366,198 @@ public class NotificationTests
 
         await notificationService.MarkAllReadAsync();
         Assert.That((await notificationService.GetPageAsync(last.CreatedAt, last.Id)).UnreadCount, Is.Zero);
+    }
+
+    private NotificationService NewNotificationService() =>
+        new(factory, authentication, dispatcher);
+
+    [Test]
+    public async Task EveryCategoryIsEnabledByDefault()
+    {
+        Assert.That(await notificationService.GetDisabledTypesAsync(), Is.Empty);
+    }
+
+    [Test]
+    public async Task DisabledCategoriesPersistAcrossNewServiceInstancesAndStayPerUser()
+    {
+        authentication.Set("bob");
+        await notificationService.SetTypeEnabledAsync(NotificationType.ReviewLike, false);
+        await notificationService.SetTypeEnabledAsync(NotificationType.Follow, false);
+        await notificationService.SetTypeEnabledAsync(NotificationType.Follow, false);
+
+        var freshService = NewNotificationService();
+        Assert.That(await freshService.GetDisabledTypesAsync(),
+            Is.EqualTo(new[] { NotificationType.Follow, NotificationType.ReviewLike }));
+
+        authentication.Set("alice");
+        Assert.That(await freshService.GetDisabledTypesAsync(), Is.Empty);
+
+        authentication.Set("bob");
+        await freshService.SetTypeEnabledAsync(NotificationType.Follow, true);
+        await freshService.SetTypeEnabledAsync(NotificationType.Follow, true);
+        Assert.That(await NewNotificationService().GetDisabledTypesAsync(),
+            Is.EqualTo(new[] { NotificationType.ReviewLike }));
+    }
+
+    [Test]
+    public async Task DisabledCategoriesAreNotCreatedOrDeliveredButOthersStillAre()
+    {
+        authentication.Set("bob");
+        await notificationService.SetTypeEnabledAsync(NotificationType.Follow, false);
+        await notificationService.SetTypeEnabledAsync(NotificationType.ReviewLike, false);
+        authentication.Set("alice");
+
+        var bobUpdates = 0;
+        using var bobSubscription = dispatcher.Subscribe("bob", () =>
+        {
+            bobUpdates++;
+            return Task.CompletedTask;
+        });
+
+        await followService.FollowAsync("bob");
+        await socialService.LikeReviewAsync(reviewId);
+        await socialService.LikeCommentAsync(commentId);
+        await socialService.AddCommentAsync(reviewId, "Still delivered");
+
+        await using var db = factory.CreateDbContext();
+        var types = await db.Notifications
+            .Where(notification => notification.RecipientUserId == "bob")
+            .Select(notification => notification.Type)
+            .ToListAsync();
+        Assert.That(types, Is.EquivalentTo(new[] { NotificationType.CommentLike, NotificationType.ReviewComment }));
+        Assert.That(bobUpdates, Is.EqualTo(2));
+        // The follow and the like themselves are still saved.
+        Assert.That(await db.Follows.CountAsync(), Is.EqualTo(1));
+        Assert.That(await db.Likes.CountAsync(like => like.ReviewId == reviewId), Is.EqualTo(1));
+    }
+
+    [Test]
+    public async Task DisabledCommentCategorySavesTheCommentWithoutNotifyingOrPublishing()
+    {
+        authentication.Set("bob");
+        await notificationService.SetTypeEnabledAsync(NotificationType.ReviewComment, false);
+        authentication.Set("alice");
+
+        var bobUpdates = 0;
+        using var bobSubscription = dispatcher.Subscribe("bob", () =>
+        {
+            bobUpdates++;
+            return Task.CompletedTask;
+        });
+
+        var comment = await socialService.AddCommentAsync(reviewId, "Comment on a disabled category");
+
+        await using var db = factory.CreateDbContext();
+        Assert.That(await db.Comments.AnyAsync(saved => saved.Id == comment.Id), Is.True);
+        Assert.That(await db.Notifications.CountAsync(notification => notification.RecipientUserId == "bob"), Is.Zero);
+        Assert.That(bobUpdates, Is.Zero);
+    }
+
+    [Test]
+    public async Task OneUsersSettingDoesNotChangeAnotherUsersNotifications()
+    {
+        // Alice turns follows off for herself. Bob's follow notification from her is unaffected.
+        await notificationService.SetTypeEnabledAsync(NotificationType.Follow, false);
+        await followService.FollowAsync("bob");
+        authentication.Set("bob");
+        await followService.FollowAsync("alice");
+
+        authentication.Set("bob");
+        Assert.That((await notificationService.GetPageAsync()).Items, Has.Count.EqualTo(1));
+        authentication.Set("alice");
+        Assert.That((await notificationService.GetPageAsync()).Items, Is.Empty);
+    }
+
+    [Test]
+    public async Task EnablingACategoryAgainOnlyAffectsFutureNotifications()
+    {
+        authentication.Set("bob");
+        await notificationService.SetTypeEnabledAsync(NotificationType.ReviewLike, false);
+        authentication.Set("alice");
+        await socialService.LikeReviewAsync(reviewId);
+        await socialService.UnlikeReviewAsync(reviewId);
+
+        authentication.Set("bob");
+        await notificationService.SetTypeEnabledAsync(NotificationType.ReviewLike, true);
+        Assert.That((await notificationService.GetPageAsync()).Items, Is.Empty);
+
+        authentication.Set("alice");
+        await socialService.LikeReviewAsync(reviewId);
+        authentication.Set("bob");
+        var page = await notificationService.GetPageAsync();
+        Assert.That(page.Items.Select(item => item.Type), Is.EqualTo(new[] { NotificationType.ReviewLike }));
+    }
+
+    [Test]
+    public async Task ChangingPreferencesLeavesExistingNotificationsAndReadStatesUntouched()
+    {
+        await SeedNotificationsAsync("alice", "bob", 3);
+        var before = await notificationService.GetPageAsync();
+        await notificationService.MarkReadAsync(before.Items[0].Id);
+        var readAt = (await notificationService.GetPageAsync()).Items[0].ReadAt;
+
+        await notificationService.SetTypeEnabledAsync(NotificationType.Follow, false);
+
+        var after = await notificationService.GetPageAsync();
+        Assert.That(after.Items, Has.Count.EqualTo(3));
+        Assert.That(after.UnreadCount, Is.EqualTo(2));
+        Assert.That(after.Items[0].ReadAt, Is.EqualTo(readAt));
+        Assert.That(after.Items.Skip(1).Select(item => item.ReadAt), Has.All.Null);
+        Assert.That(await notificationService.GetUnreadCountAsync(), Is.EqualTo(2));
+
+        Assert.That(await notificationService.MarkAllReadAsync(), Is.EqualTo(2));
+        Assert.That(await notificationService.GetUnreadCountAsync(), Is.Zero);
+    }
+
+    [Test]
+    public void InvalidCategoryAndAnonymousPreferenceAccessAreRejected()
+    {
+        Assert.ThrowsAsync<ArgumentOutOfRangeException>(
+            () => notificationService.SetTypeEnabledAsync((NotificationType)99, false));
+
+        authentication.Set(null);
+        Assert.ThrowsAsync<UnauthorizedAccessException>(() => notificationService.GetDisabledTypesAsync());
+        Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => notificationService.SetTypeEnabledAsync(NotificationType.Follow, false));
+    }
+
+    [Test]
+    public async Task DeletingAUserRemovesTheirPreferencesOnly()
+    {
+        await notificationService.SetTypeEnabledAsync(NotificationType.Follow, false);
+        authentication.Set("bob");
+        await notificationService.SetTypeEnabledAsync(NotificationType.CommentLike, false);
+
+        await using var db = factory.CreateDbContext();
+        await db.Database.ExecuteSqlRawAsync("PRAGMA foreign_keys = ON");
+        db.Users.Remove(await db.Users.SingleAsync(user => user.Id == "alice"));
+        await db.SaveChangesAsync();
+
+        var remaining = await db.NotificationOptOuts.SingleAsync();
+        Assert.That(remaining.UserId, Is.EqualTo("bob"));
+        Assert.That(remaining.Type, Is.EqualTo(NotificationType.CommentLike));
+    }
+
+    [Test]
+    public async Task PreferenceMigrationRollsBackAndUpgradesWithoutLosingNotifications()
+    {
+        await SeedNotificationsAsync("alice", "bob", 2);
+        await notificationService.SetTypeEnabledAsync(NotificationType.Follow, false);
+
+        await using var db = factory.CreateDbContext();
+        var migrator = db.GetService<IMigrator>();
+        await migrator.MigrateAsync("20261017013935_AddNotifications");
+        Assert.That(await db.Notifications.CountAsync(), Is.EqualTo(2));
+        Assert.That(await db.Database.SqlQueryRaw<int>(
+            "SELECT COUNT(*) AS Value FROM sqlite_master WHERE name = 'NotificationOptOuts'").SingleAsync(),
+            Is.Zero);
+
+        await db.Database.MigrateAsync();
+        Assert.That(db.Database.HasPendingModelChanges(), Is.False);
+        Assert.That(await db.Notifications.CountAsync(), Is.EqualTo(2));
+        // Rolling back drops only the preference table, so preferences start again with everything on.
+        Assert.That(await db.NotificationOptOuts.CountAsync(), Is.Zero);
+        Assert.That(await notificationService.GetDisabledTypesAsync(), Is.Empty);
     }
 
     private sealed class TestAuthentication(string? userId) : AuthenticationStateProvider
