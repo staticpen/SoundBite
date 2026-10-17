@@ -112,7 +112,34 @@ namespace SoundBite.Data
                     .WithMany()
                     .HasForeignKey(like => like.UserId)
                     .OnDelete(DeleteBehavior.Cascade);
-                entity.HasIndex(like => new { like.ReviewId, like.UserId }).IsUnique();
+                entity.HasOne(like => like.Track)
+                    .WithMany()
+                    .HasForeignKey(like => like.TrackId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(like => like.Playlist)
+                    .WithMany()
+                    .HasForeignKey(like => like.PlaylistId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(like => like.Comment)
+                    .WithMany()
+                    .HasForeignKey(like => like.CommentId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasIndex(like => new { like.ReviewId, like.UserId })
+                    .IsUnique().HasFilter("\"ReviewId\" IS NOT NULL");
+                entity.HasIndex(like => new { like.TrackId, like.UserId })
+                    .IsUnique().HasFilter("\"TrackId\" IS NOT NULL");
+                entity.HasIndex(like => new { like.PlaylistId, like.UserId })
+                    .IsUnique().HasFilter("\"PlaylistId\" IS NOT NULL");
+                entity.HasIndex(like => new { like.CommentId, like.UserId })
+                    .IsUnique().HasFilter("\"CommentId\" IS NOT NULL");
+                entity.ToTable(table => table.HasCheckConstraint(
+                    "CK_Likes_ExactlyOneTarget",
+                    """
+                    (CASE WHEN "ReviewId" IS NOT NULL THEN 1 ELSE 0 END) +
+                    (CASE WHEN "TrackId" IS NOT NULL THEN 1 ELSE 0 END) +
+                    (CASE WHEN "PlaylistId" IS NOT NULL THEN 1 ELSE 0 END) +
+                    (CASE WHEN "CommentId" IS NOT NULL THEN 1 ELSE 0 END) = 1
+                    """));
             });
 
             builder.Entity<Comment>(entity =>

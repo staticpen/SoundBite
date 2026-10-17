@@ -1,5 +1,6 @@
 @using System.Security.Claims
 @using Microsoft.AspNetCore.Components.Authorization
+@using SoundBite.Models
 @using SoundBite.Services
 @inject SocialInteractionService Social
 @inject AuthenticationStateProvider AuthenticationStateProvider
@@ -38,12 +39,25 @@
                 {
                     <li class="list-group-item px-0" @key="comment.Id">
                         <div class="d-flex justify-content-between gap-2">
-                            <p class="mb-1">
-                                <a href="@($"/users/{Uri.EscapeDataString(comment.UserName)}")">
-                                    @(string.IsNullOrWhiteSpace(comment.DisplayName) ? comment.UserName : comment.DisplayName)
-                                </a>
-                                <span>: @comment.Content</span>
-                            </p>
+                            <div>
+                                <p class="mb-1">
+                                    <a href="@($"/users/{Uri.EscapeDataString(comment.UserName)}")">
+                                        @(string.IsNullOrWhiteSpace(comment.DisplayName) ? comment.UserName : comment.DisplayName)
+                                    </a>
+                                    <span>: @comment.Content</span>
+                                </p>
+                                @if (signedIn)
+                                {
+                                    <button type="button" class="btn btn-sm btn-outline-primary" @onclick="() => ToggleCommentLikeAsync(comment)" disabled="@busy">
+                                        @(comment.IsLiked ? "Unlike" : "Like") (@comment.LikeCount)
+                                    </button>
+                                }
+                                else
+                                {
+                                    <span class="small">@comment.LikeCount likes</span>
+                                    <a class="small ms-2" href="/login">Log in to like</a>
+                                }
+                            </div>
                             @if (comment.IsOwner)
                             {
                                 <div class="text-nowrap">
@@ -195,6 +209,28 @@
         {
             Logger.LogError(exception, "Unable to delete comment {CommentId}", commentId);
             message = "Your comment couldn't be deleted. Please try again.";
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private async Task ToggleCommentLikeAsync(ReviewComment comment)
+    {
+        if (busy) return;
+        busy = true;
+        message = null;
+        try
+        {
+            if (comment.IsLiked) await Social.UnlikeCommentAsync(comment.Id);
+            else await Social.LikeCommentAsync(comment.Id);
+            interactions = await Social.GetReviewInteractionsAsync(ReviewId);
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Unable to change like for comment {CommentId}", comment.Id);
+            message = "The comment like couldn't be updated. Please try again.";
         }
         finally
         {

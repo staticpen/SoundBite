@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using SoundBite.Data;
 using SoundBite.Models;
 using SoundBite.Services;
@@ -15,6 +16,10 @@ public class SocialInteractionTests
     private TestAuthentication authentication = null!;
     private SocialInteractionService service = null!;
     private int reviewId;
+    private int trackId;
+    private int publicPlaylistId;
+    private int privatePlaylistId;
+    private int commentId;
 
     [SetUp]
     public async Task SetUp()
@@ -32,11 +37,20 @@ public class SocialInteractionTests
             new ApplicationUser { Id = "alice", UserName = "alice", DisplayName = "Alice" },
             new ApplicationUser { Id = "bob", UserName = "bob", DisplayName = "Bob" });
         db.Tracks.Add(new Track { Title = "Test track" });
+        db.Playlists.AddRange(
+            new Playlist { OwnerId = "bob", Name = "Public playlist", IsPublic = true },
+            new Playlist { OwnerId = "bob", Name = "Private playlist", IsPublic = false });
         await db.SaveChangesAsync();
         var track = await db.Tracks.SingleAsync();
+        trackId = track.Id;
+        publicPlaylistId = await db.Playlists.Where(playlist => playlist.IsPublic).Select(playlist => playlist.Id).SingleAsync();
+        privatePlaylistId = await db.Playlists.Where(playlist => !playlist.IsPublic).Select(playlist => playlist.Id).SingleAsync();
         db.Reviews.Add(new Review { UserId = "bob", TrackId = track.Id, Rating = 4, Comment = "Nice track" });
         await db.SaveChangesAsync();
         reviewId = await db.Reviews.Select(review => review.Id).SingleAsync();
+        db.Comments.Add(new Comment { ReviewId = reviewId, UserId = "bob", Content = "A comment" });
+        await db.SaveChangesAsync();
+        commentId = await db.Comments.Select(comment => comment.Id).SingleAsync();
     }
 
     [TearDown]
@@ -77,6 +91,63 @@ public class SocialInteractionTests
     }
 
     [Test]
+    public async Task LikesCanTargetTracksPlaylistsAndCommentsWithoutCrossTargetDuplicates()
+    {
+        await service.LikeTrackAsync(trackId);
+        await service.LikeTrackAsync(trackId);
+        await service.LikePlaylistAsync(publicPlaylistId);
+        await service.LikeCommentAsync(commentId);
+
+        Assert.That(await service.GetLikeSummaryAsync(LikeTargetType.Track, trackId), Is.EqualTo(new LikeSummary(1, true)));
+        Assert.That(await service.GetLikeSummaryAsync(LikeTargetType.Playlist, publicPlaylistId), Is.EqualTo(new LikeSummary(1, true)));
+        Assert.That(await service.GetLikeSummaryAsync(LikeTargetType.Comment, commentId), Is.EqualTo(new LikeSummary(1, true)));
+        var commentInteractions = (await service.GetReviewInteractionsAsync(reviewId)).Comments.Single();
+        Assert.That(commentInteractions.LikeCount, Is.EqualTo(1));
+        Assert.That(commentInteractions.IsLiked, Is.True);
+
+        await service.UnlikeTrackAsync(trackId);
+        await service.UnlikePlaylistAsync(publicPlaylistId);
+        await service.UnlikeCommentAsync(commentId);
+        Assert.That((await service.GetLikeSummaryAsync(LikeTargetType.Track, trackId)).Count, Is.Zero);
+        Assert.That((await service.GetLikeSummaryAsync(LikeTargetType.Playlist, publicPlaylistId)).Count, Is.Zero);
+        Assert.That((await service.GetLikeSummaryAsync(LikeTargetType.Comment, commentId)).Count, Is.Zero);
+    }
+
+    [Test]
+    public async Task PrivatePlaylistLikesAreOwnerOnlyAndTargetsMustExist()
+    {
+        Assert.ThrowsAsync<InvalidOperationException>(() => service.LikePlaylistAsync(privatePlaylistId));
+        Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.GetLikeSummaryAsync(LikeTargetType.Playlist, privatePlaylistId));
+        Assert.ThrowsAsync<InvalidOperationException>(() => service.LikeTrackAsync(int.MaxValue));
+
+        authentication.Set("bob");
+        await service.LikePlaylistAsync(privatePlaylistId);
+        Assert.That(await service.GetLikeSummaryAsync(LikeTargetType.Playlist, privatePlaylistId),
+            Is.EqualTo(new LikeSummary(1, true)));
+    }
+
+    [Test]
+    public async Task DatabaseRequiresExactlyOneLikeTargetAndAllowsSameUserAcrossTargets()
+    {
+        await service.LikeReviewAsync(reviewId);
+        await service.LikeTrackAsync(trackId);
+        await service.LikePlaylistAsync(publicPlaylistId);
+        await service.LikeCommentAsync(commentId);
+
+        await using var db = factory.CreateDbContext();
+        Assert.That(await db.Likes.CountAsync(like => like.UserId == "alice"), Is.EqualTo(4));
+        db.Likes.Add(new Like { UserId = "alice" });
+        var missingTarget = Assert.ThrowsAsync<DbUpdateException>(async () => await db.SaveChangesAsync());
+        Assert.That(((SqliteException)missingTarget!.InnerException!).SqliteExtendedErrorCode, Is.EqualTo(275));
+
+        db.ChangeTracker.Clear();
+        db.Likes.Add(new Like { UserId = "alice", TrackId = trackId, ReviewId = reviewId });
+        var multipleTargets = Assert.ThrowsAsync<DbUpdateException>(async () => await db.SaveChangesAsync());
+        Assert.That(((SqliteException)multipleTargets!.InnerException!).SqliteExtendedErrorCode, Is.EqualTo(275));
+    }
+
+    [Test]
     public async Task CommentsCanBeCreatedEditedAndDeletedByTheirOwner()
     {
         var created = await service.AddCommentAsync(reviewId, "  I agree!  ");
@@ -87,14 +158,16 @@ public class SocialInteractionTests
         authentication.Set("bob");
         Assert.ThrowsAsync<InvalidOperationException>(() => service.UpdateCommentAsync(created.Id, "Not mine"));
         Assert.ThrowsAsync<InvalidOperationException>(() => service.DeleteCommentAsync(created.Id));
-        Assert.That((await service.GetReviewInteractionsAsync(reviewId)).Comments.Single().Content, Is.EqualTo("I agree!"));
+        Assert.That((await service.GetReviewInteractionsAsync(reviewId)).Comments.Single(comment => comment.Id == created.Id).Content,
+            Is.EqualTo("I agree!"));
 
         authentication.Set("alice");
         var updated = await service.UpdateCommentAsync(created.Id, "Edited");
         Assert.That(updated.Content, Is.EqualTo("Edited"));
         Assert.That(updated.UpdatedAt, Is.GreaterThanOrEqualTo(created.UpdatedAt));
         await service.DeleteCommentAsync(created.Id);
-        Assert.That((await service.GetReviewInteractionsAsync(reviewId)).Comments, Is.Empty);
+        Assert.That((await service.GetReviewInteractionsAsync(reviewId)).Comments.Select(comment => comment.Id),
+            Is.EqualTo(new[] { commentId }));
     }
 
     [Test]
@@ -134,6 +207,69 @@ public class SocialInteractionTests
         await using var verify = factory.CreateDbContext();
         Assert.That(await verify.Likes.CountAsync(), Is.Zero);
         Assert.That(await verify.Comments.CountAsync(), Is.Zero);
+    }
+
+    [Test]
+    public async Task DeletingTrackPlaylistOrCommentCascadesOnlyLikesForThatTarget()
+    {
+        int extraTrackId;
+        int extraPlaylistId;
+        await using (var db = factory.CreateDbContext())
+        {
+            db.Tracks.Add(new Track { Title = "Separately liked track" });
+            db.Playlists.Add(new Playlist { OwnerId = "bob", Name = "Separately liked playlist" });
+            await db.SaveChangesAsync();
+            extraTrackId = await db.Tracks.Where(track => track.Title == "Separately liked track")
+                .Select(track => track.Id).SingleAsync();
+            extraPlaylistId = await db.Playlists.Where(playlist => playlist.Name == "Separately liked playlist")
+                .Select(playlist => playlist.Id).SingleAsync();
+        }
+
+        await service.LikeReviewAsync(reviewId);
+        await service.LikeTrackAsync(extraTrackId);
+        await service.LikePlaylistAsync(extraPlaylistId);
+        await service.LikeCommentAsync(commentId);
+
+        await using (var db = factory.CreateDbContext())
+        {
+            await db.Tracks.Where(track => track.Id == extraTrackId).ExecuteDeleteAsync();
+            await db.Playlists.Where(playlist => playlist.Id == extraPlaylistId).ExecuteDeleteAsync();
+            await db.Comments.Where(comment => comment.Id == commentId).ExecuteDeleteAsync();
+        }
+
+        await using var verify = factory.CreateDbContext();
+        Assert.That(await verify.Likes.CountAsync(like => like.ReviewId == reviewId), Is.EqualTo(1));
+        Assert.That(await verify.Likes.CountAsync(like => like.TrackId == extraTrackId), Is.Zero);
+        Assert.That(await verify.Likes.CountAsync(like => like.PlaylistId == extraPlaylistId), Is.Zero);
+        Assert.That(await verify.Likes.CountAsync(like => like.CommentId == commentId), Is.Zero);
+    }
+
+    [Test]
+    public async Task LikeTargetMigrationPreservesExistingReviewLikes()
+    {
+        await using var migrationConnection = new SqliteConnection("DataSource=:memory:");
+        await migrationConnection.OpenAsync();
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>().UseSqlite(migrationConnection).Options;
+        await using var db = new ApplicationDbContext(options);
+        var migrator = db.GetService<Microsoft.EntityFrameworkCore.Migrations.IMigrator>();
+        await migrator.MigrateAsync("20261017002358_AddReviewSocialInteractions");
+        db.Users.AddRange(
+            new ApplicationUser { Id = "review-owner", UserName = "review-owner" },
+            new ApplicationUser { Id = "liker", UserName = "liker" });
+        db.Tracks.Add(new Track { Title = "Preserved track" });
+        await db.SaveChangesAsync();
+        var track = await db.Tracks.SingleAsync();
+        db.Reviews.Add(new Review { UserId = "review-owner", TrackId = track.Id, Rating = 5 });
+        await db.SaveChangesAsync();
+        var review = await db.Reviews.SingleAsync();
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO "Likes" ("ReviewId", "UserId", "CreatedAt")
+            VALUES ({review.Id}, {"liker"}, {DateTime.UtcNow})
+            """);
+
+        await db.Database.MigrateAsync();
+        Assert.That(await db.Likes.CountAsync(like => like.ReviewId == review.Id && like.UserId == "liker"), Is.EqualTo(1));
+        Assert.That(db.Database.HasPendingModelChanges(), Is.False);
     }
 
     private sealed class TestAuthentication(string? userId) : AuthenticationStateProvider
