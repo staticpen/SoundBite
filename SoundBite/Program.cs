@@ -6,6 +6,7 @@ using SoundBite.Data;
 using SoundBite.Endpoints;
 using SoundBite.Interfaces;
 using SoundBite.Services;
+using SoundBite.Strategies;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -27,6 +28,10 @@ builder.Services.AddScoped<PlaylistService>();
 builder.Services.AddScoped<FollowService>();
 builder.Services.AddScoped<SocialInteractionService>();
 builder.Services.AddScoped<FeedService>();
+builder.Services.AddScoped<IRankingStrategy, RatingRankingStrategy>();
+builder.Services.AddScoped<IRankingStrategy, PopularityRankingStrategy>();
+builder.Services.AddScoped<RankingService>();
+builder.Services.AddScoped<TrendService>();
 
 builder.Services
     .AddAuthentication(options =>

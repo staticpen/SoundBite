@@ -123,7 +123,8 @@ public class CatalogueIntegrationTests
             Assert.That(html, Does.Contain("Discover music")
                 .And.Contain("href=\"/catalogue/search\"")
                 .And.Contain("href=\"/playlists\"")
-                .And.Contain("href=\"/feed\""));
+                .And.Contain("href=\"/feed\"")
+                .And.Contain("href=\"/rankings\""));
         });
     }
 

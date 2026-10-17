@@ -22,7 +22,7 @@
 
 - **Overall status:** In progress
 - **Current development phase:** Building working catalogue and social product features
-- **Current focus:** Spotify-backed catalogue search and import, with API credentials kept outside source control
+- **Current focus:** Completing product discovery, with rankings and trends now based on SoundBite reviews
 - **Last verified:** 2026-10-17
 - **Current blocker:** Live Spotify API access is unverified until valid application credentials are configured; comments and feed events remain review-based
 
@@ -41,12 +41,20 @@
 | Following and followers | Implemented — verified | Authenticated idempotent follow/unfollow, public counts and expandable 10-user pages; database constraints, concurrent requests, account deletion and browser flows verified. Merged into `main` at `ac92cbe`. |
 | Likes and comments | Partially implemented — verified | Signed-in users can idempotently like reviews, tracks, public playlists, and comments; private playlist likes are owner-only. Users can add/edit/delete their own review comments. Database uniqueness, exactly-one-target checks, foreign keys, migration preservation, and authorization are tested. Threaded replies remain unimplemented. |
 | Activity feed | Implemented — verified | `/feed` shows paginated reviews and comments from the signed-in user and followed users, links back to the track review, and prompts anonymous visitors to log in. |
-| Rankings and trends | Planned | `Services/RankingService.cs`, `Services/TrendService.cs`, `Strategies/PopularityRankingStrategy.cs`, and `Strategies/RatingRankingStrategy.cs` exist, but no implemented ranking logic is visible in the current code. |
+| Rankings and trends | Implemented — verified | `/rankings` shows top-rated tracks (minimum two reviews), most-reviewed tracks overall, and tracks with the most reviews in the last seven days. Metrics use SoundBite review data only, with stable tie-break ordering. |
 | Administrative user management | Not started | `Services/AdminService.cs` is empty and there is no admin UI or authorization pattern beyond Identity setup. |
-| Automated tests | Passed — verified | 199 NUnit tests passed, 0 failed/skipped (2026-10-17), including mocked Spotify API and catalogue import tests. |
-| Git and repository hygiene | In progress | Spotify integration changes are uncommitted on `main` at `89749cf`. |
+| Automated tests | Passed — verified | 205 NUnit tests passed, 0 failed/skipped (2026-10-17), including ranking/trend persistence, rendered page, and route tests. |
+| Git and repository hygiene | In progress | Ranking/trend implementation is uncommitted on `main` at `aa67710`. |
 
 ## 4. Latest Completed Work
+
+### 2026-10-17 — Review-based rankings and trends
+
+- **Task completed:** Implemented track rankings for highest average rating and all-time review count, plus a seven-day trending list. Added a discoverable `/rankings` page linked from navigation and the home page.
+- **Files or components changed:** `Interfaces/IRankingStrategy.cs`, `Strategies/RatingRankingStrategy.cs`, `Strategies/PopularityRankingStrategy.cs`, `Services/RankingService.cs`, `Services/TrendService.cs`, `Models/TrackRankingEntry.cs`, `Models/TrendingTrackEntry.cs`, `Components/Pages/Rankings.razor`, `Program.cs`, `Components/Layout/NavMenu.razor`, `Components/Pages/Home.razor`, `RankingAndTrendServiceTests.cs`, `PageRouteTests.cs`, and `CatalogueIntegrationTests.cs`.
+- **Important implementation decisions:** Rankings use local SoundBite reviews only, not Spotify metrics. Top-rated requires at least two reviews to reduce single-review skew; popularity counts reviews; trending counts reviews in the last seven days. Sorting is deterministic and limits/windows are validated. No database changes were needed.
+- **Verification performed and its result:** Focused ranking/trend, route, and catalogue tests passed 20/20. Full NUnit suite passed 205/205. CRLF-aware `git diff --check` passed.
+- **Remaining limitations:** Rankings cover tracks only because ratings/reviews are track-scoped. No authenticated browser test was performed. Changes are not committed.
 
 ### 2026-10-17 — Spotify track search and catalogue import
 
@@ -177,14 +185,14 @@
 
 ## 5. Current Implementation Details
 
-- The application entry point in `SoundBite/Program.cs` configures a Blazor Web App with `AddRazorComponents().AddInteractiveServerComponents()`, SQLite via `UseSqlite(...)`, and ASP.NET Core Identity via `AddIdentityCore<ApplicationUser>()` and `AddEntityFrameworkStores<ApplicationDbContext>()`.
+- The application entry point in `SoundBite/Program.cs` configures a Blazor Web App with `AddRazorComponents().AddInteractiveServerComponents()`, SQLite via `UseSqlite(...)`, ASP.NET Core Identity, and the ranking/trend services and strategies.
 - `SoundBite/Data/ApplicationDbContext.cs` defines the main EF entities: `Artists`, `Albums`, and `Tracks`, and uses many-to-many joins to model `ArtistAlbums` and `ArtistTracks`.
 - `Services/CatalogueService.cs` implements local database search/reads; `/catalogue/search` offers local and Spotify track search. Signed-in users can import Spotify matches; `/tracks/{id}`, `/artists/{id}`, and `/albums/{id}` show local catalogue details. Catalogue editing beyond Spotify track import is not implemented.
 - `Track` has an optional `AlbumId`/`Album` relationship and uses validation attributes for required `Title` and optional non-whitespace `SpotifyId`.
 - `Album`, `Artist`, and `Track` models initialize empty navigation collections and enforce basic validation requirements.
 - `Endpoints/AccountEndpoints.cs` exposes registration, login, logout, and current-user endpoints.
 - `Data/ApplicationUser.cs` includes `DisplayName` and optional `Bio`. The account page edits these fields; `/users/{username}` displays a public profile without exposing email.
-- Remaining model and service placeholders include `AdminService`, `UserService`, and the ranking/trend services. Spotify access is implemented but requires locally configured credentials. Likes support reviews, tracks, playlists, and comments; comments/feed entries remain review-scoped.
+- Remaining model and service placeholders include `AdminService` and `UserService`. Rankings and trends use SoundBite review data; Spotify access is implemented but requires locally configured credentials. Likes support reviews, tracks, playlists, and comments; comments/feed entries remain review-scoped.
 - The NUnit test project is active and passes, and the app builds and starts successfully.
 - `20261015074342_AddUserProfiles` migrates the display-name and bio fields; the playlist migration adds playlists and ordered track items.
 
@@ -213,7 +221,7 @@
 | Interactive login cannot set cookie | Resolved | Cookie operations now execute during HTTP form requests before rendering | Verified registration, login and logout | Closed |
 | Remaining social interaction scope | Comments are review-only and flat; likes are not feed events | `SocialInteractionService` stores comments against `ReviewId`; feed selects reviews/comments | Consider threaded replies and like activity events | Open |
 | Spotify access has not been exercised against a live account | External search/import cannot be confirmed without valid API credentials | Spotify client credentials are read from environment variables; automated tests use a mock HTTP handler | Configure approved credentials locally and smoke-test search/import while respecting Spotify's policies | Open |
-| Catalogue data and discovery remain limited | Spotify track search/import and local catalogue detail views are implemented | No artwork import or catalogue editing; ranking and trend services are placeholders | Implement tested rankings using SoundBite's own review/activity data | Open |
+| Catalogue data and discovery remain limited | Spotify track search/import, local catalogue details, and review-based track rankings/trends are implemented | No artwork import or general catalogue editing; rankings are track-only because reviews apply to tracks | Consider general catalogue management after protected administration is implemented | Open |
 | Administration is absent | No protected user-management workflow is available | `AdminService.cs` is empty and no admin UI/authorization policy is configured | Define roles and implement server-authorized admin workflows | Open |
 
 ## 8. Verification Record
@@ -221,34 +229,34 @@
 | Check | Result | Notes |
 |---|---|---|
 | Application build | Passed | `dotnet test SoundBite.Tests/SoundBite.Tests.csproj --nologo -v minimal` built the app and test project successfully. |
-| Automated tests | Passed — verified | 199 NUnit tests passed, 0 failed/skipped (2026-10-17). |
+| Automated tests | Passed — verified | 205 NUnit tests passed, 0 failed/skipped (2026-10-17). |
 | Application startup | Passed | Command: `dotnet run --project SoundBite --urls http://localhost:5080` → app reported `Now listening on: http://localhost:5080` and `Application started.` |
 | Relevant feature behaviour | Passed | Authentication/profile/review/playlist/follow flows were previously verified; rendered tests cover review interactions, feed, and track likes. |
 | Database migrations | Passed | Profile, review, playlist, follow, review-social, and expanded-like migrations are exercised by isolated SQLite tests, including preserving existing review likes. The configured app database is not migrated. |
 
 ## 9. Git Status
 
-- **Active branch:** `main` at `89749cf` (`Add artist and album catalogue discovery`), synchronized with `origin/main` before the current changes.
-- **Working tree:** Spotify search/import services, configuration, UI, tests, and this progress update are uncommitted.
-- **Latest verification:** Focused Spotify, catalogue, and route tests passed 16/16; full NUnit suite passed 199/199. No model/schema changes were needed, so no migration was required. Live Spotify API access was not tested.
+- **Active branch:** `main` at `aa67710` (`Add Spotify Catalogue search and track import`), synchronized with `origin/main` before the current changes.
+- **Working tree:** Ranking/trend services, strategies, page/navigation, tests, and this progress update are uncommitted. Earlier Spotify/catalogue discovery changes are included in the current main history.
+- **Latest verification:** Focused ranking/trend, route, and catalogue tests passed 20/20; full NUnit suite passed 205/205. No model/schema changes were needed, so no migration was required. Live Spotify API access was not tested.
 
 ## 10. Next Recommended Tasks
 
-1. **Task:** Implement rankings and trends.
-   - **Reason:** Ranking and trend services are placeholders; these would support discovery once catalogue and activity data exist.
-   - **Dependencies:** Define transparent metrics based on SoundBite ratings and activity.
-   - **Acceptance criteria:** Tested ranking views for tracks, albums, or artists clearly describe their metrics.
-
-2. **Task:** Add administrative user management.
+1. **Task:** Add administrative user management.
    - **Reason:** There are no admin workflows or authorization policies yet.
    - **Dependencies:** Define admin roles and protected operations.
    - **Acceptance criteria:** Admin-only user management is enforced server-side and covered by authorization tests.
 
+2. **Task:** Extend review-based discovery.
+   - **Reason:** Current rankings and trends cover tracks; album/artist ratings can be added if aggregate discovery becomes useful.
+   - **Dependencies:** Define how track ratings should roll up to albums and artists, including minimum review counts.
+   - **Acceptance criteria:** Any aggregate ranking explains its calculation and is covered by tests.
+
 ## 11. Handover for the Next Chat Session
 
 - Follow/unfollow and review likes/comments/feed are committed on `main`; likes across tracks, playlists, and comments are included in the recent main history.
-- Catalogue discovery and a Spotify-backed track search/import workflow are implemented locally. Focused tests passed 16/16 and the full suite passed 199/199 on 2026-10-17.
-- Spotify API credentials are not configured or checked in; real Spotify connectivity remains unverified. No migration was needed. Remaining work includes rankings, administration, and optionally threaded comments/feed likes.
+- Catalogue discovery, Spotify-backed track search/import, and review-based track rankings/trends are implemented locally. Focused ranking/trend, route, and catalogue tests passed 20/20; full suite passed 205/205 on 2026-10-17.
+- Spotify API credentials are not configured or checked in; live Spotify connectivity remains unverified. No migration was needed. Remaining work includes protected administration, optional aggregate album/artist rankings, and threaded comments/feed likes.
 
 ## 12. Instructions for Updating This File
 
