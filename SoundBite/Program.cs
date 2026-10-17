@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using SoundBite.Components;
+using SoundBite.Configuration;
 using SoundBite.Data;
 using SoundBite.Endpoints;
 using SoundBite.Interfaces;
@@ -13,6 +14,14 @@ builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
         builder.Configuration.GetConnectionString("DefaultConnection")));
 
 builder.Services.AddScoped<IMusicCatalog, CatalogueService>();
+builder.Services.Configure<SpotifyOptions>(
+    builder.Configuration.GetSection(SpotifyOptions.SectionName));
+builder.Services.AddMemoryCache();
+builder.Services.AddSingleton<SpotifyAccessTokenProvider>();
+builder.Services.AddHttpClient("SpotifyAuth", client =>
+    client.BaseAddress = new Uri("https://accounts.spotify.com/"));
+builder.Services.AddHttpClient<ISpotifyCatalog, SpotifyCatalogService>(client =>
+    client.BaseAddress = new Uri("https://api.spotify.com/v1/"));
 builder.Services.AddScoped<ReviewService>();
 builder.Services.AddScoped<PlaylistService>();
 builder.Services.AddScoped<FollowService>();

@@ -45,6 +45,19 @@ public class CatalogueIntegrationTests
         }
     }
 
+    private sealed class UnusedSpotifyCatalog : ISpotifyCatalog
+    {
+        public Task<IReadOnlyList<SpotifyTrackMatch>> SearchTracksAsync(
+            string query,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<SpotifyTrackMatch>>([]);
+
+        public Task<int> ImportTrackAsync(
+            SpotifyTrackMatch match,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("This test does not import Spotify tracks.");
+    }
+
     [TestCase(" eChO ")]
     [TestCase("echo")]
     public async Task SearchLinksUseTrackPrimaryKeysAndResolveToMatchingDetails(string query)
@@ -114,6 +127,18 @@ public class CatalogueIntegrationTests
         });
     }
 
+    [Test]
+    public async Task CatalogueSearchOffersSeparateSpotifyImportSearch()
+    {
+        await WithCatalogue(async renderer =>
+        {
+            var search = await renderer.RenderComponentAsync<CatalogueSearch>(ParameterView.Empty);
+            Assert.That(search.ToHtmlString(), Does.Contain("Find tracks on Spotify")
+                .And.Contain("Search Spotify")
+                .And.Contain("Add a track and its artist and album details"));
+        });
+    }
+
     [TestCase("", "Enter a name or title to search.")]
     [TestCase("missing", "No results found")]
     public async Task EmptyAndUnmatchedSearchesDoNotRenderLinks(string query, string message)
@@ -139,6 +164,7 @@ public class CatalogueIntegrationTests
         await using var services = new ServiceCollection().AddLogging()
             .AddDbContextFactory<ApplicationDbContext>(options => options.UseSqlite(connection))
             .AddScoped<IMusicCatalog, CatalogueService>()
+            .AddSingleton<ISpotifyCatalog, UnusedSpotifyCatalog>()
             .AddScoped<ReviewService>()
             .AddScoped<SocialInteractionService>()
             .AddSingleton<AuthenticationStateProvider>(new AnonymousAuthenticationStateProvider())
