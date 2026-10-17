@@ -15,7 +15,7 @@ namespace SoundBite.Migrations
         protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
-            modelBuilder.HasAnnotation("ProductVersion", "10.0.13");
+            modelBuilder.HasAnnotation("ProductVersion", "10.0.12");
 
             modelBuilder.Entity("ArtistAlbums", b =>
                 {
@@ -292,6 +292,42 @@ namespace SoundBite.Migrations
                     b.ToTable("Artists");
                 });
 
+            modelBuilder.Entity("SoundBite.Models.Comment", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ReviewId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("ReviewId", "CreatedAt");
+
+                    b.ToTable("Comments", t =>
+                        {
+                            t.HasCheckConstraint("CK_Comments_Content", "length(trim(\"Content\")) > 0");
+                        });
+                });
+
             modelBuilder.Entity("SoundBite.Models.Follow", b =>
                 {
                     b.Property<string>("FollowerId")
@@ -308,6 +344,32 @@ namespace SoundBite.Migrations
                         {
                             t.HasCheckConstraint("CK_Follows_NoSelfFollow", "\"FollowerId\" <> \"FollowingId\"");
                         });
+                });
+
+            modelBuilder.Entity("SoundBite.Models.Like", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ReviewId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("ReviewId", "UserId")
+                        .IsUnique();
+
+                    b.ToTable("Likes");
                 });
 
             modelBuilder.Entity("SoundBite.Models.Playlist", b =>
@@ -524,6 +586,25 @@ namespace SoundBite.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("SoundBite.Models.Comment", b =>
+                {
+                    b.HasOne("SoundBite.Models.Review", "Review")
+                        .WithMany()
+                        .HasForeignKey("ReviewId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SoundBite.Data.ApplicationUser", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Review");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("SoundBite.Models.Follow", b =>
                 {
                     b.HasOne("SoundBite.Data.ApplicationUser", "Follower")
@@ -541,6 +622,25 @@ namespace SoundBite.Migrations
                     b.Navigation("Follower");
 
                     b.Navigation("Following");
+                });
+
+            modelBuilder.Entity("SoundBite.Models.Like", b =>
+                {
+                    b.HasOne("SoundBite.Models.Review", "Review")
+                        .WithMany()
+                        .HasForeignKey("ReviewId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SoundBite.Data.ApplicationUser", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Review");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("SoundBite.Models.Playlist", b =>

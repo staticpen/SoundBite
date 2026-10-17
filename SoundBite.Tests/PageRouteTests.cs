@@ -28,6 +28,7 @@ public class PageRouteTests
     [TestCase("/register", typeof(Register))]
     [TestCase("/login", typeof(Account))]
     [TestCase("/account", typeof(Account))]
+    [TestCase("/feed", typeof(ActivityFeed))]
     public void AuthenticationRoute_HasExpectedOwner(string template, Type expectedComponent)
     {
         var owners = typeof(App).Assembly.GetTypes()

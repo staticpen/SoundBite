@@ -103,6 +103,7 @@ public class CatalogueIntegrationTests
             .AddDbContextFactory<ApplicationDbContext>(options => options.UseSqlite(connection))
             .AddScoped<IMusicCatalog, CatalogueService>()
             .AddScoped<ReviewService>()
+            .AddScoped<SocialInteractionService>()
             .AddSingleton<AuthenticationStateProvider>(new AnonymousAuthenticationStateProvider())
             .BuildServiceProvider();
         await using var scope = services.CreateAsyncScope();

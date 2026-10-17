@@ -97,6 +97,8 @@ public class TrackDetailsTests
             Assert.That(html, Does.Contain("Reviews (1)")
                 .And.Contain("Alice")
                 .And.Contain("A great track")
+                .And.Contain("Log in to like")
+                .And.Contain("to comment.")
                 .And.Contain("/login")
                 .And.Not.Contain("private@example.com"));
         }, db =>
@@ -124,6 +126,8 @@ public class TrackDetailsTests
             Assert.That(html, Does.Contain("Edit your review")
                 .And.Contain("value=\"5\"")
                 .And.Contain("Update review")
+                .And.Contain("Like (0)")
+                .And.Contain("Add a comment")
                 .And.Contain("A great track"));
         }, db =>
         {
@@ -197,6 +201,7 @@ public class TrackDetailsTests
             .AddSingleton<IMusicCatalog>(catalog)
             .AddSingleton<IDbContextFactory<ApplicationDbContext>>(factory)
             .AddScoped<ReviewService>()
+            .AddScoped<SocialInteractionService>()
             .AddSingleton<AuthenticationStateProvider>(
                 authStateProvider ?? new TestAuthenticationStateProvider(new ClaimsPrincipal(new ClaimsIdentity())));
         await using var services = serviceCollection.BuildServiceProvider();

@@ -22,9 +22,9 @@
 
 - **Overall status:** In progress
 - **Current development phase:** Building working catalogue and social product features
-- **Current focus:** Follow/unfollow implemented, reviewed and verified for the authorized commit
-- **Last verified:** 2026-10-16
-- **Current blocker:** Likes, comments, activity feed and external catalogue integration remain incomplete
+- **Current focus:** Review likes/comments and a follow-based activity feed implemented; remaining social targets and catalogue discovery next
+- **Last verified:** 2026-10-17
+- **Current blocker:** Likes are currently limited to reviews and comments to reviews; artist/album navigation and external metadata integration remain incomplete
 
 ## 3. Feature Implementation Tracker
 
@@ -32,21 +32,35 @@
 |---|---|---|
 | Authentication | Implemented — verified | Website registration, username/email login, logout, profile editing, cookie persistence and authorization checks pass using isolated migrated databases; see latest work. |
 | User profiles | Implemented — verified | `ApplicationUser` stores a display name and bio; the account page can edit them, and `/users/{username}` displays the public profile without exposing account email. The migration and persistence round-trip are tested. |
-| Music catalogue | In progress | `Artist`, `Album`, and `Track` models exist with validation and EF relationship wiring in `ApplicationDbContext.cs`. There is no catalog UI or metadata service implementation beyond the model layer. |
+| Music catalogue | In progress | EF-backed search is available at `/catalogue/search`, and track details are available at `/tracks/{id}`. Artist/album search results are not linked to details; catalogue editing and external metadata integration are absent. |
 | Spotify integration | Not started | `Services/SpotifyCatalogService.cs` is empty and there is no client configuration or API integration yet. |
 | Track ratings and reviews | Implemented — verified | Reviews persist through EF Core; the service supports create/read/update, the database enforces one review per user per track and valid 1–5 ratings, and track details support public review reading plus authenticated submission/editing. |
 | Album-track many-to-many relationship | Implemented — unverified | `ApplicationDbContext` maps `ArtistAlbums` and `ArtistTracks` and `Track.AlbumId` with a nullable optional foreign key. This matches the intended design, but the schema has not been validated via a migration review beyond the code. |
 | Playlist management | Implemented — verified | Users can create, edit, and delete playlists; add/remove tracks; and browse public playlist listings/details. Owner checks are enforced in the service. |
 | Playlist duplicate prevention | Implemented — verified | Service validation and a unique database index on playlist and track prevent duplicates. Playlist item positions preserve order. |
-| Following and followers | Implemented — verified | Authenticated idempotent follow/unfollow, public counts and expandable 10-user pages; database constraints, concurrent requests, account deletion and browser flows verified. |
-| Likes and comments | Not started | `Models/Like.cs` and `Models/Comment.cs` are empty. No authorization or interaction logic is implemented. |
-| Activity feed | Not started | `Models/ActivityItem.cs`, `Services/FeedService.cs`, and social service classes are still empty or incomplete. |
+| Following and followers | Implemented — verified | Authenticated idempotent follow/unfollow, public counts and expandable 10-user pages; database constraints, concurrent requests, account deletion and browser flows verified. Merged into `main` at `ac92cbe`. |
+| Likes and comments | Partially implemented — verified | Signed-in users can idempotently like reviews and add/edit/delete their own comments on reviews. Database uniqueness, ownership checks, input validation, and review/user foreign keys are tested. Likes on tracks, playlists, and comments, plus threaded replies, remain unimplemented. |
+| Activity feed | Implemented — verified | `/feed` shows paginated reviews and comments from the signed-in user and followed users, links back to the track review, and prompts anonymous visitors to log in. |
 | Rankings and trends | Planned | `Services/RankingService.cs`, `Services/TrendService.cs`, `Strategies/PopularityRankingStrategy.cs`, and `Strategies/RatingRankingStrategy.cs` exist, but no implemented ranking logic is visible in the current code. |
 | Administrative user management | Not started | `Services/AdminService.cs` is empty and there is no admin UI or authorization pattern beyond Identity setup. |
-| Automated tests | Passed — verified | 175 NUnit tests passed, 0 failed/skipped (2026-10-16), including 21 follow service/database cases and a rendered-profile integration regression. |
-| Git and repository hygiene | Verified | `FollowUnfollow` starts at fetched `origin/main` (`e507912`); follow changes reviewed for the authorized commit. Existing database unchanged. |
+| Automated tests | Passed — verified | 187 NUnit tests passed, 0 failed/skipped (2026-10-17), including 12 new social/feed tests. |
+| Git and repository hygiene | In progress | Implementation is uncommitted on `main` at `ac92cbe`; the earlier progress-file correction was also present before this implementation started. |
 
 ## 4. Latest Completed Work
+
+### 2026-10-17 — Review interactions and activity feed implemented
+
+- **Task completed:** Added review likes, review comments with owner-only edit/delete, a paginated follow-based feed, track-detail interaction controls, and a feed page.
+- **Files or components changed:** `Models/Like.cs`, `Models/Comment.cs`, `Models/ActivityItem.cs`, `Data/ApplicationDbContext.cs`, `Services/SocialInteractionService.cs`, `Services/FeedService.cs`, `Components/Pages/ReviewSocialPanel.razor`, `Components/Pages/ActivityFeed.razor`, `TrackDetails.razor`, `NavMenu.razor`, `Program.cs`, migration `20261017002358_AddReviewSocialInteractions`, and social/feed/UI tests.
+- **Important implementation decisions:** Like/comment support is initially attached to reviews; like mutations resolve the actor from server authentication and are idempotent under concurrency. Comments are flat (no replies yet), limited to 2,000 non-blank characters, and only their author can edit/delete them. The feed queries the signed-in user and followed users' reviews/comments directly rather than duplicating them in a separate event table.
+- **Verification performed and its result:** Full NUnit suite passed: 187/187. Focused social/feed, rendered UI, track detail, and route tests passed: 31/31. `dotnet ef migrations has-pending-model-changes` reported no model changes after migration generation.
+- **Remaining limitations:** Broader like targets/replies are not implemented. The migration was exercised by tests against isolated SQLite databases; it was not applied to the configured application database. Browser smoke test confirmed the anonymous `/feed` prompt/navigation; authenticated like/comment interaction was not manually exercised.
+
+### 2026-10-17 — Main branch status check
+
+- Confirmed `main` is clean and synchronized with `origin/main` at `ac92cbe`, after merge of follow/unfollow.
+- Re-ran the complete NUnit suite: 175 passed, 0 failed, 0 skipped.
+- Compared tracker with source: basic persisted catalogue search and track details exist; artist/album detail navigation and Spotify integration do not. Corrected the stale catalogue status below.
 
 ### 2026-10-16 — Follow/unfollow pre-commit review
 
@@ -141,11 +155,12 @@
 
 - The application entry point in `SoundBite/Program.cs` configures a Blazor Web App with `AddRazorComponents().AddInteractiveServerComponents()`, SQLite via `UseSqlite(...)`, and ASP.NET Core Identity via `AddIdentityCore<ApplicationUser>()` and `AddEntityFrameworkStores<ApplicationDbContext>()`.
 - `SoundBite/Data/ApplicationDbContext.cs` defines the main EF entities: `Artists`, `Albums`, and `Tracks`, and uses many-to-many joins to model `ArtistAlbums` and `ArtistTracks`.
+- `Services/CatalogueService.cs` implements database search and catalogue reads; `/catalogue/search` is a basic search UI and `/tracks/{id}` shows track details. Artist/album detail pages and catalogue editing are not implemented.
 - `Track` has an optional `AlbumId`/`Album` relationship and uses validation attributes for required `Title` and optional non-whitespace `SpotifyId`.
 - `Album`, `Artist`, and `Track` models initialize empty navigation collections and enforce basic validation requirements.
 - `Endpoints/AccountEndpoints.cs` exposes registration, login, logout, and current-user endpoints.
 - `Data/ApplicationUser.cs` includes `DisplayName` and optional `Bio`. The account page edits these fields; `/users/{username}` displays a public profile without exposing email.
-- Remaining model and service placeholders include `Like`, `Comment`, `ActivityItem`, `SpotifyCatalogService`, `AdminService`, `FeedService`, `SocialInteractionService`, `UserService`, and the ranking/trend services. Follow persistence and `FollowService` are implemented.
+- Remaining model and service placeholders include `SpotifyCatalogService`, `AdminService`, `UserService`, and the ranking/trend services. Like/comment support is currently review-scoped; `FeedService` and `SocialInteractionService` are implemented.
 - The NUnit test project is active and passes, and the app builds and starts successfully.
 - `20261015074342_AddUserProfiles` migrates the display-name and bio fields; the playlist migration adds playlists and ordered track items.
 
@@ -172,45 +187,59 @@
 |---|---|---|---|---|
 | Registration form cannot reach endpoint | Resolved | Replaced server-side loopback HTTP call with static SSR form processing | Verified in browser and HTTP tests | Closed |
 | Interactive login cannot set cookie | Resolved | Cookie operations now execute during HTTP form requests before rendering | Verified registration, login and logout | Closed |
-| Remaining social features | Likes, comments and activity feed are incomplete | Their services/models remain placeholders; follows are implemented | Implement a basic activity feed and remaining interactions | Open |
-| Remaining social persistence | Likes, comments and feed persistence are missing | Empty `Like.cs`, `Comment.cs`, `ActivityItem.cs` and related services | Design remaining social entities | Open |
+| Remaining social interaction scope | Like targets are currently reviews only; comments are review-only and flat | `SocialInteractionService` stores likes/comments against `ReviewId` | Extend likes to tracks, playlists, and comments; consider replies | Open |
 | No Spotify client is configured | Music catalogue enrichment is not connected to external metadata | `SpotifyCatalogService.cs` is empty and no API client configuration exists | Add a service abstraction and integrate Spotify metadata access | Open |
+| Catalogue discovery is basic | Artist/album results are not navigable, and the home page remains the default scaffold | Search results link to tracks only; ranking and trend services are empty | Add artist/album detail routes and discovery views | Open |
+| Administration is absent | No protected user-management workflow is available | `AdminService.cs` is empty and no admin UI/authorization policy is configured | Define roles and implement server-authorized admin workflows | Open |
 
 ## 8. Verification Record
 
 | Check | Result | Notes |
 |---|---|---|
 | Application build | Passed | `dotnet test SoundBite.Tests/SoundBite.Tests.csproj -v minimal` built the app and test project successfully. |
-| Automated tests | Passed — verified | 175 NUnit tests passed, 0 failed/skipped (2026-10-16), including 21 follow service/database cases and a rendered-profile integration regression. |
+| Automated tests | Passed — verified | 187 NUnit tests passed, 0 failed/skipped (2026-10-17), including 12 social/feed cases. |
 | Application startup | Passed | Command: `dotnet run --project SoundBite --urls http://localhost:5080` → app reported `Now listening on: http://localhost:5080` and `Application started.` |
-| Relevant feature behaviour | Passed | Website authentication, profile editing, refresh/navigation and authenticated/anonymous review/playlist access verified; see latest work. |
-| Database migrations | Passed | Profile, review, and playlist migrations are exercised by SQLite persistence tests, including playlist creation and CRUD against the migrated schema. |
+| Relevant feature behaviour | Passed | Authentication/profile/review/playlist/follow flows were previously verified; this milestone adds rendered checks for review interactions and the follow-based activity feed. |
+| Database migrations | Passed | Profile, review, playlist, follow, and review-social migrations are exercised by isolated SQLite persistence tests. The configured application database has not been updated. |
 
 ## 9. Git Status
 
-- **Active branch:** `FollowUnfollow`, based on fetched `origin/main` at `e507912e62c4da48e70e74a32eb749ef239c9fd6`.
-- **Initial checkout:** Clean. No unrelated changes or stashing required.
-- **Current work:** Follow implementation, migration, regression tests and progress update reviewed and verified for the authorized commit. No push or merge performed.
-- **Authorized commit title:** `Implement user follow and unfollow functionality` (commit identity is recorded in Git history).
-- **Suggested description:** Add idempotent follow/unfollow, public paginated profile lists, SQLite constraints and cascading relationship cleanup, with migration, concurrency, authorization and UI regression coverage.
+- **Active branch:** `main` at `ac92cbe` (follow/unfollow merge).
+- **Working tree:** Social interactions, feed, migration, tests, UI, and this progress update are uncommitted.
+- **Latest verification:** Full NUnit suite passed 187/187; EF reported no pending model changes; anonymous `/feed` browser smoke test passed. The configured application database was not migrated.
 
 ## 10. Next Recommended Tasks
 
-1. **Task:** Implement a basic activity feed and remaining social interactions.
-   - **Reason:** The application’s core differentiation is social discovery, and the current models/services are still empty.
-   - **Dependencies:** Build on the verified follow model; finalize like, comment and activity schemas.
-   - **Acceptance criteria:** Users can follow others, like content, comment, and see feed activity without duplicate or invalid entries.
+1. **Task:** Extend likes to tracks, playlists, and comments; decide whether to support threaded replies.
+   - **Reason:** The current implementation handles review likes and flat review comments, while the product scope includes additional like targets.
+   - **Dependencies:** Choose a relational model that preserves target foreign keys and uniqueness without accepting invalid target combinations.
+   - **Acceptance criteria:** Each supported target has authenticated, owner-safe interactions, database-enforced uniqueness/references, and persistence tests.
 
-2. **Task:** Build the Spotify metadata abstraction and catalogue service.
-   - **Reason:** The app requires external catalogue data and currently has no integration point.
-   - **Dependencies:** Decide on a client configuration and service contract before wiring metadata retrieval.
-   - **Acceptance criteria:** Metadata can be fetched and mapped into `Artist`, `Album`, and `Track` models without coupling the UI directly to Spotify APIs.
+2. **Task:** Complete catalogue browsing and discovery.
+   - **Reason:** Local search is basic; artist/album results are not navigable and the home page is still the default scaffold.
+   - **Dependencies:** Add artist/album detail routes and decide how catalogue data is populated.
+   - **Acceptance criteria:** Search results link to useful details and the home page offers a basic path into music discovery.
+
+3. **Task:** Integrate an external music metadata provider.
+   - **Reason:** The catalogue currently depends on records already in the local database.
+   - **Dependencies:** Choose an approved provider and comply with its metadata, artwork, and attribution rules.
+   - **Acceptance criteria:** A service abstraction fetches and maps allowed music metadata without coupling external calls to UI components.
+
+4. **Task:** Implement rankings and trends.
+   - **Reason:** Ranking and trend services are placeholders; these would support discovery once catalogue and activity data exist.
+   - **Dependencies:** Define transparent metrics based on SoundBite ratings and activity.
+   - **Acceptance criteria:** Tested ranking views for tracks, albums, or artists clearly describe their metrics.
+
+5. **Task:** Add administrative user management.
+   - **Reason:** There are no admin workflows or authorization policies yet.
+   - **Dependencies:** Define admin roles and protected operations.
+   - **Acceptance criteria:** Admin-only user management is enforced server-side and covered by authorization tests.
 
 ## 11. Handover for the Next Chat Session
 
-- Follow/unfollow implementation is verified on `FollowUnfollow` with 175 passing tests and two-account browser checks. Full diff reviewed and build/tests rerun for the authorized commit. Do not push or merge without authorization.
-- Existing database remains unchanged and unmigrated. Browser fixtures are isolated at `/tmp/soundbite-follow-browser/test.db`.
-- Apply the migration only as a separately authorized database/deployment step. Likes, comments, feed, Spotify integration and profile activity remain independent future work.
+- Follow/unfollow is merged into `main` at `ac92cbe`. Review likes/comments and the feed are implemented locally with migration `20261017002358_AddReviewSocialInteractions`.
+- The full test suite passed 187/187 on 2026-10-17. Isolated SQLite migration and rendered-component tests passed. Browser smoke test confirmed the anonymous `/feed` prompt; authenticated interaction still needs manual testing.
+- Implementation and progress changes remain uncommitted. The configured application database was not migrated. Remaining work includes broader like targets/replies, Spotify integration, catalogue discovery, rankings, and administration.
 
 ## 12. Instructions for Updating This File
 

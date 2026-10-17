@@ -21,6 +21,8 @@ namespace SoundBite.Data
         public DbSet<PlaylistItem> PlaylistItems => Set<PlaylistItem>();
 
         public DbSet<Follow> Follows => Set<Follow>();
+        public DbSet<Like> Likes => Set<Like>();
+        public DbSet<Comment> Comments => Set<Comment>();
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -98,6 +100,34 @@ namespace SoundBite.Data
                     .OnDelete(DeleteBehavior.Cascade);
                 entity.ToTable(table => table.HasCheckConstraint(
                     "CK_Follows_NoSelfFollow", "\"FollowerId\" <> \"FollowingId\""));
+            });
+
+            builder.Entity<Like>(entity =>
+            {
+                entity.HasOne(like => like.Review)
+                    .WithMany()
+                    .HasForeignKey(like => like.ReviewId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(like => like.User)
+                    .WithMany()
+                    .HasForeignKey(like => like.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasIndex(like => new { like.ReviewId, like.UserId }).IsUnique();
+            });
+
+            builder.Entity<Comment>(entity =>
+            {
+                entity.HasOne(comment => comment.Review)
+                    .WithMany()
+                    .HasForeignKey(comment => comment.ReviewId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(comment => comment.User)
+                    .WithMany()
+                    .HasForeignKey(comment => comment.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasIndex(comment => new { comment.ReviewId, comment.CreatedAt });
+                entity.ToTable(table => table.HasCheckConstraint(
+                    "CK_Comments_Content", "length(trim(\"Content\")) > 0"));
             });
 
             // SQLite unique indexes allow multiple NULLs for unknown external IDs.
