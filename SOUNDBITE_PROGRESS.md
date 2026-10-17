@@ -10,7 +10,7 @@
 - **Application:** Blazor Web App
 - **Interactivity:** Interactive Server
 - **Language:** C#
-- **Target framework:** .NET 10 (verified in `SoundBite/SoundBite.csproj`)
+- **Target framework:** .NET 9; SDK 9.0.319, Microsoft/EF packages 9.0.21
 - **Database:** SQLite
 - **ORM:** Entity Framework Core
 - **Authentication:** ASP.NET Core Identity
@@ -22,9 +22,9 @@
 
 - **Overall status:** In progress
 - **Current development phase:** Building working catalogue and social product features
-- **Current focus:** Completing the social experience with live notification updates
+- **Current focus:** Latest live-notification functionality integrated and verified on .NET 9 for PR #16
 - **Last verified:** 2026-10-17
-- **Current blocker:** Live Spotify API access is unverified until valid application credentials are configured. The threaded-comment migration has not been applied to the configured application database.
+- **Current blocker:** Windows VS2022, manual reconnection and live Spotify validation remain outstanding. Application database is preserved exactly from main; no application migrations run.
 
 ## 3. Feature Implementation Tracker
 
@@ -44,10 +44,47 @@
 | Notifications | Implemented — verified | Persistent recipient-scoped notifications are created for follows, review comments, replies, and likes on reviews, comments, and playlists. Self-notifications and duplicate follow/like events are suppressed. `/notifications` lists the latest 30, supports individual and bulk read marking, and the signed-in navigation displays an unread count. A single-instance event dispatcher updates active recipient circuits; navigation and circuit reconnection reload persisted state. Track likes have no content owner to notify. |
 | Rankings and trends | Implemented — verified | `/rankings` shows top-rated tracks (minimum two reviews), most-reviewed tracks overall, and tracks with the most reviews in the last seven days. Metrics use SoundBite review data only, with stable tie-break ordering. |
 | Administrative user management | Implemented — verified | `/admin/users` supports user search/paging, account lock/unlock, and admin-role grants/revocation. Every service operation checks live role membership and lockout state server-side. Initial roles are bootstrapped from configured user IDs. |
-| Automated tests | Passed — verified | Full NUnit suite passed: 223/223, including event creation/deduplication, recipient-only live delivery, reconnect refresh, recipient privacy, read-state updates, and authenticated notifications UI. |
-| Git and repository hygiene | In progress | Live notification updates are uncommitted on `main` at `e3e1cad`. |
+| Automated tests | Passed — verified | Combined .NET 9 suite: 225 passed, 0 failed/skipped; includes live-notification coverage and two compatibility 404 cases. |
+| Git and repository hygiene | Verified | Normal integration of main `07f9aab` into `Net9Compatibility`; database matches main, no unrelated changes. |
 
 ## 4. Latest Completed Work
+
+### 2026-10-17 — Live-notification main update integrated and verified for PR #16
+
+- Started clean on `Net9Compatibility` at `ad96f2c`; fetched and merged `origin/main` at `07f9aabad86b72f453c61d4adb8324e568f83e29` using a normal merge, without rebase or force-push. Only this progress document conflicted; retained latest feature records and compatibility history. Commit/push authorized after verification; PR merge is not authorized.
+- Preserved main's live per-user notification dispatcher, scoped circuit reconnect handler, navigation/page refresh subscriptions and disposal, and follow/social notification publishing. All feature source matches main; `Program.cs` retains every new registration with the .NET 9 status-code overload. SDK/package pins and Blazor fixes remain unchanged. No compatibility failure required source or test changes.
+- `dotnet build SoundBite.sln -c Release`: passed, 0 errors, 3 existing CS1998 test warnings. `dotnet test SoundBite.sln -c Release --no-build`: **225/225 passed**, 0 failed/skipped (223 main cases plus 2 compatibility cases). `dotnet publish SoundBite/SoundBite.csproj -c Release --no-build -o /tmp/soundbite-net9-final-integration/publish`: passed.
+- EF 9 CLI model consistency check reports no pending model changes. All **11 migrations** applied to `/tmp/soundbite-net9-final-integration/check.db`; SQLite integrity is `ok`, no foreign-key violations. Logs/TRX are in `/tmp/soundbite-net9-final-integration`. Automated persistence tests use disposable databases. No historical migrations were rewritten.
+- Database cleanup from earlier work is retained: `SoundBite/soundbite.db` matches latest main exactly (Git blob `8e37c754e5bcaa5fd7a9ab47436389420dbacc7c`) and is absent from the PR diff. Before/after SHA-256 matches; no writes or migrations against the application database in this session.
+- No browser tests or live Spotify calls repeated. Outstanding: Windows VS2022 17.14 with SDK 9.0.319, manual exhausted-retry/Retry/Reload validation, and live Spotify validation. Live notification dispatch supports one application process; multi-instance delivery requires shared infrastructure.
+
+### 2026-10-17 — Latest main integrated into PR #16; merge not committed
+
+- Started clean on `Net9Compatibility` at `505af740ca4f80ae4dcb85d456a697b948b85322`; fetched `origin/main` at `e3e1cad33b2c86036738e9a27d6e71e6dc1402f1`. Prepared a normal merge with `--no-commit --no-ff`, without rebasing or force-pushing. HEAD remains unchanged; MERGE_HEAD records the incoming main commit.
+- Resolved the sole textual conflict in this progress document by retaining main's feature tracker and all feature records, retaining the compatibility implementation record, and updating current status and verification. `Program.cs` and authentication tests merged automatically.
+- Protected database handling: incoming main changes the tracked `SoundBite/soundbite.db`. Ran merge checkout operations in a temporary working directory, restored only that database's index entry from HEAD, and copied merged source files into the real working tree. The actual application database was never overwritten, restored, or migrated; its bytes and staged entry match pre-merge HEAD. This intentionally excludes main's binary database update while preserving all model/migration code.
+- Preserved social likes/comments/replies/feed, notifications, rankings/trends, administrator management, artist/album discovery, and Spotify integration. All new service/model/migration source matches main exactly. `Program.cs` retains every main registration, Identity roles and administrator bootstrap; its only difference from main is the .NET 9 status-code overload. Authentication tests retain main's new cases plus the two 404 cases. SDK 9.0.319, Microsoft/EF 9.0.21, solution, tool manifest and Blazor compatibility fixes remain intact.
+- Reviewed notification recipient filtering, current-user resolution, read-state ExecuteUpdateAsync, event subscription disposal, and transactional event creation against EF 9. Admin bootstrap remains opt-in via configured IDs. Existing HTTP authentication/authorization and notification tests pass; no tests were removed or weakened and no additional compatibility code workaround was needed.
+- `dotnet build SoundBite.sln -c Release`: passed, 0 errors; 3 existing CS1998 warnings in AdminServiceTests:136, PlaylistServiceTests:87 and ReviewServiceTests:88.
+- `dotnet test SoundBite.sln -c Release --no-build`: **223 passed, 0 failed, 0 skipped** (main's 221 plus 2 compatibility cases). TRX/logs: `/tmp/soundbite-net9-integration/`.
+- `dotnet publish SoundBite/SoundBite.csproj -c Release --no-build -o /tmp/soundbite-net9-integration/publish`: passed.
+- EF CLI 9.0.21 `migrations has-pending-model-changes` with disposable connection override: no pending changes. `database update --connection 'Data Source=/tmp/soundbite-net9-integration/ef-check.db'` applied all **11** migrations through `20261017013935_AddNotifications`. SQLite integrity check returned `ok`; foreign-key check returned no violations. The NUnit suite also exercises isolated migration/upgrade/rollback and data-persistence behavior. Historical migration files and the model snapshot are identical to main.
+- Protected application database SHA-256 remains `ead1d21ea950e99cd6548f23d0b83159ac69c24b2bd4cbbf2dcac8376159eeaf`. No browser testing or live Spotify calls performed in this integration session.
+- Ready for a merge commit after approval. Stop before committing/pushing; PR #16 remains unmerged. Windows VS2022, manual exhausted-retry/Retry/Reload, live Spotify and real-time notification delivery limitations remain as documented.
+
+### 2026-10-16 — .NET 9 compatibility
+
+- Created `Net9Compatibility` from freshly fetched `origin/main` (`ac92cbe056983dba7ba8226455d9b2b71c964018`). Initial tracked/untracked checkout was clean; ignored local files preserved. No commits, pushes or merges.
+- **.NET 10 baseline:** SDK 10.0.401; `dotnet build SoundBite/SoundBite.csproj -c Release` succeeded, 0 warnings/errors. `dotnet test SoundBite.Tests/SoundBite.Tests.csproj -c Release` passed 175/175, 0 failed/skipped. Logs and TRX are in `/tmp/soundbite-net9-verification`.
+- Installed official .NET SDK 9.0.319 alongside 10.0.401 without removing .NET 10. `global.json` pins 9.0.319 exactly (`rollForward: disable`, previews off). Both projects target `net9.0`; removed test `LangVersion=latest` to use C# 13. Four Microsoft package references are pinned to 9.0.21; existing NUnit/test SDK/coverage versions retained. Added `SoundBite.sln` and `.config/dotnet-tools.json` (EF CLI 9.0.21).
+- Blazor adaptations: replaced .NET 10 `ResourcePreloader`, framework script asset lookup, `Router.NotFoundPage`, status-code scope overload and SSR redirect opt-out property with .NET 9 equivalents. Retained `MapStaticAssets`, `ImportMap`, app asset fingerprinting and static SSR account forms. Reconnect UI observes .NET 9 CSS class changes and supports retry/reload; unsupported .NET 10 pause/resume hooks were replaced by reload for lost circuits. Existing domain/UI features, models, services and migration history were preserved.
+- Compatibility issue found and fixed: short `<Pages.NotFound />` markup was not resolved as a Razor component; fully qualified the component and reran validation. Two pre-existing test methods emit CS1998 under a full .NET 9 rebuild (`PlaylistServiceTests:87`, `ReviewServiceTests:88`); left unrelated tests unchanged.
+- **Final automated validation:** `dotnet build SoundBite.sln -c Release --no-restore` passed (incremental: 0 warnings/errors). Explicit `-t:Rebuild` passed with the two existing test warnings and 0 errors. `dotnet test SoundBite.sln -c Release --no-build` passed **177/177**, 0 failed/skipped. All 175 existing tests retained; two added HTTP cases assert unknown routes return 404 and the application Not Found content. `dotnet publish SoundBite/SoundBite.csproj -c Release --no-restore -o /tmp/soundbite-net9-verification/publish` passed.
+- **EF Core 9 verification:** full suite exercises fresh SQLite migration, upgrade from `AddPlaylists` with existing users/tracks/playlists, rollback/re-upgrade, constraints, CRUD and model/snapshot consistency. EF CLI `migrations has-pending-model-changes` reports no changes; `database update --connection 'Data Source=/tmp/soundbite-net9-verification/cli.db'` applies all historical migrations successfully. Browser seed harness also migrates a fresh disposable database and reports no pending model changes. No historical migrations or snapshot were rewritten.
+- **Published-app browser validation:** Production environment on localhost, using only `/tmp/soundbite-net9-verification/browser.db`. Passed registration/auto-login, cookie-backed profile save and refresh, email login/logout, interactive catalogue search, track details/review submission, playlist creation/add-track persistence, owner versus anonymous/other-user controls, follow/unfollow persistence and follower lists. Pagination verified with 12 disposable followers over 10/2-item pages, disabled boundaries and Previous navigation. Missing URL renders Not Found and returns HTTP 404. All six referenced local CSS/JS/image assets return HTTP 200. Reconnection after server restart displays the modal and reloads a lost circuit; counter interaction works afterward. Suspending/resuming the test server also verified transient-disconnect recovery with counter state preserved (3, then incremented to 4). Intentional outages produce expected network console errors. HTTP-only local launch logs the expected missing HTTPS-port warning; HTTPS cookie/antiforgery behavior is covered by integration tests.
+- **Protected state:** `SoundBite/soundbite.db` SHA-256 remains `ead1d21ea950e99cd6548f23d0b83159ac69c24b2bd4cbbf2dcac8376159eeaf`. Only disposable SQLite databases were migrated or written during verification. No data/model/service/migration source changes.
+- **Changed files:** `SoundBite/SoundBite.csproj`, `SoundBite.Tests/SoundBite.Tests.csproj`, `SoundBite.Tests/AuthenticationUiTests.cs`, `SoundBite/Components/App.razor`, `SoundBite/Components/Routes.razor`, all three `ReconnectModal.razor`/`.css`/`.js` files, `SoundBite/Program.cs`, `SoundBite.sln`, `global.json`, `.config/dotnet-tools.json`, `SOUNDBITE_CONTEXT.md`, this progress file.
+- **Outstanding:** Ready for Windows Visual Studio 2022 17.14 testing, not yet Windows-verified. Install exact SDK 9.0.319 and ASP.NET workload; open solution, restore/build, run 177 tests in Test Explorer, F5 and publish against a disposable database. .NET 9 support ends 10 November 2026. Existing application DB remains unmigrated. Exhausted-retry/manual Retry/Reload browser checks remain outstanding. Commit, branch push and PR creation authorized on 2026-10-17; do not merge.
 
 ### 2026-10-17 — Live notification updates
 
@@ -269,17 +306,17 @@
 
 | Check | Result | Notes |
 |---|---|---|
-| Application build | Passed | `dotnet test SoundBite.Tests/SoundBite.Tests.csproj --nologo -v minimal` built the app and test project successfully. |
-| Automated tests | Passed — verified | 223 NUnit tests passed, 0 failed/skipped (2026-10-17). |
+| Application build | Passed | Combined .NET 9 Release build and publish passed; 0 errors, 3 existing test warnings. |
+| Automated tests | Passed — verified | Combined .NET 9 suite: 225 passed, 0 failed/skipped; includes live-notification coverage and two compatibility 404 cases. |
 | Application startup | Passed | Command: `dotnet run --project SoundBite --urls http://localhost:5080` → app reported `Now listening on: http://localhost:5080` and `Application started.` |
 | Relevant feature behaviour | Passed | Authentication/profile/review/playlist/follow flows were previously verified; rendered tests cover review interactions, feed, and track likes. |
 | Database migrations | Passed | Existing migrations, `20261017012957_ThreadedReviewComments`, and `20261017013935_AddNotifications` are exercised by isolated SQLite tests; EF reports no pending model changes. The configured app database is not migrated. |
 
 ## 9. Git Status
 
-- **Active branch:** `main` at `e3e1cad` (`Add persistent in-app notifications`), synchronized with `origin/main` before current changes.
-- **Working tree:** Live notification dispatch/reconnection handling, tests, and this progress update are uncommitted.
-- **Latest verification:** Focused `NotificationTests` passed 5/5; full NUnit suite passed 223/223. Application build passed; EF reports no pending model changes; CRLF-aware whitespace check passed.
+- **Branch:** `Net9Compatibility`; latest main `07f9aab` integrated with a normal merge. Merge commit and push authorized after the successful 225-test verification; actual commit identity/publication are recorded in Git/GitHub.
+- **Database:** Identical to latest main and excluded from PR changes. No application migration performed.
+- **PR #16:** Do not merge into main yet. No rebase, force-push or branch deletion.
 
 ## 10. Next Recommended Tasks
 
@@ -290,9 +327,10 @@
 
 ## 11. Handover for the Next Chat Session
 
-- Follow/unfollow, catalogue discovery, Spotify-backed track search/import, review-based track rankings/trends, protected administrator user management, threaded comments, activity-feed expansion, and persistent notifications are committed on `main`. Live notification updates are the current uncommitted change.
-- Active recipient circuits receive updates through a per-user in-process dispatcher. Reconnection/navigation refreshes persisted state. The full suite passed 223/223 on 2026-10-17.
-- Initial admin provisioning uses trusted `Admin__UserIds__0` configuration after registration and migration. Live Spotify connectivity remains unverified. The application database still needs `20261017012957_ThreadedReviewComments` and `20261017013935_AddNotifications` applied. Next: add notification paging and user preferences.
+- PR #16 includes all main functionality through `07f9aab`, including live notifications, and retains .NET 9 compatibility. Release build/publish and all 225 NUnit tests passed. All 11 migrations verified on disposable SQLite; no pending model changes.
+- Application database matches main and is absent from the PR diff. Do not migrate it without separate authorization.
+- Windows VS2022, manual reconnection and live Spotify checks remain outstanding. Notification events are delivered within one app instance; multi-instance delivery is not implemented. No new browser validation was performed in this integration session.
+- Confirm main has not advanced and PR remains mergeable before any separately authorized PR merge. Do not merge PR #16 yet.
 
 ## 12. Instructions for Updating This File
 
