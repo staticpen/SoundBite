@@ -72,7 +72,10 @@ public class FollowService(
                     INSERT INTO "Follows" ("FollowerId", "FollowingId") VALUES ({actor}, {targetUserId})
                     ON CONFLICT ("FollowerId", "FollowingId") DO NOTHING
                     """);
-            if (inserted > 0)
+            // The follow is always saved; the notification only if the recipient has not turned it off.
+            var notify = inserted > 0 &&
+                await NotificationService.IsEnabledAsync(db, targetUserId, SoundBite.Models.NotificationType.Follow);
+            if (notify)
             {
                 db.Notifications.Add(new SoundBite.Models.Notification
                 {
@@ -83,7 +86,7 @@ public class FollowService(
                 await db.SaveChangesAsync();
             }
             await transaction.CommitAsync();
-            if (inserted > 0)
+            if (notify)
                 await notificationEvents.PublishAsync(targetUserId);
         }
         else

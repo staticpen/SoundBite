@@ -15,7 +15,7 @@ namespace SoundBite.Migrations
         protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
-            modelBuilder.HasAnnotation("ProductVersion", "10.0.12");
+            modelBuilder.HasAnnotation("ProductVersion", "9.0.21");
 
             modelBuilder.Entity("ArtistAlbums", b =>
                 {
@@ -462,6 +462,19 @@ namespace SoundBite.Migrations
                     b.ToTable("Notifications");
                 });
 
+            modelBuilder.Entity("SoundBite.Models.NotificationOptOut", b =>
+                {
+                    b.Property<string>("UserId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("UserId", "Type");
+
+                    b.ToTable("NotificationOptOuts");
+                });
+
             modelBuilder.Entity("SoundBite.Models.Playlist", b =>
                 {
                     b.Property<int>("Id")
@@ -805,6 +818,17 @@ namespace SoundBite.Migrations
                     b.Navigation("Recipient");
 
                     b.Navigation("Review");
+                });
+
+            modelBuilder.Entity("SoundBite.Models.NotificationOptOut", b =>
+                {
+                    b.HasOne("SoundBite.Data.ApplicationUser", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("SoundBite.Models.Playlist", b =>

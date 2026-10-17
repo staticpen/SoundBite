@@ -24,6 +24,7 @@ namespace SoundBite.Data
         public DbSet<Like> Likes => Set<Like>();
         public DbSet<Comment> Comments => Set<Comment>();
         public DbSet<Notification> Notifications => Set<Notification>();
+        public DbSet<NotificationOptOut> NotificationOptOuts => Set<NotificationOptOut>();
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -197,6 +198,15 @@ namespace SoundBite.Data
                     .IsUnique().HasFilter("\"LikeId\" IS NOT NULL");
                 entity.HasIndex(notification => new { notification.CommentId, notification.RecipientUserId })
                     .IsUnique().HasFilter("\"CommentId\" IS NOT NULL");
+            });
+
+            builder.Entity<NotificationOptOut>(entity =>
+            {
+                entity.HasKey(optOut => new { optOut.UserId, optOut.Type });
+                entity.HasOne(optOut => optOut.User)
+                    .WithMany()
+                    .HasForeignKey(optOut => optOut.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
             });
 
             // SQLite unique indexes allow multiple NULLs for unknown external IDs.
