@@ -22,12 +22,23 @@ else if (!signedIn)
 {
     <p><a href="/login">Log in</a> to view your notifications.</p>
 }
-else if (loadFailed)
+else if (loadFailed && !loaded)
 {
-    <div class="alert alert-danger" role="alert">Notifications couldn't be loaded. Please try again later.</div>
+    <div class="alert alert-danger" role="alert">
+        Notifications couldn't be loaded.
+        <button type="button" class="btn btn-sm btn-outline-danger ms-2" @onclick="LoadAsync">Try again</button>
+    </div>
 }
 else if (loaded)
 {
+    @if (loadFailed)
+    {
+        <div class="alert alert-danger" role="alert">
+            Notifications couldn't be refreshed. The list below may be out of date.
+            <button type="button" class="btn btn-sm btn-outline-danger ms-2" @onclick="LoadAsync">Try again</button>
+        </div>
+    }
+
     <div class="d-flex justify-content-between align-items-center mb-3">
         <p class="mb-0">@unreadCount unread</p>
         @if (unreadCount > 0)
@@ -104,7 +115,7 @@ else if (loaded)
 
         @if (hasMore)
         {
-            <button type="button" class="btn btn-outline-primary mt-3" @onclick="LoadMoreAsync" disabled="@(loadingMore || busy)">
+            <button type="button" class="btn btn-outline-primary mt-3" @onclick="LoadMoreAsync" disabled="@(loadingMore || refreshing || busy)">
                 @(loadingMore ? "Loading..." : "Load more")
             </button>
             @if (loadMoreFailed)
@@ -161,11 +172,17 @@ else if (loaded)
 
     // Replaces the list with the newest page. Anything loaded with "Load more" is dropped,
     // so read states and deleted notifications always match the database.
+    // If the refresh fails, the list that was already shown is kept and an error with a retry is displayed.
     private async Task LoadAsync()
     {
         var generation = ++loadGeneration;
         refreshing = true;
         loadFailed = false;
+        // Any "Load more" still running is now out of date (its result will be ignored),
+        // so clear its state here rather than relying on this refresh succeeding.
+        loadingMore = false;
+        loadMoreFailed = false;
+        StateHasChanged(); // show that a refresh is running (Load more is disabled)
         try
         {
             var result = await NotificationService.GetPageAsync();
@@ -175,8 +192,6 @@ else if (loaded)
             items.AddRange(result.Items);
             unreadCount = result.UnreadCount;
             hasMore = result.HasMore;
-            loadingMore = false;
-            loadMoreFailed = false;
             loaded = true;
         }
         catch (Exception exception)

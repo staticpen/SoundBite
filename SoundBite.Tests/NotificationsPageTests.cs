@@ -96,6 +96,14 @@ public class NotificationsPageTests
             Assert.That(page.Html, Does.Contain("33 unread").And.Contain("Load more"));
             // 30 shown, only the notification with Id ids[0] is read.
             Assert.That(Regex.Matches(page.Html, "list-group-item-primary").Count, Is.EqualTo(29));
+
+            // Loading the older page again shows the read state that was set elsewhere:
+            // list order is new, ids[0], ids[1], ids[3]..ids[34], so ids[0] is at 1 and ids[33] at 33.
+            await page.ClickLoadMoreAsync();
+            var readPositions = page.ReadFlags().Select((isRead, index) => (isRead, index))
+                .Where(entry => entry.isRead).Select(entry => entry.index);
+            Assert.That(page.ShownTimes(), Has.Count.EqualTo(35));
+            Assert.That(readPositions, Is.EqualTo(new[] { 1, 33 }));
         });
     }
 
@@ -164,6 +172,83 @@ public class NotificationsPageTests
             expected.AddRange(ExpectedTimes(0, 29));
             Assert.That(page.ShownTimes(), Is.EqualTo(expected));
             Assert.That(page.Html, Does.Contain("36 unread").And.Contain("Load more"));
+        });
+    }
+
+    [Test]
+    public async Task FailedRefreshOverlappingLoadMoreKeepsTheListAndRecoversOnRetry()
+    {
+        await SeedAsync(35);
+
+        await WithPageAsync(async page =>
+        {
+            // Load more is in flight when a live refresh starts, and the refresh fails.
+            var gate = new TaskCompletionSource();
+            authentication.Gate = gate;
+            var loadMore = page.ClickLoadMoreAsync();
+            authentication.FailNext = true;
+            await dispatcher.PublishAsync("alice");
+            gate.SetResult();
+            await loadMore;
+
+            // The list that was already shown is kept, with an error and a retry; Load more is not stuck.
+            Assert.That(page.ShownTimes(), Is.EqualTo(ExpectedTimes(0, 30)));
+            Assert.That(page.Html, Does.Contain("Notifications couldn").And.Contain("Try again")
+                .And.Contain("Load more").And.Not.Contain("Loading..."));
+            Assert.That(Regex.IsMatch(page.Html, @"<button[^>]*\bdisabled\b[^>]*>\s*Load more"), Is.False);
+
+            // Retrying refreshes successfully, and Load more works again.
+            await page.ClickTryAgainAsync();
+            Assert.That(page.Html, Does.Not.Contain("Notifications couldn").And.Not.Contain("Try again"));
+            Assert.That(page.ShownTimes(), Is.EqualTo(ExpectedTimes(0, 30)));
+
+            await page.ClickLoadMoreAsync();
+            Assert.That(page.ShownTimes(), Is.EqualTo(ExpectedTimes(0, 35)));
+        });
+    }
+
+    [Test]
+    public async Task InitialLoadFailureOffersRetry()
+    {
+        // The service rejects a signed-in user whose account no longer exists, so the first load fails.
+        await using (var db = factory.CreateDbContext())
+            await db.Users.Where(user => user.Id == "alice").ExecuteDeleteAsync();
+
+        await WithPageAsync(async page =>
+        {
+            Assert.That(page.Html, Does.Contain("Notifications couldn").And.Contain("Try again"));
+            Assert.That(page.ShownTimes(), Is.Empty);
+
+            await using (var db = factory.CreateDbContext())
+            {
+                db.Users.Add(new ApplicationUser { Id = "alice", UserName = "alice", DisplayName = "Alice" });
+                await db.SaveChangesAsync();
+            }
+            await SeedAsync(3);
+            await page.ClickTryAgainAsync();
+
+            Assert.That(page.ShownTimes(), Is.EqualTo(ExpectedTimes(0, 3)));
+            Assert.That(page.Html, Does.Not.Contain("Try again"));
+        });
+    }
+
+    [Test]
+    public async Task LoadMoreIsDisabledWhileARefreshIsRunning()
+    {
+        await SeedAsync(35);
+
+        await WithPageAsync(async page =>
+        {
+            var gate = new TaskCompletionSource();
+            authentication.Gate = gate;
+            var refresh = dispatcher.PublishAsync("alice");
+
+            Assert.That(Regex.IsMatch(page.Html, @"<button[^>]*\bdisabled\b[^>]*>\s*Load more"), Is.True);
+
+            gate.SetResult();
+            await refresh;
+
+            Assert.That(Regex.IsMatch(page.Html, @"<button[^>]*\bdisabled\b[^>]*>\s*Load more"), Is.False);
         });
     }
 
@@ -245,6 +330,19 @@ public class NotificationsPageTests
                 .Invoke(this, null)!;
             StateHasChanged();
         });
+
+        public Task ClickTryAgainAsync() => InvokeAsync(async () =>
+        {
+            await (Task)typeof(Notifications).GetMethod("LoadAsync", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(this, null)!;
+            StateHasChanged();
+        });
+
+        // For each listed notification, in display order: true if it is shown as read.
+        public List<bool> ReadFlags() =>
+            Regex.Matches(Html, "<li class=\"([^\"]*)\"")
+                .Select(match => !match.Groups[1].Value.Contains("list-group-item-primary"))
+                .ToList();
 
         // The CreatedAt ticks of the notifications currently listed, in display order.
         public List<long> ShownTimes() =>
