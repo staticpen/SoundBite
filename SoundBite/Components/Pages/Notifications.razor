@@ -1,0 +1,184 @@
+@page "/notifications"
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using SoundBite.Models
+@using SoundBite.Services
+@inject NotificationService NotificationService
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ILogger<Notifications> Logger
+
+<PageTitle>Notifications - SoundBite</PageTitle>
+
+<h1>Notifications</h1>
+
+@if (loading)
+{
+    <p role="status">Loading notifications...</p>
+}
+else if (!signedIn)
+{
+    <p><a href="/login">Log in</a> to view your notifications.</p>
+}
+else if (loadFailed)
+{
+    <div class="alert alert-danger" role="alert">Notifications couldn't be loaded. Please try again later.</div>
+}
+else if (notificationPage is not null)
+{
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <p class="mb-0">@notificationPage.UnreadCount unread</p>
+        @if (notificationPage.UnreadCount > 0)
+        {
+            <button type="button" class="btn btn-sm btn-outline-primary" @onclick="MarkAllReadAsync" disabled="@busy">
+                Mark all as read
+            </button>
+        }
+    </div>
+
+    @if (notificationPage.Items.Count == 0)
+    {
+        <p class="text-muted">You don't have any notifications yet.</p>
+    }
+    else
+    {
+        <ul class="list-group">
+            @foreach (var item in notificationPage.Items)
+            {
+                <li class="list-group-item @(item.ReadAt is null ? "list-group-item-primary" : string.Empty)" @key="item.Id">
+                    <div class="d-flex justify-content-between align-items-start gap-3">
+                        <div>
+                            <p class="mb-1">
+                                @if (item.Type == NotificationType.Follow)
+                                {
+                                    <a href="@($"/users/{Uri.EscapeDataString(item.ActorUserName)}")">@item.ActorName</a>
+                                    <span> followed you.</span>
+                                }
+                                else if (item.Type == NotificationType.PlaylistLike)
+                                {
+                                    <a href="@($"/users/{Uri.EscapeDataString(item.ActorUserName)}")">@item.ActorName</a>
+                                    <span> liked your playlist </span>
+                                    <a href="@($"/playlists/{item.PlaylistId}")">@item.PlaylistName</a>
+                                    <span>.</span>
+                                }
+                                else
+                                {
+                                    <a href="@($"/users/{Uri.EscapeDataString(item.ActorUserName)}")">@item.ActorName</a>
+                                    <span>
+                                        @(item.Type switch
+                                        {
+                                            NotificationType.ReviewComment => " commented on your review.",
+                                            NotificationType.CommentReply => " replied to your comment.",
+                                            NotificationType.ReviewLike => " liked your review.",
+                                            NotificationType.CommentLike => " liked your comment.",
+                                            _ => " interacted with your activity."
+                                        })
+                                    </span>
+                                    @if (item.TrackId is int trackId && item.ReviewId is int reviewId)
+                                    {
+                                        <a href="@($"/tracks/{trackId}#review-{reviewId}")">View review</a>
+                                    }
+                                }
+                            </p>
+                            @if (!string.IsNullOrWhiteSpace(item.Content))
+                            {
+                                <p class="mb-1 text-muted">@item.Content</p>
+                            }
+                            <time class="text-muted small" datetime="@item.CreatedAt.ToString("O")">
+                                @item.CreatedAt.ToLocalTime().ToString("g")
+                            </time>
+                        </div>
+                        @if (item.ReadAt is null)
+                        {
+                            <button type="button" class="btn btn-sm btn-outline-secondary text-nowrap"
+                                    @onclick="() => MarkReadAsync(item.Id)" disabled="@busy">
+                                Mark read
+                            </button>
+                        }
+                    </div>
+                </li>
+            }
+        </ul>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(message))
+    {
+        <p class="mt-3" role="status">@message</p>
+    }
+}
+
+@code {
+    private NotificationPage? notificationPage;
+    private bool loading = true;
+    private bool loadFailed;
+    private bool signedIn;
+    private bool busy;
+    private string? message;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+        signedIn = user.Identity?.IsAuthenticated == true &&
+            !string.IsNullOrWhiteSpace(user.FindFirstValue(ClaimTypes.NameIdentifier));
+        if (signedIn)
+            await LoadAsync();
+        loading = false;
+    }
+
+    private async Task LoadAsync()
+    {
+        loadFailed = false;
+        try
+        {
+            notificationPage = await NotificationService.GetPageAsync();
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Unable to load notifications");
+            loadFailed = true;
+        }
+    }
+
+    private async Task MarkReadAsync(int notificationId)
+    {
+        if (busy) return;
+        busy = true;
+        message = null;
+        try
+        {
+            await NotificationService.MarkReadAsync(notificationId);
+            await LoadAsync();
+            message = loadFailed ? null : "Notification marked as read.";
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Unable to mark notification {NotificationId} as read", notificationId);
+            message = "The notification couldn't be marked as read. Please try again.";
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private async Task MarkAllReadAsync()
+    {
+        if (busy) return;
+        busy = true;
+        message = null;
+        try
+        {
+            await NotificationService.MarkAllReadAsync();
+            await LoadAsync();
+            message = loadFailed ? null : "All notifications marked as read.";
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Unable to mark all notifications as read");
+            message = "Notifications couldn't be marked as read. Please try again.";
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+}

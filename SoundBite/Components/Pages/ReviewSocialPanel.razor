@@ -1,0 +1,316 @@
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using SoundBite.Models
+@using SoundBite.Services
+@inject SocialInteractionService Social
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ILogger<ReviewSocialPanel> Logger
+
+<section class="mt-3" aria-label="Review likes and comments">
+    @if (loading)
+    {
+        <p role="status">Loading interactions...</p>
+    }
+    else if (loadFailed)
+    {
+        <p class="alert alert-danger" role="alert">Interactions couldn't be loaded. Please try again later.</p>
+    }
+    else if (interactions is not null)
+    {
+        <div class="d-flex align-items-center gap-3">
+            @if (signedIn)
+            {
+                <button type="button" class="btn btn-sm btn-outline-primary" @onclick="ToggleLikeAsync" disabled="@busy">
+                    @(interactions.IsLiked ? "Unlike" : "Like") (@interactions.LikeCount)
+                </button>
+            }
+            else
+            {
+                <span>@interactions.LikeCount likes</span>
+                <a href="/login">Log in to like</a>
+            }
+            <span>@interactions.Comments.Count comments</span>
+        </div>
+
+        @if (interactions.Comments.Count > 0)
+        {
+            <ul class="list-group list-group-flush mt-2">
+                @foreach (var comment in interactions.Comments.Where(comment => comment.ParentCommentId is null))
+                {
+                    <li class="list-group-item px-0" @key="comment.Id">
+                        <div class="d-flex justify-content-between gap-2">
+                            <div>
+                                <p class="mb-1">
+                                    <a href="@($"/users/{Uri.EscapeDataString(comment.UserName)}")">
+                                        @(string.IsNullOrWhiteSpace(comment.DisplayName) ? comment.UserName : comment.DisplayName)
+                                    </a>
+                                    <span>: @comment.Content</span>
+                                </p>
+                                @if (signedIn)
+                                {
+                                    <button type="button" class="btn btn-sm btn-outline-primary" @onclick="() => ToggleCommentLikeAsync(comment)" disabled="@busy">
+                                        @(comment.IsLiked ? "Unlike" : "Like") (@comment.LikeCount)
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-link" @onclick="() => BeginReply(comment)" disabled="@busy">Reply</button>
+                                }
+                                else
+                                {
+                                    <span class="small">@comment.LikeCount likes</span>
+                                    <a class="small ms-2" href="/login">Log in to like</a>
+                                }
+                            </div>
+                            @if (comment.IsOwner)
+                            {
+                                <div class="text-nowrap">
+                                    <button type="button" class="btn btn-sm btn-link" @onclick="() => BeginEdit(comment)" disabled="@busy">Edit</button>
+                                    <button type="button" class="btn btn-sm btn-link text-danger" @onclick="() => DeleteCommentAsync(comment.Id)" disabled="@busy">Delete</button>
+                                </div>
+                            }
+                        </div>
+                        @{
+                            var replies = interactions.Comments.Where(reply => reply.ParentCommentId == comment.Id).ToArray();
+                        }
+                        @if (replies.Length > 0)
+                        {
+                            <ul class="list-group list-group-flush ms-3 mt-2" aria-label="@($"Replies to {comment.UserName}")">
+                                @foreach (var reply in replies)
+                                {
+                                    <li class="list-group-item px-0" @key="reply.Id">
+                                        <div class="d-flex justify-content-between gap-2">
+                                            <div>
+                                                <p class="mb-1">
+                                                    <a href="@($"/users/{Uri.EscapeDataString(reply.UserName)}")">
+                                                        @(string.IsNullOrWhiteSpace(reply.DisplayName) ? reply.UserName : reply.DisplayName)
+                                                    </a>
+                                                    <span class="text-muted small"> replied to @(string.IsNullOrWhiteSpace(reply.ParentDisplayName) ? reply.ParentUserName : reply.ParentDisplayName)</span>
+                                                    <span>: @reply.Content</span>
+                                                </p>
+                                                @if (signedIn)
+                                                {
+                                                    <button type="button" class="btn btn-sm btn-outline-primary" @onclick="() => ToggleCommentLikeAsync(reply)" disabled="@busy">
+                                                        @(reply.IsLiked ? "Unlike" : "Like") (@reply.LikeCount)
+                                                    </button>
+                                                }
+                                                else
+                                                {
+                                                    <span class="small">@reply.LikeCount likes</span>
+                                                    <a class="small ms-2" href="/login">Log in to like</a>
+                                                }
+                                            </div>
+                                            @if (reply.IsOwner)
+                                            {
+                                                <div class="text-nowrap">
+                                                    <button type="button" class="btn btn-sm btn-link" @onclick="() => BeginEdit(reply)" disabled="@busy">Edit</button>
+                                                    <button type="button" class="btn btn-sm btn-link text-danger" @onclick="() => DeleteCommentAsync(reply.Id)" disabled="@busy">Delete</button>
+                                                </div>
+                                            }
+                                        </div>
+                                    </li>
+                                }
+                            </ul>
+                        }
+                    </li>
+                }
+            </ul>
+        }
+
+        @if (signedIn)
+        {
+            <div class="mt-3">
+                <label class="form-label" for="@($"review-comment-{ReviewId}")">
+                    @(editingCommentId is not null ? "Edit your comment" :
+                        replyingToComment is not null ? $"Reply to {replyingToComment.DisplayName ?? replyingToComment.UserName}" :
+                        "Add a comment")
+                </label>
+                <textarea id="@($"review-comment-{ReviewId}")" class="form-control" rows="2"
+                          maxlength="@SocialInteractionService.MaximumCommentLength" @bind="commentText" disabled="@busy"></textarea>
+                <div class="mt-2">
+                    <button type="button" class="btn btn-sm btn-primary" @onclick="SaveCommentAsync" disabled="@busy">
+                        @(busy ? "Saving..." : editingCommentId is not null ? "Save comment" :
+                            replyingToComment is not null ? "Reply" : "Comment")
+                    </button>
+                    @if (editingCommentId is not null)
+                    {
+                        <button type="button" class="btn btn-sm btn-outline-secondary ms-2" @onclick="CancelEdit" disabled="@busy">Cancel</button>
+                    }
+                </div>
+            </div>
+        }
+        else
+        {
+            <p class="mt-3 mb-0"><a href="/login">Log in</a> to comment.</p>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(message))
+        {
+            <p class="mt-2 mb-0" role="status">@message</p>
+        }
+    }
+</section>
+
+@code {
+    [Parameter] public int ReviewId { get; set; }
+
+    private ReviewInteractions? interactions;
+    private bool loading;
+    private bool loadFailed;
+    private bool signedIn;
+    private bool busy;
+    private int? editingCommentId;
+    private ReviewComment? replyingToComment;
+    private string commentText = string.Empty;
+    private string? message;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        loading = true;
+        loadFailed = false;
+        message = null;
+        editingCommentId = null;
+        replyingToComment = null;
+        commentText = string.Empty;
+        try
+        {
+            var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+            signedIn = user.Identity?.IsAuthenticated == true &&
+                !string.IsNullOrWhiteSpace(user.FindFirstValue(ClaimTypes.NameIdentifier));
+            interactions = await Social.GetReviewInteractionsAsync(ReviewId);
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Unable to load social interactions for review {ReviewId}", ReviewId);
+            loadFailed = true;
+            interactions = null;
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task ToggleLikeAsync()
+    {
+        if (interactions is null || busy) return;
+        busy = true;
+        message = null;
+        try
+        {
+            if (interactions.IsLiked) await Social.UnlikeReviewAsync(ReviewId);
+            else await Social.LikeReviewAsync(ReviewId);
+            interactions = await Social.GetReviewInteractionsAsync(ReviewId);
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Unable to change like for review {ReviewId}", ReviewId);
+            message = "Your like couldn't be updated. Please try again.";
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private async Task SaveCommentAsync()
+    {
+        if (busy) return;
+        busy = true;
+        message = null;
+        try
+        {
+            if (editingCommentId is int commentId)
+                await Social.UpdateCommentAsync(commentId, commentText);
+            else if (replyingToComment is not null)
+                await Social.AddReplyAsync(replyingToComment.Id, commentText);
+            else
+                await Social.AddCommentAsync(ReviewId, commentText);
+            commentText = string.Empty;
+            editingCommentId = null;
+            replyingToComment = null;
+            interactions = await Social.GetReviewInteractionsAsync(ReviewId);
+            message = "Comment saved.";
+        }
+        catch (ArgumentException exception)
+        {
+            message = exception.Message;
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Unable to save comment for review {ReviewId}", ReviewId);
+            message = "Your comment couldn't be saved. Please try again.";
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private async Task DeleteCommentAsync(int commentId)
+    {
+        if (busy) return;
+        busy = true;
+        message = null;
+        try
+        {
+            await Social.DeleteCommentAsync(commentId);
+            if (editingCommentId == commentId) CancelEdit();
+            if (replyingToComment?.Id == commentId) CancelEdit();
+            interactions = await Social.GetReviewInteractionsAsync(ReviewId);
+            message = "Comment deleted.";
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Unable to delete comment {CommentId}", commentId);
+            message = "Your comment couldn't be deleted. Please try again.";
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private async Task ToggleCommentLikeAsync(ReviewComment comment)
+    {
+        if (busy) return;
+        busy = true;
+        message = null;
+        try
+        {
+            if (comment.IsLiked) await Social.UnlikeCommentAsync(comment.Id);
+            else await Social.LikeCommentAsync(comment.Id);
+            interactions = await Social.GetReviewInteractionsAsync(ReviewId);
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Unable to change like for comment {CommentId}", comment.Id);
+            message = "The comment like couldn't be updated. Please try again.";
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private void BeginEdit(ReviewComment comment)
+    {
+        editingCommentId = comment.Id;
+        replyingToComment = null;
+        commentText = comment.Content;
+        message = null;
+    }
+
+    private void BeginReply(ReviewComment comment)
+    {
+        editingCommentId = null;
+        replyingToComment = comment;
+        commentText = string.Empty;
+        message = null;
+    }
+
+    private void CancelEdit()
+    {
+        editingCommentId = null;
+        replyingToComment = null;
+        commentText = string.Empty;
+        message = null;
+    }
+}

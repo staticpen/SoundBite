@@ -28,6 +28,12 @@ public class PageRouteTests
     [TestCase("/register", typeof(Register))]
     [TestCase("/login", typeof(Account))]
     [TestCase("/account", typeof(Account))]
+    [TestCase("/feed", typeof(ActivityFeed))]
+    [TestCase("/notifications", typeof(Notifications))]
+    [TestCase("/rankings", typeof(Rankings))]
+    [TestCase("/admin/users", typeof(AdminUsers))]
+    [TestCase("/artists/{Id:int}", typeof(ArtistDetails))]
+    [TestCase("/albums/{Id:int}", typeof(AlbumDetails))]
     public void AuthenticationRoute_HasExpectedOwner(string template, Type expectedComponent)
     {
         var owners = typeof(App).Assembly.GetTypes()

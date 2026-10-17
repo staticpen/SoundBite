@@ -1,7 +1,9 @@
 @page "/catalogue/search"
+@using Microsoft.AspNetCore.Components.Authorization
 @using SoundBite.Interfaces
 @using SoundBite.Models
 @inject IMusicCatalog Catalog
+@inject ISpotifyCatalog SpotifyCatalog
 @inject ILogger<CatalogueSearch> Logger
 
 <PageTitle>Catalogue Search</PageTitle>
@@ -13,9 +15,9 @@
     <label for="catalogue-query" class="form-label">Search the catalogue</label>
     <div class="input-group mb-3">
         <input id="catalogue-query" type="search" class="form-control"
-               @bind="query" @bind:event="oninput" disabled="@isLoading"
+               @bind="query" @bind:event="oninput" disabled="@(isLoading || isSpotifyLoading)"
                placeholder="Enter a name or title" />
-        <button type="submit" class="btn btn-primary" disabled="@isLoading">Search</button>
+        <button type="submit" class="btn btn-primary" disabled="@(isLoading || isSpotifyLoading)">Search</button>
     </div>
 </form>
 
@@ -49,7 +51,9 @@
                 <ul class="list-group">
                     @foreach (var artist in results.Artists)
                     {
-                        <li class="list-group-item text-break" @key="artist.Id">@artist.Name</li>
+                        <li class="list-group-item text-break" @key="artist.Id">
+                            <a href="@($"/artists/{artist.Id}")">@artist.Name</a>
+                        </li>
                     }
                 </ul>
             </section>
@@ -62,7 +66,9 @@
                 <ul class="list-group">
                     @foreach (var album in results.Albums)
                     {
-                        <li class="list-group-item text-break" @key="album.Id">@album.Title</li>
+                        <li class="list-group-item text-break" @key="album.Id">
+                            <a href="@($"/albums/{album.Id}")">@album.Title</a>
+                        </li>
                     }
                 </ul>
             </section>
@@ -85,12 +91,87 @@
     }
 </div>
 
+<section class="mt-5" aria-labelledby="spotify-search-heading">
+    <h2 id="spotify-search-heading">Find tracks on Spotify</h2>
+    <p class="text-muted">Track search results are supplied by Spotify. Add a track and its artist and album details to the local catalogue.</p>
+    <form @onsubmit="SearchSpotifyAsync" @onsubmit:preventDefault>
+        <button type="submit" class="btn btn-outline-primary"
+                disabled="@(isLoading || isSpotifyLoading || string.IsNullOrWhiteSpace(query))">
+            @(isSpotifyLoading ? "Searching Spotify..." : "Search Spotify")
+        </button>
+    </form>
+
+    <div class="mt-3" aria-live="polite" aria-busy="@isSpotifyLoading">
+        @if (spotifyError is not null)
+        {
+            <p class="alert alert-danger" role="alert">@spotifyError</p>
+        }
+        else if (importedTrackId is int importedId)
+        {
+            <p class="alert alert-success" role="status">
+                Track added to the local catalogue.
+                <a href="@($"/tracks/{importedId}")">View track</a>
+            </p>
+        }
+        else if (isSpotifyLoading)
+        {
+            <p role="status">Searching Spotify...</p>
+        }
+        else if (spotifyResults is not null)
+        {
+            @if (spotifyResults.Count == 0)
+            {
+                <p role="status">No Spotify tracks found for “@spotifyQuery”.</p>
+            }
+            else
+            {
+                <ul class="list-group">
+                    @foreach (var match in spotifyResults)
+                    {
+                        <li class="list-group-item d-flex justify-content-between align-items-center gap-3"
+                            @key="match.SpotifyId">
+                            <span class="text-break">
+                                <strong>@match.Title</strong>
+                                <span class="text-muted"> — @string.Join(", ", match.Artists.Select(artist => artist.Name)) · @match.AlbumTitle</span>
+                                <a class="ms-2" href="@SpotifyTrackUrl(match.SpotifyId)">Open on Spotify</a>
+                            </span>
+                            <AuthorizeView>
+                                <Authorized>
+                                    <button type="button" class="btn btn-sm btn-outline-success flex-shrink-0"
+                                            disabled="@isImporting"
+                                            @onclick="() => ImportSpotifyTrackAsync(match)">
+                                        @(importingSpotifyId == match.SpotifyId ? "Adding..." : "Add to catalogue")
+                                    </button>
+                                </Authorized>
+                                <NotAuthorized>
+                                    <a href="/account">Log in to add</a>
+                                </NotAuthorized>
+                            </AuthorizeView>
+                        </li>
+                    }
+                </ul>
+            }
+        }
+    </div>
+</section>
+
 @code {
     private string query = string.Empty;
     private string searchedQuery = string.Empty;
     private CatalogueSearchResults? results;
     private bool isLoading;
     private string? error;
+    private string spotifyQuery = string.Empty;
+    private IReadOnlyList<SpotifyTrackMatch>? spotifyResults;
+    private bool isSpotifyLoading;
+    private string? spotifyError;
+    private string? importingSpotifyId;
+    private int? importedTrackId;
+
+    private bool isImporting => importingSpotifyId is not null;
+
+    private static string SpotifyTrackUrl(string id) =>
+        $"https://open.spotify.com/track/{Uri.EscapeDataString(id)}";
 
     private async Task SearchAsync()
     {
@@ -116,6 +197,57 @@
         finally
         {
             isLoading = false;
+        }
+    }
+
+    private async Task SearchSpotifyAsync()
+    {
+        if (isSpotifyLoading || isLoading)
+            return;
+
+        spotifyQuery = query.Trim();
+        spotifyResults = null;
+        spotifyError = null;
+        importedTrackId = null;
+        if (spotifyQuery.Length == 0)
+            return;
+
+        isSpotifyLoading = true;
+        try
+        {
+            spotifyResults = await SpotifyCatalog.SearchTracksAsync(spotifyQuery);
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Spotify catalogue search failed");
+            spotifyError = "Spotify search failed. Check API access or try again later.";
+        }
+        finally
+        {
+            isSpotifyLoading = false;
+        }
+    }
+
+    private async Task ImportSpotifyTrackAsync(SpotifyTrackMatch match)
+    {
+        if (isImporting)
+            return;
+
+        importingSpotifyId = match.SpotifyId;
+        spotifyError = null;
+        importedTrackId = null;
+        try
+        {
+            importedTrackId = await SpotifyCatalog.ImportTrackAsync(match);
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Unable to import Spotify track {SpotifyTrackId}", match.SpotifyId);
+            spotifyError = "The track could not be added to the catalogue. Please try again.";
+        }
+        finally
+        {
+            importingSpotifyId = null;
         }
     }
 }

@@ -21,6 +21,9 @@ namespace SoundBite.Data
         public DbSet<PlaylistItem> PlaylistItems => Set<PlaylistItem>();
 
         public DbSet<Follow> Follows => Set<Follow>();
+        public DbSet<Like> Likes => Set<Like>();
+        public DbSet<Comment> Comments => Set<Comment>();
+        public DbSet<Notification> Notifications => Set<Notification>();
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -98,6 +101,102 @@ namespace SoundBite.Data
                     .OnDelete(DeleteBehavior.Cascade);
                 entity.ToTable(table => table.HasCheckConstraint(
                     "CK_Follows_NoSelfFollow", "\"FollowerId\" <> \"FollowingId\""));
+            });
+
+            builder.Entity<Like>(entity =>
+            {
+                entity.HasOne(like => like.Review)
+                    .WithMany()
+                    .HasForeignKey(like => like.ReviewId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(like => like.User)
+                    .WithMany()
+                    .HasForeignKey(like => like.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(like => like.Track)
+                    .WithMany()
+                    .HasForeignKey(like => like.TrackId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(like => like.Playlist)
+                    .WithMany()
+                    .HasForeignKey(like => like.PlaylistId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(like => like.Comment)
+                    .WithMany()
+                    .HasForeignKey(like => like.CommentId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasIndex(like => new { like.ReviewId, like.UserId })
+                    .IsUnique().HasFilter("\"ReviewId\" IS NOT NULL");
+                entity.HasIndex(like => new { like.TrackId, like.UserId })
+                    .IsUnique().HasFilter("\"TrackId\" IS NOT NULL");
+                entity.HasIndex(like => new { like.PlaylistId, like.UserId })
+                    .IsUnique().HasFilter("\"PlaylistId\" IS NOT NULL");
+                entity.HasIndex(like => new { like.CommentId, like.UserId })
+                    .IsUnique().HasFilter("\"CommentId\" IS NOT NULL");
+                entity.ToTable(table => table.HasCheckConstraint(
+                    "CK_Likes_ExactlyOneTarget",
+                    """
+                    (CASE WHEN "ReviewId" IS NOT NULL THEN 1 ELSE 0 END) +
+                    (CASE WHEN "TrackId" IS NOT NULL THEN 1 ELSE 0 END) +
+                    (CASE WHEN "PlaylistId" IS NOT NULL THEN 1 ELSE 0 END) +
+                    (CASE WHEN "CommentId" IS NOT NULL THEN 1 ELSE 0 END) = 1
+                    """));
+            });
+
+            builder.Entity<Comment>(entity =>
+            {
+                entity.HasOne(comment => comment.Review)
+                    .WithMany()
+                    .HasForeignKey(comment => comment.ReviewId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(comment => comment.User)
+                    .WithMany()
+                    .HasForeignKey(comment => comment.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(comment => comment.ParentComment)
+                    .WithMany(comment => comment.Replies)
+                    .HasForeignKey(comment => comment.ParentCommentId)
+                    .OnDelete(DeleteBehavior.SetNull);
+                entity.HasIndex(comment => new { comment.ReviewId, comment.ParentCommentId, comment.CreatedAt });
+                entity.ToTable(table => table.HasCheckConstraint(
+                    "CK_Comments_Content", "length(trim(\"Content\")) > 0"));
+                entity.ToTable(table => table.HasCheckConstraint(
+                    "CK_Comments_NoSelfReply",
+                    "\"ParentCommentId\" IS NULL OR \"ParentCommentId\" <> \"Id\""));
+            });
+
+            builder.Entity<Notification>(entity =>
+            {
+                entity.HasOne(notification => notification.Recipient)
+                    .WithMany()
+                    .HasForeignKey(notification => notification.RecipientUserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(notification => notification.Actor)
+                    .WithMany()
+                    .HasForeignKey(notification => notification.ActorUserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(notification => notification.Review)
+                    .WithMany()
+                    .HasForeignKey(notification => notification.ReviewId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(notification => notification.Comment)
+                    .WithMany()
+                    .HasForeignKey(notification => notification.CommentId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(notification => notification.Playlist)
+                    .WithMany()
+                    .HasForeignKey(notification => notification.PlaylistId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(notification => notification.Like)
+                    .WithMany()
+                    .HasForeignKey(notification => notification.LikeId)
+                    .OnDelete(DeleteBehavior.SetNull);
+                entity.HasIndex(notification => new { notification.RecipientUserId, notification.CreatedAt, notification.Id });
+                entity.HasIndex(notification => new { notification.RecipientUserId, notification.ReadAt });
+                entity.HasIndex(notification => notification.LikeId)
+                    .IsUnique().HasFilter("\"LikeId\" IS NOT NULL");
+                entity.HasIndex(notification => new { notification.CommentId, notification.RecipientUserId })
+                    .IsUnique().HasFilter("\"CommentId\" IS NOT NULL");
             });
 
             // SQLite unique indexes allow multiple NULLs for unknown external IDs.

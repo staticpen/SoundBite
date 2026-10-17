@@ -65,12 +65,23 @@ public class FollowService(
 
         if (following)
         {
-            // Atomic, parameterized SQLite upsert: ignore only the exact duplicate key.
-            // FK/check failures remain errors; concurrent requests cannot create duplicates.
-            await db.Database.ExecuteSqlInterpolatedAsync($"""
-                INSERT INTO "Follows" ("FollowerId", "FollowingId") VALUES ({actor}, {targetUserId})
-                ON CONFLICT ("FollowerId", "FollowingId") DO NOTHING
-                """);
+            await using var transaction = await db.Database.BeginTransactionAsync();
+            // Create the notification only for the request that inserts the unique follow.
+            var inserted = await db.Database.ExecuteSqlInterpolatedAsync($"""
+                    INSERT INTO "Follows" ("FollowerId", "FollowingId") VALUES ({actor}, {targetUserId})
+                    ON CONFLICT ("FollowerId", "FollowingId") DO NOTHING
+                    """);
+            if (inserted > 0)
+            {
+                db.Notifications.Add(new SoundBite.Models.Notification
+                {
+                    RecipientUserId = targetUserId,
+                    ActorUserId = actor,
+                    Type = SoundBite.Models.NotificationType.Follow
+                });
+                await db.SaveChangesAsync();
+            }
+            await transaction.CommitAsync();
         }
         else
         {

@@ -1,7 +1,52 @@
 ﻿@page "/"
 
-<PageTitle>Home</PageTitle>
+<PageTitle>SoundBite — Discover music</PageTitle>
 
-<h1>Hello, world!</h1>
+<section class="p-4 p-md-5 mb-4 bg-body-tertiary rounded-3">
+    <div class="container-fluid py-2">
+        <h1 class="display-5 fw-bold">Discover music. Share what you love.</h1>
+        <p class="col-md-8 fs-5">
+            Find artists, albums, and tracks in the SoundBite catalogue, then read and share reviews with the community.
+        </p>
+        <a class="btn btn-primary btn-lg" href="/catalogue/search">Search the catalogue</a>
+    </div>
+</section>
 
-Welcome to your new app.
+<div class="row g-3">
+    <section class="col-md-6 col-xl-3">
+        <div class="card h-100">
+            <div class="card-body">
+                <h2 class="h4">Browse music</h2>
+                <p>Explore artists, albums, and tracks currently available in the catalogue.</p>
+                <a href="/catalogue/search">Search artists, albums, and tracks</a>
+            </div>
+        </div>
+    </section>
+    <section class="col-md-6 col-xl-3">
+        <div class="card h-100">
+            <div class="card-body">
+                <h2 class="h4">Discover playlists</h2>
+                <p>Browse public playlists and find a new collection of tracks.</p>
+                <a href="/playlists">Explore playlists</a>
+            </div>
+        </div>
+    </section>
+    <section class="col-md-6 col-xl-3">
+        <div class="card h-100">
+            <div class="card-body">
+                <h2 class="h4">Join the community</h2>
+                <p>Follow listeners, rate tracks, and share your perspective.</p>
+                <a href="/feed">View the activity feed</a>
+            </div>
+        </div>
+    </section>
+    <section class="col-md-6 col-xl-3">
+        <div class="card h-100">
+            <div class="card-body">
+                <h2 class="h4">Ratings and trends</h2>
+                <p>See the community's highest-rated, most-reviewed, and currently trending tracks.</p>
+                <a href="/rankings">Explore track rankings</a>
+            </div>
+        </div>
+    </section>
+</div>

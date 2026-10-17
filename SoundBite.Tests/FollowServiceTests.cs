@@ -161,6 +161,9 @@ public class FollowServiceTests
     {
         await Task.WhenAll(Enumerable.Range(0, 16).Select(_ => Task.Run(() => service.FollowAsync("bob"))));
         Assert.That((await service.GetSummaryAsync("bob")).Followers, Is.EqualTo(1));
+        await using (var db = factory.CreateDbContext())
+            Assert.That(await db.Notifications.CountAsync(notification =>
+                notification.RecipientUserId == "bob" && notification.Type == NotificationType.Follow), Is.EqualTo(1));
         await Task.WhenAll(Enumerable.Range(0, 16).Select(_ => Task.Run(() => service.UnfollowAsync("bob"))));
         Assert.That((await service.GetSummaryAsync("bob")).Followers, Is.Zero);
         await Task.WhenAll(Enumerable.Range(0, 16).Select(i => Task.Run(() => i % 2 == 0 ? service.FollowAsync("bob") : service.UnfollowAsync("bob"))));

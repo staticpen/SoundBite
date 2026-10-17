@@ -1,0 +1,87 @@
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using SoundBite.Models
+@using SoundBite.Services
+@inject SocialInteractionService Social
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ILogger<LikeButton> Logger
+
+@if (loading)
+{
+    <span class="text-muted small" role="status">Loading likes...</span>
+}
+else if (failed)
+{
+    <span class="text-danger small" role="alert">Likes unavailable</span>
+}
+else
+{
+    @if (signedIn)
+    {
+        <button type="button" class="btn btn-sm btn-outline-primary" @onclick="ToggleAsync" disabled="@busy">
+            @(summary!.IsLiked ? "Unlike" : "Like") (@summary.Count)
+        </button>
+    }
+    else
+    {
+        <span class="small">@summary!.Count likes</span>
+        <a class="small ms-2" href="/login">Log in to like</a>
+    }
+}
+
+@code {
+    [Parameter, EditorRequired] public LikeTargetType TargetType { get; set; }
+    [Parameter, EditorRequired] public int TargetId { get; set; }
+
+    private LikeSummary? summary;
+    private bool loading = true;
+    private bool failed;
+    private bool signedIn;
+    private bool busy;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        loading = true;
+        failed = false;
+        try
+        {
+            var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+            signedIn = user.Identity?.IsAuthenticated == true &&
+                !string.IsNullOrWhiteSpace(user.FindFirstValue(ClaimTypes.NameIdentifier));
+            summary = await Social.GetLikeSummaryAsync(TargetType, TargetId);
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Unable to load likes for {TargetType} {TargetId}", TargetType, TargetId);
+            failed = true;
+            summary = null;
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task ToggleAsync()
+    {
+        if (summary is null || busy) return;
+        busy = true;
+        try
+        {
+            if (summary.IsLiked)
+                await Social.UnlikeAsync(TargetType, TargetId);
+            else
+                await Social.LikeAsync(TargetType, TargetId);
+            summary = await Social.GetLikeSummaryAsync(TargetType, TargetId);
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Unable to change like for {TargetType} {TargetId}", TargetType, TargetId);
+            failed = true;
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+}

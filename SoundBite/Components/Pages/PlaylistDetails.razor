@@ -51,6 +51,9 @@ else
             </div>
             <a class="btn btn-outline-secondary" href="/playlists">All playlists</a>
         </div>
+        <div class="mb-3" aria-label="Playlist likes">
+            <LikeButton TargetType="LikeTargetType.Playlist" TargetId="@playlist.Id" />
+        </div>
 
         @if (isOwner)
         {

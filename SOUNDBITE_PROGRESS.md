@@ -22,9 +22,9 @@
 
 - **Overall status:** In progress
 - **Current development phase:** Building working catalogue and social product features
-- **Current focus:** .NET 9 compatibility implemented on `Net9Compatibility`; Windows Visual Studio 2022 verification outstanding
-- **Last verified:** 2026-10-16
-- **Current blocker:** Likes, comments, activity feed and external catalogue integration remain incomplete
+- **Current focus:** Latest main integrated into .NET 9 compatibility branch; resolved merge awaits authorization to commit/push
+- **Last verified:** 2026-10-17
+- **Current blocker:** Windows VS2022 and manual exhausted-retry/reload checks remain outstanding. Live Spotify API access requires approved credentials. The protected application database remains unchanged and unmigrated.
 
 ## 3. Feature Implementation Tracker
 
@@ -32,21 +32,36 @@
 |---|---|---|
 | Authentication | Implemented — verified | Website registration, username/email login, logout, profile editing, cookie persistence and authorization checks pass using isolated migrated databases; see latest work. |
 | User profiles | Implemented — verified | `ApplicationUser` stores a display name and bio; the account page can edit them, and `/users/{username}` displays the public profile without exposing account email. The migration and persistence round-trip are tested. |
-| Music catalogue | In progress | `Artist`, `Album`, and `Track` models exist with validation and EF relationship wiring in `ApplicationDbContext.cs`. Local `CatalogueService`, catalogue search UI and track details are implemented and regression verified; external metadata integration remains outstanding. |
-| Spotify integration | Not started | `Services/SpotifyCatalogService.cs` is empty and there is no client configuration or API integration yet. |
+| Music catalogue | In progress — discovery and import workflow verified | Local search links to track, artist, and album details. The catalogue search page also offers Spotify track search and imports selected tracks with their album and artists. |
+| Spotify integration | Partially implemented — service and persistence verified | Client-credentials authentication, token caching, external track search, and idempotent local import are implemented. Live Spotify access requires `Spotify__ClientId` and `Spotify__ClientSecret` environment variables and has not been verified. |
 | Track ratings and reviews | Implemented — verified | Reviews persist through EF Core; the service supports create/read/update, the database enforces one review per user per track and valid 1–5 ratings, and track details support public review reading plus authenticated submission/editing. |
 | Album-track many-to-many relationship | Implemented — unverified | `ApplicationDbContext` maps `ArtistAlbums` and `ArtistTracks` and `Track.AlbumId` with a nullable optional foreign key. This matches the intended design, but the schema has not been validated via a migration review beyond the code. |
 | Playlist management | Implemented — verified | Users can create, edit, and delete playlists; add/remove tracks; and browse public playlist listings/details. Owner checks are enforced in the service. |
 | Playlist duplicate prevention | Implemented — verified | Service validation and a unique database index on playlist and track prevent duplicates. Playlist item positions preserve order. |
-| Following and followers | Implemented — verified | Authenticated idempotent follow/unfollow, public counts and expandable 10-user pages; database constraints, concurrent requests, account deletion and browser flows verified. |
-| Likes and comments | Not started | `Models/Like.cs` and `Models/Comment.cs` are empty. No authorization or interaction logic is implemented. |
-| Activity feed | Not started | `Models/ActivityItem.cs`, `Services/FeedService.cs`, and social service classes are still empty or incomplete. |
-| Rankings and trends | Planned | `Services/RankingService.cs`, `Services/TrendService.cs`, `Strategies/PopularityRankingStrategy.cs`, and `Strategies/RatingRankingStrategy.cs` exist, but no implemented ranking logic is visible in the current code. |
-| Administrative user management | Not started | `Services/AdminService.cs` is empty and there is no admin UI or authorization pattern beyond Identity setup. |
-| Automated tests | Passed — verified | 177 NUnit tests passed on .NET 9, 0 failed/skipped (2026-10-16), including all 175 original cases and two direct-route 404 regressions. |
-| Git and repository hygiene | Verified | `Net9Compatibility` starts at fetched `origin/main` (`ac92cbe`); compatibility changes reviewed for the authorized commit and PR. Existing database unchanged. |
+| Following and followers | Implemented — verified | Authenticated idempotent follow/unfollow, public counts and expandable 10-user pages; database constraints, concurrent requests, account deletion and browser flows verified. Merged into `main` at `ac92cbe`. |
+| Likes and comments | Implemented — verified | Signed-in users can idempotently like reviews, tracks, public playlists, and comments; private playlist likes are owner-only. Users can add/edit/delete their own review comments and reply one level deep to top-level comments. Replies are grouped under parents, cannot be nested further, and are preserved as top-level comments if their parent is deleted. |
+| Activity feed | Implemented — verified | `/feed` globally orders and paginates reviews, comments/replies, and likes by followed users and the signed-in user. Reply entries identify the parent author. Like activity covers reviews, comments, tracks, and public playlists; private-playlist likes are excluded. |
+| Notifications | Implemented — verified | Persistent recipient-scoped notifications are created for follows, review comments, replies, and likes on reviews, comments, and playlists. Self-notifications and duplicate follow/like events are suppressed. `/notifications` lists the latest 30, supports individual and bulk read marking, and the signed-in navigation displays an unread count. Track likes have no content owner to notify. |
+| Rankings and trends | Implemented — verified | `/rankings` shows top-rated tracks (minimum two reviews), most-reviewed tracks overall, and tracks with the most reviews in the last seven days. Metrics use SoundBite review data only, with stable tie-break ordering. |
+| Administrative user management | Implemented — verified | `/admin/users` supports user search/paging, account lock/unlock, and admin-role grants/revocation. Every service operation checks live role membership and lockout state server-side. Initial roles are bootstrapped from configured user IDs. |
+| Automated tests | Passed — verified | Combined .NET 9 suite passed: 223/223, including notification creation/deduplication, recipient privacy, read-state updates, authentication, and two compatibility 404 cases. |
+| Git and repository hygiene | In progress | `Net9Compatibility` has a resolved, uncommitted merge of `origin/main` at `e3e1cad`; no push performed. |
 
 ## 4. Latest Completed Work
+
+### 2026-10-17 — Latest main integrated into PR #16; merge not committed
+
+- Started clean on `Net9Compatibility` at `505af740ca4f80ae4dcb85d456a697b948b85322`; fetched `origin/main` at `e3e1cad33b2c86036738e9a27d6e71e6dc1402f1`. Prepared a normal merge with `--no-commit --no-ff`, without rebasing or force-pushing. HEAD remains unchanged; MERGE_HEAD records the incoming main commit.
+- Resolved the sole textual conflict in this progress document by retaining main's feature tracker and all feature records, retaining the compatibility implementation record, and updating current status and verification. `Program.cs` and authentication tests merged automatically.
+- Protected database handling: incoming main changes the tracked `SoundBite/soundbite.db`. Ran merge checkout operations in a temporary working directory, restored only that database's index entry from HEAD, and copied merged source files into the real working tree. The actual application database was never overwritten, restored, or migrated; its bytes and staged entry match pre-merge HEAD. This intentionally excludes main's binary database update while preserving all model/migration code.
+- Preserved social likes/comments/replies/feed, notifications, rankings/trends, administrator management, artist/album discovery, and Spotify integration. All new service/model/migration source matches main exactly. `Program.cs` retains every main registration, Identity roles and administrator bootstrap; its only difference from main is the .NET 9 status-code overload. Authentication tests retain main's new cases plus the two 404 cases. SDK 9.0.319, Microsoft/EF 9.0.21, solution, tool manifest and Blazor compatibility fixes remain intact.
+- Reviewed notification recipient filtering, current-user resolution, read-state ExecuteUpdateAsync, event subscription disposal, and transactional event creation against EF 9. Admin bootstrap remains opt-in via configured IDs. Existing HTTP authentication/authorization and notification tests pass; no tests were removed or weakened and no additional compatibility code workaround was needed.
+- `dotnet build SoundBite.sln -c Release`: passed, 0 errors; 3 existing CS1998 warnings in AdminServiceTests:136, PlaylistServiceTests:87 and ReviewServiceTests:88.
+- `dotnet test SoundBite.sln -c Release --no-build`: **223 passed, 0 failed, 0 skipped** (main's 221 plus 2 compatibility cases). TRX/logs: `/tmp/soundbite-net9-integration/`.
+- `dotnet publish SoundBite/SoundBite.csproj -c Release --no-build -o /tmp/soundbite-net9-integration/publish`: passed.
+- EF CLI 9.0.21 `migrations has-pending-model-changes` with disposable connection override: no pending changes. `database update --connection 'Data Source=/tmp/soundbite-net9-integration/ef-check.db'` applied all **11** migrations through `20261017013935_AddNotifications`. SQLite integrity check returned `ok`; foreign-key check returned no violations. The NUnit suite also exercises isolated migration/upgrade/rollback and data-persistence behavior. Historical migration files and the model snapshot are identical to main.
+- Protected application database SHA-256 remains `ead1d21ea950e99cd6548f23d0b83159ac69c24b2bd4cbbf2dcac8376159eeaf`. No browser testing or live Spotify calls performed in this integration session.
+- Ready for a merge commit after approval. Stop before committing/pushing; PR #16 remains unmerged. Windows VS2022, manual exhausted-retry/Retry/Reload, live Spotify and real-time notification delivery limitations remain as documented.
 
 ### 2026-10-16 — .NET 9 compatibility
 
@@ -61,6 +76,84 @@
 - **Protected state:** `SoundBite/soundbite.db` SHA-256 remains `ead1d21ea950e99cd6548f23d0b83159ac69c24b2bd4cbbf2dcac8376159eeaf`. Only disposable SQLite databases were migrated or written during verification. No data/model/service/migration source changes.
 - **Changed files:** `SoundBite/SoundBite.csproj`, `SoundBite.Tests/SoundBite.Tests.csproj`, `SoundBite.Tests/AuthenticationUiTests.cs`, `SoundBite/Components/App.razor`, `SoundBite/Components/Routes.razor`, all three `ReconnectModal.razor`/`.css`/`.js` files, `SoundBite/Program.cs`, `SoundBite.sln`, `global.json`, `.config/dotnet-tools.json`, `SOUNDBITE_CONTEXT.md`, this progress file.
 - **Outstanding:** Ready for Windows Visual Studio 2022 17.14 testing, not yet Windows-verified. Install exact SDK 9.0.319 and ASP.NET workload; open solution, restore/build, run 177 tests in Test Explorer, F5 and publish against a disposable database. .NET 9 support ends 10 November 2026. Existing application DB remains unmigrated. Exhausted-retry/manual Retry/Reload browser checks remain outstanding. Commit, branch push and PR creation authorized on 2026-10-17; do not merge.
+
+### 2026-10-17 — Persistent in-app notifications
+
+- **Task completed:** Added durable notifications for follows, review comments, comment replies, and likes on reviews, comments, and playlists. Added a private notifications page, unread navigation count, and individual/bulk read actions.
+- **Files or components changed:** `Models/Notification.cs`, `Data/ApplicationDbContext.cs`, `Services/NotificationService.cs`, `Services/FollowService.cs`, `Services/SocialInteractionService.cs`, `Components/Pages/Notifications.razor`, `Components/Layout/NavMenu.razor`, `Program.cs`, migration `20261017013935_AddNotifications` (designer and snapshot), `NotificationTests.cs`, `AuthenticationUiTests.cs`, `PageRouteTests.cs`, and this progress file.
+- **Important implementation decisions:** Follow and like writes plus their notifications are in one database transaction; only a newly inserted follow/like creates a notification. Comment notifications are saved with their comment. Self-notifications are suppressed. Track likes do not notify because tracks have no user owner; private playlist likes are only possible for the owner and therefore do not generate self-notifications. Mark-read queries are scoped to the authenticated recipient.
+- **Verification performed and its result:** Focused notification, authentication UI, and route tests passed 25/25. Full NUnit suite passed 221/221. EF reports no pending model changes after migration generation; CRLF-aware `git diff --check` passed.
+- **Remaining limitations:** The migration has been exercised by isolated test databases but not applied to the configured application database. New notifications from other users do not update an already-open circuit in real time; the unread count refreshes after local mark-read actions and on page load.
+
+### 2026-10-17 — Activity feed replies and likes
+
+- **Task completed:** Added reply context and like activities to the paginated feed.
+- **Files or components changed:** `Models/ActivityItem.cs`, `Services/FeedService.cs`, `Components/Pages/ActivityFeed.razor`, `FeedServiceTests.cs`, `ActivityFeedUiTests.cs`, and this progress file.
+- **Important implementation decisions:** Reviews, comments, and likes are combined before ordering and paging, so likes cannot bypass the feed's page limit. The feed includes review, comment, track, and public-playlist likes. Likes on private playlists are omitted to avoid exposing private activity. Comment replies identify the parent author; liked replies include that context too.
+- **Verification performed and its result:** Focused feed tests passed 6/6. Full NUnit suite passed 216/216. Mixed-page tests confirm no duplicate/omitted IDs across pages; private-playlist like visibility is covered.
+- **Remaining limitations:** Activity is fetched as a current snapshot. Likes on private playlists intentionally do not appear in the feed.
+
+### 2026-10-17 — Threaded review comments
+
+- **Task completed:** Added one-level replies to review comments, nested display under parent comments on track details, and a database migration.
+- **Files or components changed:** `Models/Comment.cs`, `Data/ApplicationDbContext.cs`, `Services/SocialInteractionService.cs`, `Components/Pages/ReviewSocialPanel.razor`, migration `20261017012957_ThreadedReviewComments` (including designer and model snapshot), `SocialInteractionTests.cs`, `TrackDetailsTests.cs`, and this progress file.
+- **Important implementation decisions:** Replies can target only top-level comments, keeping threads one level deep. Parent comments can be deleted without losing replies: direct replies are promoted to top-level comments, and the self-reference uses `SET NULL`. Actor identity remains resolved server-side; comments can only be edited/deleted by their owners.
+- **Verification performed and its result:** Focused social interaction and track detail tests passed 29/29. Full NUnit suite passed 215/215. `dotnet ef migrations has-pending-model-changes` reported no unscaffolded model changes; CRLF-aware `git diff --check` passed.
+- **Remaining limitations:** The migration has only been exercised in isolated test databases; it has not been applied to the configured application database.
+
+### 2026-10-17 — Protected administrator user management
+
+- **Task completed:** Added an admin user directory with search and paging, account lock/unlock, and administrator role management. Added configured administrator bootstrap and hid the admin navigation link from non-admin users.
+- **Files or components changed:** `Services/AdminService.cs`, `Services/AdminRoleBootstrapper.cs`, `Program.cs`, `Components/Pages/AdminUsers.razor`, `Components/Layout/NavMenu.razor`, `AdminServiceTests.cs`, `AuthenticationUiTests.cs`, and `PageRouteTests.cs`.
+- **Important implementation decisions:** Initial admins are configured using `Admin__UserIds__0` (and additional indexed IDs) after the account exists and database migrations are applied. Every admin service operation verifies live role membership and lockout status from the database rather than relying only on potentially stale role claims. Admins cannot lock or demote themselves, and the last admin cannot be demoted. No user deletion was added.
+- **Verification performed and its result:** Focused admin provisioning, service authorization, anonymous-page, and route tests passed 15/15. Full NUnit suite passed 212/212. CRLF-aware `git diff --check` passed.
+- **Remaining limitations:** Bootstrap behavior is tested through the bootstrapper but has not been exercised by starting the deployed app with production configuration. No schema change was needed because Identity role tables already exist.
+
+### 2026-10-17 — Review-based rankings and trends
+
+- **Task completed:** Implemented track rankings for highest average rating and all-time review count, plus a seven-day trending list. Added a discoverable `/rankings` page linked from navigation and the home page.
+- **Files or components changed:** `Interfaces/IRankingStrategy.cs`, `Strategies/RatingRankingStrategy.cs`, `Strategies/PopularityRankingStrategy.cs`, `Services/RankingService.cs`, `Services/TrendService.cs`, `Models/TrackRankingEntry.cs`, `Models/TrendingTrackEntry.cs`, `Components/Pages/Rankings.razor`, `Program.cs`, `Components/Layout/NavMenu.razor`, `Components/Pages/Home.razor`, `RankingAndTrendServiceTests.cs`, `PageRouteTests.cs`, and `CatalogueIntegrationTests.cs`.
+- **Important implementation decisions:** Rankings use local SoundBite reviews only, not Spotify metrics. Top-rated requires at least two reviews to reduce single-review skew; popularity counts reviews; trending counts reviews in the last seven days. Sorting is deterministic and limits/windows are validated. No database changes were needed.
+- **Verification performed and its result:** Focused ranking/trend, route, and catalogue tests passed 20/20. Full NUnit suite passed 205/205. CRLF-aware `git diff --check` passed.
+- **Remaining limitations:** Rankings cover tracks only because ratings/reviews are track-scoped. No authenticated browser test was performed. Changes are not committed.
+
+### 2026-10-17 — Spotify track search and catalogue import
+
+- **Task completed:** Added a Spotify-backed track search and an import action that adds the selected track plus its album and artists to the local catalogue.
+- **Files or components changed:** `Configuration/SpotifyOptions.cs`, `Interfaces/ISpotifyCatalog.cs`, `Models/SpotifyTrackMatch.cs`, `Services/SpotifyAccessTokenProvider.cs`, `Services/SpotifyCatalogService.cs`, `Program.cs`, `Components/Pages/CatalogueSearch.razor`, `SpotifyCatalogServiceTests.cs`, and `CatalogueIntegrationTests.cs`.
+- **Important implementation decisions:** Uses Spotify's client-credentials flow with cached access tokens; credentials come from `Spotify__ClientId` and `Spotify__ClientSecret` environment variables, never checked-in configuration. Import is restricted to signed-in users and matches imported records by Spotify ID to avoid duplicates. Spotify results are attributed and link back to Spotify; artwork is not fetched or stored.
+- **Verification performed and its result:** Focused Spotify/catalogue/route tests passed 16/16, and the full NUnit suite passed 199/199 after the final changes. Mock HTTP tests verify token use/caching, search mapping, idempotent import, missing-credential errors, and rejection of anonymous imports. CRLF-aware `git diff --check` passed.
+- **Remaining limitations:** Live API credentials and current Spotify developer access have not been tested; no artwork is imported, and API terms, branding, and metadata use requirements must continue to be observed. Changes are not committed.
+
+### 2026-10-17 — Artist/album catalogue details and discovery landing page
+
+- **Task completed:** Made artist and album search results navigable, added artist and album detail pages, and replaced the scaffold home page with entry points into catalogue search, playlists, and the activity feed.
+- **Files or components changed:** `Components/Pages/CatalogueSearch.razor`, `Components/Pages/ArtistDetails.razor`, `Components/Pages/AlbumDetails.razor`, `Components/Pages/Home.razor`, `CatalogueIntegrationTests.cs`, and `PageRouteTests.cs`.
+- **Important implementation decisions:** Reused the existing `IMusicCatalog` and EF-backed artist/album queries; no schema or migration changes were needed. Detail pages handle invalid IDs, missing records, and load failures, and link available related entities and tracks.
+- **Verification performed and its result:** Focused catalogue and route tests passed 13/13. Full NUnit suite passed 196/196. `git diff --check` passed after normalizing the Home page line endings.
+- **Remaining limitations:** Catalogue content is local only; external music metadata integration, catalogue editing, and broader discovery such as rankings remain future work. Changes are not committed.
+
+### 2026-10-17 — Like support extended to all planned targets
+
+- **Task completed:** Extended likes from reviews to tracks, playlists, and comments, and added reusable like controls to track details, playlist details, and each review comment.
+- **Files or components changed:** `Models/Like.cs`, `Data/ApplicationDbContext.cs`, `Services/SocialInteractionService.cs`, `Components/Pages/LikeButton.razor`, `ReviewSocialPanel.razor`, `TrackDetails.razor`, `PlaylistDetails.razor`, migration `20261017005729_ExpandLikeTargets`, model snapshot, and `SocialInteractionTests.cs`.
+- **Important implementation decisions:** Likes use nullable foreign keys for each supported target and a database check requiring exactly one target, with filtered unique indexes per target/user. The migration preserves existing review likes. Non-owner actors cannot like private playlists; private playlist counts are also hidden from non-owners. Like actions resolve the actor from server authentication and remain idempotent.
+- **Verification performed and its result:** Full suite passed: 192/192. Focused like-target, migration-preservation, and track integration tests passed: 29/29; the 11 focused social persistence tests also passed. EF reports no pending model changes, and the CRLF-aware diff whitespace check passed.
+- **Remaining limitations:** Comments and feed entries still attach to reviews; likes themselves are not shown as feed events. Threaded replies remain absent. Configured app database migration and authenticated browser testing were not performed.
+
+### 2026-10-17 — Review interactions and activity feed implemented
+
+- **Task completed:** Added review likes, review comments with owner-only edit/delete, a paginated follow-based feed, track-detail interaction controls, and a feed page.
+- **Files or components changed:** `Models/Like.cs`, `Models/Comment.cs`, `Models/ActivityItem.cs`, `Data/ApplicationDbContext.cs`, `Services/SocialInteractionService.cs`, `Services/FeedService.cs`, `Components/Pages/ReviewSocialPanel.razor`, `Components/Pages/ActivityFeed.razor`, `TrackDetails.razor`, `NavMenu.razor`, `Program.cs`, migration `20261017002358_AddReviewSocialInteractions`, and social/feed/UI tests.
+- **Important implementation decisions:** Like/comment support is initially attached to reviews; like mutations resolve the actor from server authentication and are idempotent under concurrency. Comments are flat (no replies yet), limited to 2,000 non-blank characters, and only their author can edit/delete them. The feed queries the signed-in user and followed users' reviews/comments directly rather than duplicating them in a separate event table.
+- **Verification performed and its result:** Full NUnit suite passed: 187/187. Focused social/feed, rendered UI, track detail, and route tests passed: 31/31. `dotnet ef migrations has-pending-model-changes` reported no model changes after migration generation.
+- **Remaining limitations:** Broader like targets/replies are not implemented. The migration was exercised by tests against isolated SQLite databases; it was not applied to the configured application database. Browser smoke test confirmed the anonymous `/feed` prompt/navigation; authenticated like/comment interaction was not manually exercised.
+
+### 2026-10-17 — Main branch status check
+
+- Confirmed `main` is clean and synchronized with `origin/main` at `ac92cbe`, after merge of follow/unfollow.
+- Re-ran the complete NUnit suite: 175 passed, 0 failed, 0 skipped.
+- Compared tracker with source: basic persisted catalogue search and track details exist; artist/album detail navigation and Spotify integration do not. Corrected the stale catalogue status below.
 
 ### 2026-10-16 — Follow/unfollow pre-commit review
 
@@ -153,13 +246,14 @@
 
 ## 5. Current Implementation Details
 
-- The application entry point in `SoundBite/Program.cs` configures a Blazor Web App with `AddRazorComponents().AddInteractiveServerComponents()`, SQLite via `UseSqlite(...)`, and ASP.NET Core Identity via `AddIdentityCore<ApplicationUser>()` and `AddEntityFrameworkStores<ApplicationDbContext>()`.
+- The application entry point in `SoundBite/Program.cs` configures a Blazor Web App with `AddRazorComponents().AddInteractiveServerComponents()`, SQLite via `UseSqlite(...)`, ASP.NET Core Identity, and the ranking/trend services and strategies.
 - `SoundBite/Data/ApplicationDbContext.cs` defines the main EF entities: `Artists`, `Albums`, and `Tracks`, and uses many-to-many joins to model `ArtistAlbums` and `ArtistTracks`.
+- `Services/CatalogueService.cs` implements local database search/reads; `/catalogue/search` offers local and Spotify track search. Signed-in users can import Spotify matches; `/tracks/{id}`, `/artists/{id}`, and `/albums/{id}` show local catalogue details. Catalogue editing beyond Spotify track import is not implemented.
 - `Track` has an optional `AlbumId`/`Album` relationship and uses validation attributes for required `Title` and optional non-whitespace `SpotifyId`.
 - `Album`, `Artist`, and `Track` models initialize empty navigation collections and enforce basic validation requirements.
 - `Endpoints/AccountEndpoints.cs` exposes registration, login, logout, and current-user endpoints.
 - `Data/ApplicationUser.cs` includes `DisplayName` and optional `Bio`. The account page edits these fields; `/users/{username}` displays a public profile without exposing email.
-- Remaining model and service placeholders include `Like`, `Comment`, `ActivityItem`, `SpotifyCatalogService`, `AdminService`, `FeedService`, `SocialInteractionService`, `UserService`, and the ranking/trend services. Follow persistence and `FollowService` are implemented.
+- Remaining model and service placeholders include `UserService`. Rankings and trends use SoundBite review data; Spotify access is implemented but requires locally configured credentials. Likes support reviews, tracks, playlists, and comments; comments/feed entries remain review-scoped.
 - The NUnit test project is active and passes, and the app builds and starts successfully.
 - `20261015074342_AddUserProfiles` migrates the display-name and bio fields; the playlist migration adds playlists and ordered track items.
 
@@ -186,47 +280,42 @@
 |---|---|---|---|---|
 | Registration form cannot reach endpoint | Resolved | Replaced server-side loopback HTTP call with static SSR form processing | Verified in browser and HTTP tests | Closed |
 | Interactive login cannot set cookie | Resolved | Cookie operations now execute during HTTP form requests before rendering | Verified registration, login and logout | Closed |
-| Remaining social features | Likes, comments and activity feed are incomplete | Their services/models remain placeholders; follows are implemented | Implement a basic activity feed and remaining interactions | Open |
-| Remaining social persistence | Likes, comments and feed persistence are missing | Empty `Like.cs`, `Comment.cs`, `ActivityItem.cs` and related services | Design remaining social entities | Open |
-| No Spotify client is configured | Music catalogue enrichment is not connected to external metadata | `SpotifyCatalogService.cs` is empty and no API client configuration exists | Add a service abstraction and integrate Spotify metadata access | Open |
+| Remaining social interaction scope | Notifications are not pushed to already-open circuits; private-playlist likes are excluded | Notification counts are loaded on page load and refreshed on local read actions; feed omits private playlist activity | Consider real-time notification delivery after validating core features | Open |
+| Spotify access has not been exercised against a live account | External search/import cannot be confirmed without valid API credentials | Spotify client credentials are read from environment variables; automated tests use a mock HTTP handler | Configure approved credentials locally and smoke-test search/import while respecting Spotify's policies | Open |
+| Catalogue data and discovery remain limited | Spotify track search/import, local catalogue details, and review-based track rankings/trends are implemented | No artwork import or general catalogue editing; rankings are track-only because reviews apply to tracks | Consider general catalogue management after protected administration is implemented | Open |
+| Initial administrator needs deployment configuration | The first admin must exist before the app can assign its admin role | Startup reads indexed `Admin:UserIds` settings and fails explicitly if an ID is unknown | Register the first user, configure the ID, apply migrations, then restart; keep settings in trusted environment configuration | Open |
 
 ## 8. Verification Record
 
 | Check | Result | Notes |
 |---|---|---|
-| Application build | Passed | Release solution rebuild passed on SDK 9.0.319 with 0 errors and 2 existing test warnings; Release publish passed. |
-| Automated tests | Passed — verified | 177 NUnit tests passed on .NET 9, 0 failed/skipped (2026-10-16), including all 175 original cases and two direct-route 404 regressions. |
-| Application startup | Passed | Published .NET 9 output launched in Production on localhost:5199/5200 with an explicit disposable SQLite connection. |
-| Relevant feature behaviour | Passed | Website authentication, profile editing, refresh/navigation and authenticated/anonymous review/playlist access verified; see latest work. |
-| Database migrations | Passed | EF 9 fresh migration, data-preserving upgrade, rollback/re-upgrade, constraints and model/snapshot checks passed on disposable SQLite databases; historical files untouched. |
+| Application build | Passed | Combined Release build/publish passed on SDK 9.0.319; 0 errors and 3 existing test warnings. |
+| Automated tests | Passed — verified | 223 NUnit tests passed on .NET 9, 0 failed/skipped (2026-10-17). |
+| Application startup | Previously passed; combined browser startup not repeated | Command: `dotnet run --project SoundBite --urls http://localhost:5080` → app reported `Now listening on: http://localhost:5080` and `Application started.` |
+| Relevant feature behaviour | Passed | Authentication/profile/review/playlist/follow flows were previously verified; rendered tests cover review interactions, feed, and track likes. |
+| Database migrations | Passed | Existing migrations, `20261017012957_ThreadedReviewComments`, and `20261017013935_AddNotifications` are exercised by isolated SQLite tests; EF reports no pending model changes. The configured app database is not migrated. |
 
 ## 9. Git Status
 
-- **Active branch:** `Net9Compatibility`, created from freshly fetched `origin/main` at `ac92cbe056983dba7ba8226455d9b2b71c964018`.
-- **Initial checkout:** Clean on `FollowUnfollow`; no unrelated changes, stashing or cleanup required. Ignored files were preserved.
-- **Current work:** Compatibility changes reviewed for the authorized commit, branch push and PR on 2026-10-17. Commit identity and publication status are recorded in Git/GitHub. Merge is not authorized.
-- **Authorized commit title:** `Add .NET 9 and Visual Studio 2022 compatibility`.
-- **Suggested description:** Retarget app/tests and pin SDK/EF tooling, adapt Blazor routing/assets/reconnection, preserve migrations and features, add 404 regressions and record validation.
+- **Active branch:** `Net9Compatibility`, HEAD `505af74` (already published in PR #16).
+- **Merge in progress:** `origin/main` at `e3e1cad`; conflicts resolved and staged for review. No merge commit or push performed; no rebase or force-push.
+- **Database:** Pre-merge database retained in working tree and index; incoming main's binary DB change intentionally excluded.
+- **Latest verification:** Release build/publish, 223 NUnit tests and disposable EF migration/model/integrity checks passed. No compatibility blocker found.
 
 ## 10. Next Recommended Tasks
 
-1. **Task:** Implement a basic activity feed and remaining social interactions.
-   - **Reason:** The application’s core differentiation is social discovery, and the current models/services are still empty.
-   - **Dependencies:** Build on the verified follow model; finalize like, comment and activity schemas.
-   - **Acceptance criteria:** Users can follow others, like content, comment, and see feed activity without duplicate or invalid entries.
-
-2. **Task:** Build the Spotify metadata abstraction and catalogue service.
-   - **Reason:** The app requires external catalogue data and currently has no integration point.
-   - **Dependencies:** Decide on a client configuration and service contract before wiring metadata retrieval.
-   - **Acceptance criteria:** Metadata can be fetched and mapped into `Artist`, `Album`, and `Track` models without coupling the UI directly to Spotify APIs.
+1. **Task:** Add real-time delivery for unread notifications.
+   - **Reason:** The current unread count is accurate on page load and after local read actions, but notifications from other users do not appear in already-open circuits.
+   - **Dependencies:** Use the existing Interactive Server model and ensure per-user authorization before pushing events; keep database records as the durable source of truth.
+   - **Acceptance criteria:** Notification events update only the recipient's signed-in circuit, reconnects recover from persisted notification state, and cross-user delivery is covered by tests.
 
 ## 11. Handover for the Next Chat Session
 
-- Commit, branch push and PR creation are authorized for `Net9Compatibility`; do not merge. Windows VS2022 and exhausted-retry/manual Retry/Reload checks remain outstanding.
-- Open `SoundBite.sln` on Windows in Visual Studio 2022 17.14 with SDK 9.0.319 and the ASP.NET workload. Restore/build, run all 177 tests in Test Explorer, launch with F5 and verify publish. These Windows checks have not run on this macOS host.
-- Use a disposable SQLite connection override for Windows testing. The existing application database remains unchanged and unmigrated; database deployment is a separately authorized step.
-- .NET 9 support ends 10 November 2026, after the submission deadline of 19 October 2026 at 11:59 pm Sydney time.
-- Likes/comments/feed/Spotify integration and profile activity remain independent future work.
+- Review the resolved merge on `Net9Compatibility` for PR #16. All incoming feature implementations and migrations are preserved; the application database is unchanged. Stop before committing or pushing until explicitly authorized. Do not merge PR #16 into main.
+- Combined .NET 9 Release build/publish and 223/223 tests pass. EF 9 applies all 11 migrations on a disposable database with no pending model changes or integrity violations.
+- Windows Visual Studio 2022 17.14 with exact SDK 9.0.319 still needs solution-load, Test Explorer, F5 and publish checks. Manual exhausted-retry/Retry/Reload browser checks remain outstanding; previous automatic reconnect checks are historical, not rerun on this combined state.
+- Live Spotify connectivity remains unverified. Initial admin provisioning uses trusted `Admin__UserIds__0` after registration/migration. Notifications are persistent and recipient-scoped, but real-time cross-circuit delivery remains future work.
+- The application database remains at its original pre-integration schema. Any deployment migration needs separate authorization; continue using disposable databases for verification.
 
 ## 12. Instructions for Updating This File
 

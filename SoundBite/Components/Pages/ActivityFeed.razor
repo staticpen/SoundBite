@@ -1,0 +1,168 @@
+@page "/feed"
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using SoundBite.Models
+@using SoundBite.Services
+@inject FeedService Feed
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ILogger<ActivityFeed> Logger
+
+<PageTitle>Activity Feed - SoundBite</PageTitle>
+
+<h1>Activity feed</h1>
+
+@if (loading)
+{
+    <p role="status">Loading your feed...</p>
+}
+else if (!signedIn)
+{
+    <p><a href="/login">Log in</a> to see recent reviews and comments from people you follow.</p>
+}
+else if (loadFailed)
+{
+    <div class="alert alert-danger" role="alert">The activity feed couldn't be loaded. Please try again later.</div>
+}
+else if (items.Count == 0)
+{
+    <p class="text-muted">No recent activity yet. Follow people and explore their reviews.</p>
+}
+else
+{
+    <div class="list-group">
+        @foreach (var item in items)
+        {
+            <article class="list-group-item" @key="(item.Type, item.Id)">
+                <p class="mb-1">
+                    <a href="@($"/users/{Uri.EscapeDataString(item.UserName)}")">@item.ActorName</a>
+                    @if (item.Type == ActivityType.Review)
+                    {
+                        <span> reviewed </span>
+                    }
+                    else if (item.Type == ActivityType.Comment)
+                    {
+                        @if (item.ParentCommentId is not null)
+                        {
+                            <span> replied to </span>
+                            <a href="@($"/users/{Uri.EscapeDataString(item.ParentUserName ?? string.Empty)}")">@item.ParentActorName</a>
+                            <span> on a review of </span>
+                        }
+                        else
+                        {
+                            <span> commented on a review of </span>
+                        }
+                    }
+                    else if (item.TargetType == LikeTargetType.Track)
+                    {
+                        <span> liked the track </span>
+                    }
+                    else if (item.TargetType == LikeTargetType.Playlist)
+                    {
+                        <span> liked a public playlist by </span>
+                        <a href="@($"/users/{Uri.EscapeDataString(item.TargetUserName ?? string.Empty)}")">@item.TargetActorName</a>
+                        <span>: </span>
+                        <a href="@($"/playlists/{item.PlaylistId}")">@item.PlaylistName</a>
+                    }
+                    else
+                    {
+                        <span> liked a @(item.TargetType == LikeTargetType.Review ? "review" : "comment") by </span>
+                        <a href="@($"/users/{Uri.EscapeDataString(item.TargetUserName ?? string.Empty)}")">@item.TargetActorName</a>
+                        <span> on a review of </span>
+                    }
+                    @if (item.TrackId is int trackId && item.TrackTitle is not null)
+                    {
+                        <a href="@($"/tracks/{trackId}{(item.ReviewId is int reviewId ? $"#review-{reviewId}" : string.Empty)}")">@item.TrackTitle</a>
+                    }
+                    @if (item.Rating is int rating)
+                    {
+                        <span class="badge text-bg-warning ms-2">@rating / 5 stars</span>
+                    }
+                </p>
+                @if (item.Type == ActivityType.Like && item.TargetType == LikeTargetType.Comment && item.ParentCommentId is not null)
+                {
+                    <p class="small text-muted mb-1">The liked comment is a reply to @item.ParentActorName.</p>
+                }
+                @if (!string.IsNullOrWhiteSpace(item.Content))
+                {
+                    <p class="mb-1">@item.Content</p>
+                }
+                <time class="text-muted small" datetime="@item.CreatedAt.ToString("O")">
+                    @item.CreatedAt.ToLocalTime().ToString("g")
+                </time>
+            </article>
+        }
+    </div>
+    @if (hasNext)
+    {
+        <button type="button" class="btn btn-outline-primary mt-3" @onclick="LoadMoreAsync" disabled="@loadingMore">
+            @(loadingMore ? "Loading..." : "Load more")
+        </button>
+        @if (loadMoreFailed)
+        {
+            <p class="alert alert-danger mt-2" role="alert">More activity couldn't be loaded. Please try again.</p>
+        }
+    }
+}
+
+@code {
+    private readonly List<ActivityItem> items = [];
+    private int page;
+    private bool hasNext;
+    private bool loading = true;
+    private bool loadingMore;
+    private bool loadMoreFailed;
+    private bool signedIn;
+    private bool loadFailed;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+        signedIn = user.Identity?.IsAuthenticated == true &&
+            !string.IsNullOrWhiteSpace(user.FindFirstValue(ClaimTypes.NameIdentifier));
+        if (!signedIn)
+        {
+            loading = false;
+            return;
+        }
+
+        try
+        {
+            var result = await Feed.GetPageAsync();
+            items.AddRange(result.Items);
+            hasNext = result.HasNext;
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Unable to load activity feed");
+            loadFailed = true;
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task LoadMoreAsync()
+    {
+        if (loadingMore || !hasNext) return;
+        loadingMore = true;
+        loadMoreFailed = false;
+        try
+        {
+            var nextPage = page + 1;
+            var result = await Feed.GetPageAsync(nextPage);
+            items.AddRange(result.Items);
+            page = nextPage;
+            hasNext = result.HasNext;
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Unable to load activity feed page {Page}", page + 1);
+            loadMoreFailed = true;
+        }
+        finally
+        {
+            loadingMore = false;
+        }
+    }
+}
