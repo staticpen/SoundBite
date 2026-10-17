@@ -228,6 +228,7 @@ public class TrackDetailsTests
             .AddSingleton<IMusicCatalog>(catalog)
             .AddSingleton<IDbContextFactory<ApplicationDbContext>>(factory)
             .AddScoped<ReviewService>()
+            .AddSingleton<NotificationEventDispatcher>()
             .AddScoped<SocialInteractionService>()
             .AddSingleton<AuthenticationStateProvider>(
                 authStateProvider ?? new TestAuthenticationStateProvider(new ClaimsPrincipal(new ClaimsIdentity())));

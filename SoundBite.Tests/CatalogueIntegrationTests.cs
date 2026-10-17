@@ -167,6 +167,7 @@ public class CatalogueIntegrationTests
             .AddScoped<IMusicCatalog, CatalogueService>()
             .AddSingleton<ISpotifyCatalog, UnusedSpotifyCatalog>()
             .AddScoped<ReviewService>()
+            .AddSingleton<NotificationEventDispatcher>()
             .AddScoped<SocialInteractionService>()
             .AddSingleton<AuthenticationStateProvider>(new AnonymousAuthenticationStateProvider())
             .BuildServiceProvider();

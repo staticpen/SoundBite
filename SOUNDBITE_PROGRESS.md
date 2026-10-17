@@ -22,7 +22,7 @@
 
 - **Overall status:** In progress
 - **Current development phase:** Building working catalogue and social product features
-- **Current focus:** Persistent in-app notifications with unread/read state
+- **Current focus:** Completing the social experience with live notification updates
 - **Last verified:** 2026-10-17
 - **Current blocker:** Live Spotify API access is unverified until valid application credentials are configured. The threaded-comment migration has not been applied to the configured application database.
 
@@ -41,13 +41,21 @@
 | Following and followers | Implemented — verified | Authenticated idempotent follow/unfollow, public counts and expandable 10-user pages; database constraints, concurrent requests, account deletion and browser flows verified. Merged into `main` at `ac92cbe`. |
 | Likes and comments | Implemented — verified | Signed-in users can idempotently like reviews, tracks, public playlists, and comments; private playlist likes are owner-only. Users can add/edit/delete their own review comments and reply one level deep to top-level comments. Replies are grouped under parents, cannot be nested further, and are preserved as top-level comments if their parent is deleted. |
 | Activity feed | Implemented — verified | `/feed` globally orders and paginates reviews, comments/replies, and likes by followed users and the signed-in user. Reply entries identify the parent author. Like activity covers reviews, comments, tracks, and public playlists; private-playlist likes are excluded. |
-| Notifications | Implemented — verified | Persistent recipient-scoped notifications are created for follows, review comments, replies, and likes on reviews, comments, and playlists. Self-notifications and duplicate follow/like events are suppressed. `/notifications` lists the latest 30, supports individual and bulk read marking, and the signed-in navigation displays an unread count. Track likes have no content owner to notify. |
+| Notifications | Implemented — verified | Persistent recipient-scoped notifications are created for follows, review comments, replies, and likes on reviews, comments, and playlists. Self-notifications and duplicate follow/like events are suppressed. `/notifications` lists the latest 30, supports individual and bulk read marking, and the signed-in navigation displays an unread count. A single-instance event dispatcher updates active recipient circuits; navigation and circuit reconnection reload persisted state. Track likes have no content owner to notify. |
 | Rankings and trends | Implemented — verified | `/rankings` shows top-rated tracks (minimum two reviews), most-reviewed tracks overall, and tracks with the most reviews in the last seven days. Metrics use SoundBite review data only, with stable tie-break ordering. |
 | Administrative user management | Implemented — verified | `/admin/users` supports user search/paging, account lock/unlock, and admin-role grants/revocation. Every service operation checks live role membership and lockout state server-side. Initial roles are bootstrapped from configured user IDs. |
-| Automated tests | Passed — verified | Full NUnit suite passed: 221/221, including event creation/deduplication, recipient privacy, read-state updates, and authenticated notifications UI. |
-| Git and repository hygiene | In progress | Notification changes are uncommitted on `main` at `3870844`. |
+| Automated tests | Passed — verified | Full NUnit suite passed: 223/223, including event creation/deduplication, recipient-only live delivery, reconnect refresh, recipient privacy, read-state updates, and authenticated notifications UI. |
+| Git and repository hygiene | In progress | Live notification updates are uncommitted on `main` at `e3e1cad`. |
 
 ## 4. Latest Completed Work
+
+### 2026-10-17 — Live notification updates
+
+- **Task completed:** Added user-targeted live notification change dispatch to active Blazor circuits and refresh recovery on circuit reconnection/navigation.
+- **Files or components changed:** `Services/NotificationEventDispatcher.cs`, `Services/NotificationCircuitHandler.cs`, `Services/FollowService.cs`, `Services/SocialInteractionService.cs`, `Services/NotificationService.cs`, `Components/Layout/NavMenu.razor`, `Components/Pages/Notifications.razor`, `Program.cs`, `NotificationTests.cs`, `FollowServiceTests.cs`, `SocialInteractionTests.cs`, `TrackDetailsTests.cs`, `CatalogueIntegrationTests.cs`, and this progress file.
+- **Important implementation decisions:** A singleton in-process dispatcher publishes only to subscribers registered for the recipient's authenticated user ID. Components marshal updates to their Blazor dispatcher and dispose subscriptions with their lifetime. A scoped circuit handler re-reads persisted notification state after reconnection; navigation also refreshes the unread count. The existing database remains the source of truth.
+- **Verification performed and its result:** Application build passed with 0 warnings/errors. Focused notification/follow/social/authentication tests passed 50/50. Full NUnit suite passed 223/223. EF reports no pending model changes; CRLF-aware `git diff --check` passed.
+- **Remaining limitations:** In-process event delivery assumes one application instance; multiple instances would need a distributed backplane. No two-browser manual smoke test was performed. Database migrations `20261017012957_ThreadedReviewComments` and `20261017013935_AddNotifications` have not been applied to the configured application database.
 
 ### 2026-10-17 — Persistent in-app notifications
 
@@ -55,7 +63,7 @@
 - **Files or components changed:** `Models/Notification.cs`, `Data/ApplicationDbContext.cs`, `Services/NotificationService.cs`, `Services/FollowService.cs`, `Services/SocialInteractionService.cs`, `Components/Pages/Notifications.razor`, `Components/Layout/NavMenu.razor`, `Program.cs`, migration `20261017013935_AddNotifications` (designer and snapshot), `NotificationTests.cs`, `AuthenticationUiTests.cs`, `PageRouteTests.cs`, and this progress file.
 - **Important implementation decisions:** Follow and like writes plus their notifications are in one database transaction; only a newly inserted follow/like creates a notification. Comment notifications are saved with their comment. Self-notifications are suppressed. Track likes do not notify because tracks have no user owner; private playlist likes are only possible for the owner and therefore do not generate self-notifications. Mark-read queries are scoped to the authenticated recipient.
 - **Verification performed and its result:** Focused notification, authentication UI, and route tests passed 25/25. Full NUnit suite passed 221/221. EF reports no pending model changes after migration generation; CRLF-aware `git diff --check` passed.
-- **Remaining limitations:** The migration has been exercised by isolated test databases but not applied to the configured application database. New notifications from other users do not update an already-open circuit in real time; the unread count refreshes after local mark-read actions and on page load.
+- **Remaining limitations:** The migration has been exercised by isolated test databases but not applied to the configured application database. Live delivery is in-process and requires a single app instance.
 
 ### 2026-10-17 — Activity feed replies and likes
 
@@ -252,7 +260,7 @@
 |---|---|---|---|---|
 | Registration form cannot reach endpoint | Resolved | Replaced server-side loopback HTTP call with static SSR form processing | Verified in browser and HTTP tests | Closed |
 | Interactive login cannot set cookie | Resolved | Cookie operations now execute during HTTP form requests before rendering | Verified registration, login and logout | Closed |
-| Remaining social interaction scope | Notifications are not pushed to already-open circuits; private-playlist likes are excluded | Notification counts are loaded on page load and refreshed on local read actions; feed omits private playlist activity | Consider real-time notification delivery after validating core features | Open |
+| Remaining social interaction scope | Notifications are not backed by a distributed event bus; private-playlist likes are excluded from the activity feed | Live delivery uses an in-process dispatcher by design for the current single-instance app | Add a distributed backplane if deploying multiple instances; otherwise prioritize user notification preferences and paging | Open |
 | Spotify access has not been exercised against a live account | External search/import cannot be confirmed without valid API credentials | Spotify client credentials are read from environment variables; automated tests use a mock HTTP handler | Configure approved credentials locally and smoke-test search/import while respecting Spotify's policies | Open |
 | Catalogue data and discovery remain limited | Spotify track search/import, local catalogue details, and review-based track rankings/trends are implemented | No artwork import or general catalogue editing; rankings are track-only because reviews apply to tracks | Consider general catalogue management after protected administration is implemented | Open |
 | Initial administrator needs deployment configuration | The first admin must exist before the app can assign its admin role | Startup reads indexed `Admin:UserIds` settings and fails explicitly if an ID is unknown | Register the first user, configure the ID, apply migrations, then restart; keep settings in trusted environment configuration | Open |
@@ -262,29 +270,29 @@
 | Check | Result | Notes |
 |---|---|---|
 | Application build | Passed | `dotnet test SoundBite.Tests/SoundBite.Tests.csproj --nologo -v minimal` built the app and test project successfully. |
-| Automated tests | Passed — verified | 221 NUnit tests passed, 0 failed/skipped (2026-10-17). |
+| Automated tests | Passed — verified | 223 NUnit tests passed, 0 failed/skipped (2026-10-17). |
 | Application startup | Passed | Command: `dotnet run --project SoundBite --urls http://localhost:5080` → app reported `Now listening on: http://localhost:5080` and `Application started.` |
 | Relevant feature behaviour | Passed | Authentication/profile/review/playlist/follow flows were previously verified; rendered tests cover review interactions, feed, and track likes. |
 | Database migrations | Passed | Existing migrations, `20261017012957_ThreadedReviewComments`, and `20261017013935_AddNotifications` are exercised by isolated SQLite tests; EF reports no pending model changes. The configured app database is not migrated. |
 
 ## 9. Git Status
 
-- **Active branch:** `main` at `3870844` (`Add likes and reply context to activity feed`), synchronized with `origin/main` before current changes.
-- **Working tree:** Notification model, service, UI, migration, tests, and this progress update are uncommitted.
-- **Latest verification:** Focused notification/authentication/route tests passed 25/25; full NUnit suite passed 221/221. EF reports no pending model changes; CRLF-aware whitespace check passed.
+- **Active branch:** `main` at `e3e1cad` (`Add persistent in-app notifications`), synchronized with `origin/main` before current changes.
+- **Working tree:** Live notification dispatch/reconnection handling, tests, and this progress update are uncommitted.
+- **Latest verification:** Focused `NotificationTests` passed 5/5; full NUnit suite passed 223/223. Application build passed; EF reports no pending model changes; CRLF-aware whitespace check passed.
 
 ## 10. Next Recommended Tasks
 
-1. **Task:** Add real-time delivery for unread notifications.
-   - **Reason:** The current unread count is accurate on page load and after local read actions, but notifications from other users do not appear in already-open circuits.
-   - **Dependencies:** Use the existing Interactive Server model and ensure per-user authorization before pushing events; keep database records as the durable source of truth.
-   - **Acceptance criteria:** Notification events update only the recipient's signed-in circuit, reconnects recover from persisted notification state, and cross-user delivery is covered by tests.
+1. **Task:** Add notification paging and user preferences.
+   - **Reason:** The notification page currently returns only the latest 30 and sends every supported notification type without user controls.
+   - **Dependencies:** Preserve recipient scoping, unread-count correctness, and existing read-state behavior when filtering or loading more notifications.
+   - **Acceptance criteria:** Users can load older notifications and independently disable selected notification categories; persistence, authorization, unread counts, and UI are covered by tests.
 
 ## 11. Handover for the Next Chat Session
 
-- Follow/unfollow, catalogue discovery, Spotify-backed track search/import, review-based track rankings/trends, protected administrator user management, threaded comments, and the activity-feed expansion are committed on `main`. Persistent notifications are the current uncommitted change.
-- Notifications persist follow, comment/reply, and owned-content like events; recipients can mark their own notifications read. The full suite passed 221/221 on 2026-10-17.
-- Initial admin provisioning uses trusted `Admin__UserIds__0` configuration after registration and migration. Live Spotify connectivity remains unverified. The application database still needs `20261017012957_ThreadedReviewComments` and `20261017013935_AddNotifications` applied. Next: consider real-time notification delivery.
+- Follow/unfollow, catalogue discovery, Spotify-backed track search/import, review-based track rankings/trends, protected administrator user management, threaded comments, activity-feed expansion, and persistent notifications are committed on `main`. Live notification updates are the current uncommitted change.
+- Active recipient circuits receive updates through a per-user in-process dispatcher. Reconnection/navigation refreshes persisted state. The full suite passed 223/223 on 2026-10-17.
+- Initial admin provisioning uses trusted `Admin__UserIds__0` configuration after registration and migration. Live Spotify connectivity remains unverified. The application database still needs `20261017012957_ThreadedReviewComments` and `20261017013935_AddNotifications` applied. Next: add notification paging and user preferences.
 
 ## 12. Instructions for Updating This File
 

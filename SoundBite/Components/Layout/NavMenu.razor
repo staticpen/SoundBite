@@ -4,6 +4,9 @@
 @using SoundBite.Services
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject NotificationService NotificationService
+@inject NotificationEventDispatcher NotificationEventDispatcher
+@inject NotificationCircuitHandler NotificationCircuitHandler
+@inject NavigationManager Navigation
 @inject ILogger<NavMenu> Logger
 
 <div class="top-row ps-3 navbar navbar-dark">
@@ -91,16 +94,23 @@
     private bool signedIn;
     private int? notificationCount;
     private bool notificationCountFailed;
+    private readonly List<IDisposable> subscriptions = [];
 
     protected override async Task OnInitializedAsync()
     {
-        NotificationService.UnreadCountChanged += RefreshUnreadCount;
         var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
         signedIn = user.Identity?.IsAuthenticated == true &&
             !string.IsNullOrWhiteSpace(user.FindFirstValue(ClaimTypes.NameIdentifier));
         if (!signedIn)
             return;
 
+        var userId = user.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        subscriptions.Add(NotificationEventDispatcher.Subscribe(
+            userId,
+            () => InvokeAsync(RefreshUnreadCountAsync)));
+        subscriptions.Add(NotificationCircuitHandler.Subscribe(
+            () => InvokeAsync(RefreshUnreadCountAsync)));
+        Navigation.LocationChanged += HandleLocationChanged;
         try
         {
             notificationCount = await NotificationService.GetUnreadCountAsync();
@@ -112,7 +122,10 @@
         }
     }
 
-    private void RefreshUnreadCount() => _ = InvokeAsync(async () =>
+    private void HandleLocationChanged(object? sender, LocationChangedEventArgs args) =>
+        _ = InvokeAsync(RefreshUnreadCountAsync);
+
+    private async Task RefreshUnreadCountAsync()
     {
         try
         {
@@ -125,7 +138,12 @@
             notificationCountFailed = true;
         }
         StateHasChanged();
-    });
+    }
 
-    public void Dispose() => NotificationService.UnreadCountChanged -= RefreshUnreadCount;
+    public void Dispose()
+    {
+        Navigation.LocationChanged -= HandleLocationChanged;
+        foreach (var subscription in subscriptions)
+            subscription.Dispose();
+    }
 }

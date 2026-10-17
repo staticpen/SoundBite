@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using SoundBite.Data;
 using SoundBite.Models;
 using SoundBite.Services;
@@ -16,6 +17,7 @@ public class NotificationTests
     private FollowService followService = null!;
     private SocialInteractionService socialService = null!;
     private NotificationService notificationService = null!;
+    private NotificationEventDispatcher dispatcher = null!;
     private int reviewId;
     private int trackId;
     private int commentId;
@@ -29,9 +31,11 @@ public class NotificationTests
         factory = new TestFactory(new DbContextOptionsBuilder<ApplicationDbContext>()
             .UseSqlite(connection).Options);
         authentication = new TestAuthentication("alice");
-        followService = new FollowService(factory, authentication);
-        socialService = new SocialInteractionService(factory, authentication);
-        notificationService = new NotificationService(factory, authentication);
+        var notificationEvents = new NotificationEventDispatcher(NullLogger<NotificationEventDispatcher>.Instance);
+        followService = new FollowService(factory, authentication, notificationEvents);
+        socialService = new SocialInteractionService(factory, authentication, notificationEvents);
+        notificationService = new NotificationService(factory, authentication, notificationEvents);
+        dispatcher = notificationEvents;
 
         await using var db = factory.CreateDbContext();
         await db.Database.MigrateAsync();
@@ -57,6 +61,19 @@ public class NotificationTests
     [Test]
     public async Task FollowCommentReplyAndLikesCreateDeduplicatedNotificationsForOwners()
     {
+        var bobUpdates = 0;
+        var aliceUpdates = 0;
+        using var bobSubscription = dispatcher.Subscribe("bob", () =>
+        {
+            bobUpdates++;
+            return Task.CompletedTask;
+        });
+        using var aliceSubscription = dispatcher.Subscribe("alice", () =>
+        {
+            aliceUpdates++;
+            return Task.CompletedTask;
+        });
+
         await followService.FollowAsync("bob");
         await followService.FollowAsync("bob");
         await socialService.LikeReviewAsync(reviewId);
@@ -91,6 +108,8 @@ public class NotificationTests
         Assert.That(notifications.Single(notification => notification.Type == NotificationType.ReviewLike).LikeId,
             Is.Not.Null);
         Assert.That(notifications.Count(notification => notification.LikeId is not null), Is.EqualTo(3));
+        Assert.That(bobUpdates, Is.EqualTo(6));
+        Assert.That(aliceUpdates, Is.Zero);
 
         authentication.Set("bob");
         await socialService.LikeReviewAsync(reviewId);
@@ -98,6 +117,48 @@ public class NotificationTests
         await using var verify = factory.CreateDbContext();
         Assert.That(await verify.Notifications.CountAsync(notification => notification.RecipientUserId == "bob"),
             Is.EqualTo(6));
+    }
+
+    [Test]
+    public async Task LiveNotificationEventsAreRecipientScopedAndSubscriptionsCanBeRemoved()
+    {
+        var bobUpdates = 0;
+        var aliceUpdates = 0;
+        using var bobSubscription = dispatcher.Subscribe("bob", () =>
+        {
+            bobUpdates++;
+            return Task.CompletedTask;
+        });
+        var removedSubscription = dispatcher.Subscribe("bob", () =>
+            throw new InvalidOperationException("Removed subscriber must not be called."));
+        using var aliceSubscription = dispatcher.Subscribe("alice", () =>
+        {
+            aliceUpdates++;
+            return Task.CompletedTask;
+        });
+
+        removedSubscription.Dispose();
+        await dispatcher.PublishAsync("bob");
+
+        Assert.That(bobUpdates, Is.EqualTo(1));
+        Assert.That(aliceUpdates, Is.Zero);
+    }
+
+    [Test]
+    public async Task CircuitReconnectNotifiesActiveSubscribersToReloadPersistedState()
+    {
+        var refreshCount = 0;
+        var circuitHandler = new NotificationCircuitHandler(
+            NullLogger<NotificationCircuitHandler>.Instance);
+        using var subscription = circuitHandler.Subscribe(() =>
+        {
+            refreshCount++;
+            return Task.CompletedTask;
+        });
+
+        await circuitHandler.OnConnectionUpAsync(null!, CancellationToken.None);
+
+        Assert.That(refreshCount, Is.EqualTo(1));
     }
 
     [Test]

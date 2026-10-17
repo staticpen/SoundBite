@@ -1,9 +1,12 @@
 @page "/notifications"
+@implements IDisposable
 @using System.Security.Claims
 @using Microsoft.AspNetCore.Components.Authorization
 @using SoundBite.Models
 @using SoundBite.Services
 @inject NotificationService NotificationService
+@inject NotificationEventDispatcher NotificationEventDispatcher
+@inject NotificationCircuitHandler NotificationCircuitHandler
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject ILogger<Notifications> Logger
 
@@ -113,6 +116,7 @@ else if (notificationPage is not null)
     private bool signedIn;
     private bool busy;
     private string? message;
+    private readonly List<IDisposable> subscriptions = [];
 
     protected override async Task OnInitializedAsync()
     {
@@ -120,8 +124,21 @@ else if (notificationPage is not null)
         signedIn = user.Identity?.IsAuthenticated == true &&
             !string.IsNullOrWhiteSpace(user.FindFirstValue(ClaimTypes.NameIdentifier));
         if (signedIn)
+        {
+            var userId = user.FindFirstValue(ClaimTypes.NameIdentifier)!;
+            subscriptions.Add(NotificationEventDispatcher.Subscribe(userId, RefreshNotificationPageAsync));
+            subscriptions.Add(NotificationCircuitHandler.Subscribe(RefreshNotificationPageAsync));
             await LoadAsync();
+        }
         loading = false;
+    }
+
+    private Task RefreshNotificationPageAsync() => InvokeAsync(LoadAndRenderAsync);
+
+    private async Task LoadAndRenderAsync()
+    {
+        await LoadAsync();
+        StateHasChanged();
     }
 
     private async Task LoadAsync()
@@ -180,5 +197,11 @@ else if (notificationPage is not null)
         {
             busy = false;
         }
+    }
+
+    public void Dispose()
+    {
+        foreach (var subscription in subscriptions)
+            subscription.Dispose();
     }
 }

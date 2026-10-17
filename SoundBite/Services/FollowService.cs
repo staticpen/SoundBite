@@ -11,7 +11,8 @@ public record FollowPage(IReadOnlyList<FollowProfile> Users, bool HasNext);
 
 public class FollowService(
     IDbContextFactory<ApplicationDbContext> contextFactory,
-    AuthenticationStateProvider authenticationStateProvider)
+    AuthenticationStateProvider authenticationStateProvider,
+    NotificationEventDispatcher notificationEvents)
 {
     public const int PageSize = 10;
 
@@ -82,6 +83,8 @@ public class FollowService(
                 await db.SaveChangesAsync();
             }
             await transaction.CommitAsync();
+            if (inserted > 0)
+                await notificationEvents.PublishAsync(targetUserId);
         }
         else
         {
