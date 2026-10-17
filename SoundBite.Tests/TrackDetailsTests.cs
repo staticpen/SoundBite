@@ -139,6 +139,33 @@ public class TrackDetailsTests
     }
 
     [Test]
+    public async Task TrackDetailsRendersRepliesUnderTheirParentComment()
+    {
+        var catalog = new CatalogStub { Load = _ => Task.FromResult<Track?>(new Track { Id = 1, Title = "Reviewed track" }) };
+        var identity = new ClaimsIdentity(
+            [new Claim(ClaimTypes.NameIdentifier, "alice")],
+            authenticationType: "test");
+
+        await RenderAsync(catalog, async renderer =>
+        {
+            var root = await renderer.RenderComponentAsync<TrackDetails>(Parameters(1));
+            Assert.That(root.ToHtmlString(), Does.Contain("Root comment")
+                .And.Contain("replied to Bob")
+                .And.Contain("A response"));
+        }, db =>
+        {
+            db.Users.AddRange(
+                new ApplicationUser { Id = "alice", UserName = "alice", DisplayName = "Alice" },
+                new ApplicationUser { Id = "bob", UserName = "bob", DisplayName = "Bob" });
+            db.Tracks.Add(new Track { Id = 1, Title = "Reviewed track" });
+            var review = new Review { Id = 1, UserId = "bob", TrackId = 1, Rating = 5, Comment = "A great track" };
+            db.Reviews.Add(review);
+            db.Comments.Add(new Comment { Id = 1, ReviewId = 1, UserId = "bob", Content = "Root comment" });
+            db.Comments.Add(new Comment { Id = 2, ReviewId = 1, UserId = "alice", ParentCommentId = 1, Content = "A response" });
+        }, new TestAuthenticationStateProvider(new ClaimsPrincipal(identity)));
+    }
+
+    [Test]
     public async Task SignedInVisitorWithoutReviewSeesNewReviewForm()
     {
         var catalog = new CatalogStub { Load = _ => Task.FromResult<Track?>(new Track { Title = "Unreviewed track" }) };

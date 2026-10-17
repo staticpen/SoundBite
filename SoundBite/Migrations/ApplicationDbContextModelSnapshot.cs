@@ -306,6 +306,9 @@ namespace SoundBite.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("TEXT");
 
+                    b.Property<int?>("ParentCommentId")
+                        .HasColumnType("INTEGER");
+
                     b.Property<int>("ReviewId")
                         .HasColumnType("INTEGER");
 
@@ -318,13 +321,17 @@ namespace SoundBite.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ParentCommentId");
+
                     b.HasIndex("UserId");
 
-                    b.HasIndex("ReviewId", "CreatedAt");
+                    b.HasIndex("ReviewId", "ParentCommentId", "CreatedAt");
 
                     b.ToTable("Comments", t =>
                         {
                             t.HasCheckConstraint("CK_Comments_Content", "length(trim(\"Content\")) > 0");
+
+                            t.HasCheckConstraint("CK_Comments_NoSelfReply", "\"ParentCommentId\" IS NULL OR \"ParentCommentId\" <> \"Id\"");
                         });
                 });
 
@@ -613,6 +620,11 @@ namespace SoundBite.Migrations
 
             modelBuilder.Entity("SoundBite.Models.Comment", b =>
                 {
+                    b.HasOne("SoundBite.Models.Comment", "ParentComment")
+                        .WithMany("Replies")
+                        .HasForeignKey("ParentCommentId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("SoundBite.Models.Review", "Review")
                         .WithMany()
                         .HasForeignKey("ReviewId")
@@ -624,6 +636,8 @@ namespace SoundBite.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("ParentComment");
 
                     b.Navigation("Review");
 
@@ -750,6 +764,11 @@ namespace SoundBite.Migrations
             modelBuilder.Entity("SoundBite.Models.Album", b =>
                 {
                     b.Navigation("Tracks");
+                });
+
+            modelBuilder.Entity("SoundBite.Models.Comment", b =>
+                {
+                    b.Navigation("Replies");
                 });
 
             modelBuilder.Entity("SoundBite.Models.Playlist", b =>

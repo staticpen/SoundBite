@@ -8,6 +8,9 @@ namespace SoundBite.Services;
 
 public sealed record ReviewComment(
     int Id,
+    int? ParentCommentId,
+    string? ParentUserName,
+    string? ParentDisplayName,
     string UserName,
     string DisplayName,
     string Content,
@@ -45,9 +48,13 @@ public sealed class SocialInteractionService(
             await db.Likes.AnyAsync(like => like.ReviewId == reviewId && like.UserId == actorId, cancellationToken);
         var comments = await db.Comments.AsNoTracking()
             .Where(comment => comment.ReviewId == reviewId)
-            .OrderBy(comment => comment.CreatedAt).ThenBy(comment => comment.Id)
+            .OrderBy(comment => comment.ParentCommentId)
+            .ThenBy(comment => comment.CreatedAt).ThenBy(comment => comment.Id)
             .Select(comment => new ReviewComment(
                 comment.Id,
+                comment.ParentCommentId,
+                comment.ParentComment == null ? null : comment.ParentComment.User!.UserName,
+                comment.ParentComment == null ? null : comment.ParentComment.User!.DisplayName,
                 comment.User!.UserName!,
                 comment.User.DisplayName,
                 comment.Content,
@@ -109,7 +116,37 @@ public sealed class SocialInteractionService(
     public async Task<ReviewComment> AddCommentAsync(
         int reviewId,
         string? content,
+        CancellationToken cancellationToken = default) =>
+        await SaveCommentAsync(reviewId, null, content, cancellationToken);
+
+    public async Task<ReviewComment> AddReplyAsync(
+        int parentCommentId,
+        string? content,
         CancellationToken cancellationToken = default)
+    {
+        ValidateCommentId(parentCommentId);
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        var parent = await db.Comments
+            .Include(comment => comment.User)
+            .SingleOrDefaultAsync(comment => comment.Id == parentCommentId, cancellationToken)
+            ?? throw new InvalidOperationException("Parent comment was not found.");
+        if (parent.ParentCommentId is not null)
+            throw new InvalidOperationException("Replies can only be added to top-level comments.");
+
+        return await SaveCommentAsync(
+            parent.ReviewId,
+            parent.Id,
+            content,
+            cancellationToken,
+            parent.User);
+    }
+
+    private async Task<ReviewComment> SaveCommentAsync(
+        int reviewId,
+        int? parentCommentId,
+        string? content,
+        CancellationToken cancellationToken,
+        ApplicationUser? parentUser = null)
     {
         ValidateReviewId(reviewId);
         var cleanedContent = NormalizeComment(content);
@@ -124,6 +161,7 @@ public sealed class SocialInteractionService(
         var comment = new Comment
         {
             ReviewId = reviewId,
+            ParentCommentId = parentCommentId,
             UserId = user.Id,
             Content = cleanedContent,
             CreatedAt = now,
@@ -132,7 +170,7 @@ public sealed class SocialInteractionService(
         db.Comments.Add(comment);
         await db.SaveChangesAsync(cancellationToken);
 
-        return ToReviewComment(comment, user, true);
+        return ToReviewComment(comment, user, true, parentUser);
     }
 
     public async Task<ReviewComment> UpdateCommentAsync(
@@ -169,6 +207,10 @@ public sealed class SocialInteractionService(
         if (comment is null)
             throw new InvalidOperationException("Comment was not found for the current user.");
 
+        await db.Comments
+            .Where(reply => reply.ParentCommentId == commentId)
+            .ExecuteUpdateAsync(update => update.SetProperty(reply => reply.ParentCommentId, (int?)null),
+                cancellationToken);
         db.Comments.Remove(comment);
         await db.SaveChangesAsync(cancellationToken);
     }
@@ -257,8 +299,13 @@ public sealed class SocialInteractionService(
             : null;
     }
 
-    private static ReviewComment ToReviewComment(Comment comment, ApplicationUser user, bool isOwner) =>
-        new(comment.Id, user.UserName ?? string.Empty, user.DisplayName, comment.Content,
+    private static ReviewComment ToReviewComment(
+        Comment comment,
+        ApplicationUser user,
+        bool isOwner,
+        ApplicationUser? parentUser = null) =>
+        new(comment.Id, comment.ParentCommentId, parentUser?.UserName, parentUser?.DisplayName,
+            user.UserName ?? string.Empty, user.DisplayName, comment.Content,
             comment.CreatedAt, comment.UpdatedAt, isOwner, 0, false);
 
     private static string NormalizeComment(string? content) => content?.Trim() ?? string.Empty;

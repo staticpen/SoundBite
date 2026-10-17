@@ -171,6 +171,32 @@ public class SocialInteractionTests
     }
 
     [Test]
+    public async Task RepliesArePersistedUnderTopLevelCommentsAndCannotBeNested()
+    {
+        var reply = await service.AddReplyAsync(commentId, "A thoughtful response");
+
+        Assert.That(reply.ParentCommentId, Is.EqualTo(commentId));
+        Assert.That(reply.ParentUserName, Is.EqualTo("bob"));
+        var comments = (await service.GetReviewInteractionsAsync(reviewId)).Comments;
+        Assert.That(comments.Single(comment => comment.Id == reply.Id).ParentCommentId, Is.EqualTo(commentId));
+        Assert.ThrowsAsync<InvalidOperationException>(() => service.AddReplyAsync(reply.Id, "Nested reply"));
+    }
+
+    [Test]
+    public async Task DeletingACommentPromotesItsRepliesInsteadOfDeletingThem()
+    {
+        var reply = await service.AddReplyAsync(commentId, "Keep this response");
+        authentication.Set("bob");
+
+        await service.DeleteCommentAsync(commentId);
+
+        var promoted = (await service.GetReviewInteractionsAsync(reviewId)).Comments.Single();
+        Assert.That(promoted.Id, Is.EqualTo(reply.Id));
+        Assert.That(promoted.ParentCommentId, Is.Null);
+        Assert.That(promoted.Content, Is.EqualTo("Keep this response"));
+    }
+
+    [Test]
     public async Task CommentsRequireContentAndRespectLengthLimit()
     {
         Assert.ThrowsAsync<ArgumentException>(() => service.AddCommentAsync(reviewId, "  "));
@@ -197,6 +223,7 @@ public class SocialInteractionTests
     {
         await service.LikeReviewAsync(reviewId);
         await service.AddCommentAsync(reviewId, "Hello");
+        await service.AddReplyAsync(commentId, "A reply");
         await using (var db = factory.CreateDbContext())
         {
             var review = await db.Reviews.SingleAsync(item => item.Id == reviewId);

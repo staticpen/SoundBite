@@ -22,9 +22,9 @@
 
 - **Overall status:** In progress
 - **Current development phase:** Building working catalogue and social product features
-- **Current focus:** Protected user administration with role-based access, account lockout, and administrator provisioning
+- **Current focus:** Completing the core social experience with threaded review comments
 - **Last verified:** 2026-10-17
-- **Current blocker:** Live Spotify API access is unverified until valid application credentials are configured; comments and feed events remain review-based
+- **Current blocker:** Live Spotify API access is unverified until valid application credentials are configured. The application database has not been migrated for threaded comments.
 
 ## 3. Feature Implementation Tracker
 
@@ -39,14 +39,22 @@
 | Playlist management | Implemented — verified | Users can create, edit, and delete playlists; add/remove tracks; and browse public playlist listings/details. Owner checks are enforced in the service. |
 | Playlist duplicate prevention | Implemented — verified | Service validation and a unique database index on playlist and track prevent duplicates. Playlist item positions preserve order. |
 | Following and followers | Implemented — verified | Authenticated idempotent follow/unfollow, public counts and expandable 10-user pages; database constraints, concurrent requests, account deletion and browser flows verified. Merged into `main` at `ac92cbe`. |
-| Likes and comments | Partially implemented — verified | Signed-in users can idempotently like reviews, tracks, public playlists, and comments; private playlist likes are owner-only. Users can add/edit/delete their own review comments. Database uniqueness, exactly-one-target checks, foreign keys, migration preservation, and authorization are tested. Threaded replies remain unimplemented. |
-| Activity feed | Implemented — verified | `/feed` shows paginated reviews and comments from the signed-in user and followed users, links back to the track review, and prompts anonymous visitors to log in. |
+| Likes and comments | Implemented — verified | Signed-in users can idempotently like reviews, tracks, public playlists, and comments; private playlist likes are owner-only. Users can add/edit/delete their own review comments and reply one level deep to top-level comments. Replies are grouped under parents, cannot be nested further, and are preserved as top-level comments if their parent is deleted. |
+| Activity feed | Implemented — verified | `/feed` shows paginated reviews and comments from the signed-in user and followed users, including replies as comment activity, links back to the track review, and prompts anonymous visitors to log in. Reply context is not currently shown in the feed. |
 | Rankings and trends | Implemented — verified | `/rankings` shows top-rated tracks (minimum two reviews), most-reviewed tracks overall, and tracks with the most reviews in the last seven days. Metrics use SoundBite review data only, with stable tie-break ordering. |
 | Administrative user management | Implemented — verified | `/admin/users` supports user search/paging, account lock/unlock, and admin-role grants/revocation. Every service operation checks live role membership and lockout state server-side. Initial roles are bootstrapped from configured user IDs. |
-| Automated tests | Passed — verified | Full NUnit suite passed: 212/212, including administrator provisioning, authorization, account lockout/roles, anonymous access, and routing. |
-| Git and repository hygiene | In progress | Admin implementation is uncommitted on `main` at `d9776ca`. |
+| Automated tests | Passed — verified | Full NUnit suite passed: 215/215, including reply persistence, one-level reply rules, parent deletion behavior, and rendered track-detail replies. |
+| Git and repository hygiene | In progress | Threaded-comment changes are uncommitted on `main` at `94921bf`. |
 
 ## 4. Latest Completed Work
+
+### 2026-10-17 — Threaded review comments
+
+- **Task completed:** Added one-level replies to review comments, nested display under parent comments on track details, and a database migration.
+- **Files or components changed:** `Models/Comment.cs`, `Data/ApplicationDbContext.cs`, `Services/SocialInteractionService.cs`, `Components/Pages/ReviewSocialPanel.razor`, migration `20261017012957_ThreadedReviewComments` (including designer and model snapshot), `SocialInteractionTests.cs`, `TrackDetailsTests.cs`, and this progress file.
+- **Important implementation decisions:** Replies can target only top-level comments, keeping threads one level deep. Parent comments can be deleted without losing replies: direct replies are promoted to top-level comments, and the self-reference uses `SET NULL`. Actor identity remains resolved server-side; comments can only be edited/deleted by their owners.
+- **Verification performed and its result:** Focused social interaction and track detail tests passed 29/29. Full NUnit suite passed 215/215. `dotnet ef migrations has-pending-model-changes` reported no unscaffolded model changes; CRLF-aware `git diff --check` passed.
+- **Remaining limitations:** The migration has only been exercised in isolated test databases; it has not been applied to the configured application database. The activity feed lists replies as comments without displaying their parent/reply context.
 
 ### 2026-10-17 — Protected administrator user management
 
@@ -227,7 +235,7 @@
 |---|---|---|---|---|
 | Registration form cannot reach endpoint | Resolved | Replaced server-side loopback HTTP call with static SSR form processing | Verified in browser and HTTP tests | Closed |
 | Interactive login cannot set cookie | Resolved | Cookie operations now execute during HTTP form requests before rendering | Verified registration, login and logout | Closed |
-| Remaining social interaction scope | Comments are review-only and flat; likes are not feed events | `SocialInteractionService` stores comments against `ReviewId`; feed selects reviews/comments | Consider threaded replies and like activity events | Open |
+| Remaining social interaction scope | Likes are not feed events; feed does not distinguish replies from other comments | `FeedService` combines review and comment rows | Add reply context and/or like events to the activity feed | Open |
 | Spotify access has not been exercised against a live account | External search/import cannot be confirmed without valid API credentials | Spotify client credentials are read from environment variables; automated tests use a mock HTTP handler | Configure approved credentials locally and smoke-test search/import while respecting Spotify's policies | Open |
 | Catalogue data and discovery remain limited | Spotify track search/import, local catalogue details, and review-based track rankings/trends are implemented | No artwork import or general catalogue editing; rankings are track-only because reviews apply to tracks | Consider general catalogue management after protected administration is implemented | Open |
 | Initial administrator needs deployment configuration | The first admin must exist before the app can assign its admin role | Startup reads indexed `Admin:UserIds` settings and fails explicitly if an ID is unknown | Register the first user, configure the ID, apply migrations, then restart; keep settings in trusted environment configuration | Open |
@@ -237,29 +245,29 @@
 | Check | Result | Notes |
 |---|---|---|
 | Application build | Passed | `dotnet test SoundBite.Tests/SoundBite.Tests.csproj --nologo -v minimal` built the app and test project successfully. |
-| Automated tests | Passed — verified | 212 NUnit tests passed, 0 failed/skipped (2026-10-17). |
+| Automated tests | Passed — verified | 215 NUnit tests passed, 0 failed/skipped (2026-10-17). |
 | Application startup | Passed | Command: `dotnet run --project SoundBite --urls http://localhost:5080` → app reported `Now listening on: http://localhost:5080` and `Application started.` |
 | Relevant feature behaviour | Passed | Authentication/profile/review/playlist/follow flows were previously verified; rendered tests cover review interactions, feed, and track likes. |
-| Database migrations | Passed | Profile, review, playlist, follow, review-social, and expanded-like migrations are exercised by isolated SQLite tests, including preserving existing review likes. The configured app database is not migrated. |
+| Database migrations | Passed | Existing migrations and `20261017012957_ThreadedReviewComments` are exercised by isolated SQLite tests; EF reports no pending model changes. The configured app database is not migrated. |
 
 ## 9. Git Status
 
-- **Active branch:** `main` at `d9776ca` (`Implement review-based track rankings and trends`), synchronized with `origin/main` before current changes.
-- **Working tree:** Administrator service, role bootstrap, UI/navigation, tests, and this progress update are uncommitted.
-- **Latest verification:** Focused admin tests passed 15/15; full NUnit suite passed 212/212. No model/schema changes were needed.
+- **Active branch:** `main` at `94921bf` (`Add protected administrator user management`), synchronized with `origin/main` before current changes.
+- **Working tree:** Threaded-comment model, service, UI, migration, tests, and this progress update are uncommitted.
+- **Latest verification:** Focused social and track-detail tests passed 29/29; full NUnit suite passed 215/215. EF reports no pending model changes.
 
 ## 10. Next Recommended Tasks
 
-1. **Task:** Extend review-based discovery.
-   - **Reason:** Current rankings and trends cover tracks; album/artist ratings can be added if aggregate discovery becomes useful.
-   - **Dependencies:** Define how track ratings should roll up to albums and artists, including minimum review counts.
-   - **Acceptance criteria:** Any aggregate ranking explains its calculation and is covered by tests.
+1. **Task:** Add reply context and like events to the activity feed.
+   - **Reason:** Threaded replies now exist, but the feed presents them as ordinary comments and does not surface likes.
+   - **Dependencies:** Extend activity-item types and queries while preserving pagination and deterministic ordering.
+   - **Acceptance criteria:** Feed entries distinguish replies from top-level comments, include useful parent context, and cover like events without duplicating or skipping paginated activity.
 
 ## 11. Handover for the Next Chat Session
 
-- Follow/unfollow and review likes/comments/feed are committed on `main`; likes across tracks, playlists, and comments are included in the recent main history.
-- Catalogue discovery, Spotify-backed track search/import, review-based track rankings/trends, and protected administrator user management are implemented locally. The full suite passed 212/212 on 2026-10-17.
-- Initial admin provisioning uses trusted `Admin__UserIds__0` configuration after registration and migration. Live Spotify connectivity remains unverified. No migration was needed. Remaining work includes optional aggregate album/artist rankings and threaded comments/feed likes.
+- Follow/unfollow, catalogue discovery, Spotify-backed track search/import, review-based track rankings/trends, and protected administrator user management are committed on `main`. Threaded comments are the current uncommitted change.
+- Threaded comments support one-level replies; deleting a parent preserves and promotes its replies. The full suite passed 215/215 on 2026-10-17, and EF reports no pending model changes.
+- Initial admin provisioning uses trusted `Admin__UserIds__0` configuration after registration and migration. Live Spotify connectivity remains unverified. The application database still needs the threaded-comment migration applied. Next: improve feed reply context and surface likes as activity.
 
 ## 12. Instructions for Updating This File
 

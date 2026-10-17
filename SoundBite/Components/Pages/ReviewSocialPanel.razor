@@ -35,7 +35,7 @@
         @if (interactions.Comments.Count > 0)
         {
             <ul class="list-group list-group-flush mt-2">
-                @foreach (var comment in interactions.Comments)
+                @foreach (var comment in interactions.Comments.Where(comment => comment.ParentCommentId is null))
                 {
                     <li class="list-group-item px-0" @key="comment.Id">
                         <div class="d-flex justify-content-between gap-2">
@@ -51,6 +51,7 @@
                                     <button type="button" class="btn btn-sm btn-outline-primary" @onclick="() => ToggleCommentLikeAsync(comment)" disabled="@busy">
                                         @(comment.IsLiked ? "Unlike" : "Like") (@comment.LikeCount)
                                     </button>
+                                    <button type="button" class="btn btn-sm btn-link" @onclick="() => BeginReply(comment)" disabled="@busy">Reply</button>
                                 }
                                 else
                                 {
@@ -66,6 +67,48 @@
                                 </div>
                             }
                         </div>
+                        @{
+                            var replies = interactions.Comments.Where(reply => reply.ParentCommentId == comment.Id).ToArray();
+                        }
+                        @if (replies.Length > 0)
+                        {
+                            <ul class="list-group list-group-flush ms-3 mt-2" aria-label="@($"Replies to {comment.UserName}")">
+                                @foreach (var reply in replies)
+                                {
+                                    <li class="list-group-item px-0" @key="reply.Id">
+                                        <div class="d-flex justify-content-between gap-2">
+                                            <div>
+                                                <p class="mb-1">
+                                                    <a href="@($"/users/{Uri.EscapeDataString(reply.UserName)}")">
+                                                        @(string.IsNullOrWhiteSpace(reply.DisplayName) ? reply.UserName : reply.DisplayName)
+                                                    </a>
+                                                    <span class="text-muted small"> replied to @(string.IsNullOrWhiteSpace(reply.ParentDisplayName) ? reply.ParentUserName : reply.ParentDisplayName)</span>
+                                                    <span>: @reply.Content</span>
+                                                </p>
+                                                @if (signedIn)
+                                                {
+                                                    <button type="button" class="btn btn-sm btn-outline-primary" @onclick="() => ToggleCommentLikeAsync(reply)" disabled="@busy">
+                                                        @(reply.IsLiked ? "Unlike" : "Like") (@reply.LikeCount)
+                                                    </button>
+                                                }
+                                                else
+                                                {
+                                                    <span class="small">@reply.LikeCount likes</span>
+                                                    <a class="small ms-2" href="/login">Log in to like</a>
+                                                }
+                                            </div>
+                                            @if (reply.IsOwner)
+                                            {
+                                                <div class="text-nowrap">
+                                                    <button type="button" class="btn btn-sm btn-link" @onclick="() => BeginEdit(reply)" disabled="@busy">Edit</button>
+                                                    <button type="button" class="btn btn-sm btn-link text-danger" @onclick="() => DeleteCommentAsync(reply.Id)" disabled="@busy">Delete</button>
+                                                </div>
+                                            }
+                                        </div>
+                                    </li>
+                                }
+                            </ul>
+                        }
                     </li>
                 }
             </ul>
@@ -75,13 +118,16 @@
         {
             <div class="mt-3">
                 <label class="form-label" for="@($"review-comment-{ReviewId}")">
-                    @(editingCommentId is null ? "Add a comment" : "Edit your comment")
+                    @(editingCommentId is not null ? "Edit your comment" :
+                        replyingToComment is not null ? $"Reply to {replyingToComment.DisplayName ?? replyingToComment.UserName}" :
+                        "Add a comment")
                 </label>
                 <textarea id="@($"review-comment-{ReviewId}")" class="form-control" rows="2"
                           maxlength="@SocialInteractionService.MaximumCommentLength" @bind="commentText" disabled="@busy"></textarea>
                 <div class="mt-2">
                     <button type="button" class="btn btn-sm btn-primary" @onclick="SaveCommentAsync" disabled="@busy">
-                        @(busy ? "Saving..." : editingCommentId is null ? "Comment" : "Save comment")
+                        @(busy ? "Saving..." : editingCommentId is not null ? "Save comment" :
+                            replyingToComment is not null ? "Reply" : "Comment")
                     </button>
                     @if (editingCommentId is not null)
                     {
@@ -111,6 +157,7 @@
     private bool signedIn;
     private bool busy;
     private int? editingCommentId;
+    private ReviewComment? replyingToComment;
     private string commentText = string.Empty;
     private string? message;
 
@@ -120,6 +167,7 @@
         loadFailed = false;
         message = null;
         editingCommentId = null;
+        replyingToComment = null;
         commentText = string.Empty;
         try
         {
@@ -171,10 +219,13 @@
         {
             if (editingCommentId is int commentId)
                 await Social.UpdateCommentAsync(commentId, commentText);
+            else if (replyingToComment is not null)
+                await Social.AddReplyAsync(replyingToComment.Id, commentText);
             else
                 await Social.AddCommentAsync(ReviewId, commentText);
             commentText = string.Empty;
             editingCommentId = null;
+            replyingToComment = null;
             interactions = await Social.GetReviewInteractionsAsync(ReviewId);
             message = "Comment saved.";
         }
@@ -202,6 +253,7 @@
         {
             await Social.DeleteCommentAsync(commentId);
             if (editingCommentId == commentId) CancelEdit();
+            if (replyingToComment?.Id == commentId) CancelEdit();
             interactions = await Social.GetReviewInteractionsAsync(ReviewId);
             message = "Comment deleted.";
         }
@@ -241,13 +293,23 @@
     private void BeginEdit(ReviewComment comment)
     {
         editingCommentId = comment.Id;
+        replyingToComment = null;
         commentText = comment.Content;
+        message = null;
+    }
+
+    private void BeginReply(ReviewComment comment)
+    {
+        editingCommentId = null;
+        replyingToComment = comment;
+        commentText = string.Empty;
         message = null;
     }
 
     private void CancelEdit()
     {
         editingCommentId = null;
+        replyingToComment = null;
         commentText = string.Empty;
         message = null;
     }

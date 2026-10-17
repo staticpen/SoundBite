@@ -152,9 +152,16 @@ namespace SoundBite.Data
                     .WithMany()
                     .HasForeignKey(comment => comment.UserId)
                     .OnDelete(DeleteBehavior.Cascade);
-                entity.HasIndex(comment => new { comment.ReviewId, comment.CreatedAt });
+                entity.HasOne(comment => comment.ParentComment)
+                    .WithMany(comment => comment.Replies)
+                    .HasForeignKey(comment => comment.ParentCommentId)
+                    .OnDelete(DeleteBehavior.SetNull);
+                entity.HasIndex(comment => new { comment.ReviewId, comment.ParentCommentId, comment.CreatedAt });
                 entity.ToTable(table => table.HasCheckConstraint(
                     "CK_Comments_Content", "length(trim(\"Content\")) > 0"));
+                entity.ToTable(table => table.HasCheckConstraint(
+                    "CK_Comments_NoSelfReply",
+                    "\"ParentCommentId\" IS NULL OR \"ParentCommentId\" <> \"Id\""));
             });
 
             // SQLite unique indexes allow multiple NULLs for unknown external IDs.
