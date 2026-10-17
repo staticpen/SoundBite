@@ -22,7 +22,7 @@
 
 - **Overall status:** In progress
 - **Current development phase:** Building working catalogue and social product features
-- **Current focus:** Latest live-notification functionality integrated and verified on .NET 9 for PR #16
+- **Current focus:** Post-merge follow-up on `main` after PR #16
 - **Last verified:** 2026-10-17
 - **Current blocker:** Windows VS2022, manual reconnection and live Spotify validation remain outstanding. Application database is preserved exactly from main; no application migrations run.
 
@@ -45,7 +45,7 @@
 | Rankings and trends | Implemented — verified | `/rankings` shows top-rated tracks (minimum two reviews), most-reviewed tracks overall, and tracks with the most reviews in the last seven days. Metrics use SoundBite review data only, with stable tie-break ordering. |
 | Administrative user management | Implemented — verified | `/admin/users` supports user search/paging, account lock/unlock, and admin-role grants/revocation. Every service operation checks live role membership and lockout state server-side. Initial roles are bootstrapped from configured user IDs. |
 | Automated tests | Passed — verified | Combined .NET 9 suite: 225 passed, 0 failed/skipped; includes live-notification coverage and two compatibility 404 cases. |
-| Git and repository hygiene | Verified | Normal integration of main `07f9aab` into `Net9Compatibility`; database matches main, no unrelated changes. |
+| Git and repository hygiene | Verified | PR #16 is merged into `main`; current worktree is clean and synchronized with `origin/main` at `9c33964`. |
 
 ## 4. Latest Completed Work
 
@@ -314,9 +314,9 @@
 
 ## 9. Git Status
 
-- **Branch:** `Net9Compatibility`; latest main `07f9aab` integrated with a normal merge. Merge commit and push authorized after the successful 225-test verification; actual commit identity/publication are recorded in Git/GitHub.
+- **Branch:** `main`, clean and synchronized with `origin/main` at `9c33964` (`Merge pull request #16 from staticpen/Net9Compatibility`).
 - **Database:** Identical to latest main and excluded from PR changes. No application migration performed.
-- **PR #16:** Do not merge into main yet. No rebase, force-push or branch deletion.
+- **PR #16:** Merged into `main`.
 
 ## 10. Next Recommended Tasks
 
@@ -327,10 +327,10 @@
 
 ## 11. Handover for the Next Chat Session
 
-- PR #16 includes all main functionality through `07f9aab`, including live notifications, and retains .NET 9 compatibility. Release build/publish and all 225 NUnit tests passed. All 11 migrations verified on disposable SQLite; no pending model changes.
+- PR #16 is merged into `main` at `9c33964`, including live notifications and .NET 9 compatibility. Release build/publish and all 225 NUnit tests passed. All 11 migrations verified on disposable SQLite; no pending model changes.
 - Application database matches main and is absent from the PR diff. Do not migrate it without separate authorization.
 - Windows VS2022, manual reconnection and live Spotify checks remain outstanding. Notification events are delivered within one app instance; multi-instance delivery is not implemented. No new browser validation was performed in this integration session.
-- Confirm main has not advanced and PR remains mergeable before any separately authorized PR merge. Do not merge PR #16 yet.
+- The worktree was clean on `main`, synchronized with `origin/main`, at `9c33964` when this status was checked.
 
 ## 12. Instructions for Updating This File
 
