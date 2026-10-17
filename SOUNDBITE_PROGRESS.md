@@ -22,9 +22,9 @@
 
 - **Overall status:** In progress
 - **Current development phase:** Building working catalogue and social product features
-- **Current focus:** Post-merge follow-up on `main` after PR #16
+- **Current focus:** Release-readiness checks (B); notification usability (A) is complete
 - **Last verified:** 2026-10-17
-- **Current blocker:** Windows VS2022, manual reconnection and live Spotify validation remain outstanding. Application database is preserved exactly from main; no application migrations run.
+- **Current blocker:** Windows VS2022 validation, manual retry/reload controls, live Spotify validation, and deployment-target authorization remain outstanding. No deployment database migration has been run.
 
 ## 3. Feature Implementation Tracker
 
@@ -41,15 +41,26 @@
 | Following and followers | Implemented — verified | Authenticated idempotent follow/unfollow, public counts and expandable 10-user pages; database constraints, concurrent requests, account deletion and browser flows verified. Merged into `main` at `ac92cbe`. |
 | Likes and comments | Implemented — verified | Signed-in users can idempotently like reviews, tracks, public playlists, and comments; private playlist likes are owner-only. Users can add/edit/delete their own review comments and reply one level deep to top-level comments. Replies are grouped under parents, cannot be nested further, and are preserved as top-level comments if their parent is deleted. |
 | Activity feed | Implemented — verified | `/feed` globally orders and paginates reviews, comments/replies, and likes by followed users and the signed-in user. Reply entries identify the parent author. Like activity covers reviews, comments, tracks, and public playlists; private-playlist likes are excluded. |
-| Notifications | Implemented — verified | Persistent recipient-scoped notifications are created for follows, review comments, replies, and likes on reviews, comments, and playlists. Self-notifications and duplicate follow/like events are suppressed. `/notifications` lists the latest 30, supports individual and bulk read marking, and the signed-in navigation displays an unread count. A single-instance event dispatcher updates active recipient circuits; navigation and circuit reconnection reload persisted state. Track likes have no content owner to notify. |
+| Notifications | Implemented — verified | In addition to recipient-scoped notifications, `/notifications` uses keyset paging to load older items without duplicates; unread counts and read-state behavior remain independent of the displayed page. Users can persist per-category opt-outs from `/notifications/settings`, affecting future notifications only. Paging, authorization, read state, preference persistence/isolation, and UI behavior are covered by tests. The single-instance event dispatcher updates active recipient circuits; navigation and reconnection reload persisted state. |
 | Rankings and trends | Implemented — verified | `/rankings` shows top-rated tracks (minimum two reviews), most-reviewed tracks overall, and tracks with the most reviews in the last seven days. Metrics use SoundBite review data only, with stable tie-break ordering. |
 | Administrative user management | Implemented — verified | `/admin/users` supports user search/paging, account lock/unlock, and admin-role grants/revocation. Every service operation checks live role membership and lockout state server-side. Initial roles are bootstrapped from configured user IDs. |
-| Automated tests | Passed — verified | Combined .NET 9 suite: 225 passed, 0 failed/skipped; includes live-notification coverage and two compatibility 404 cases. |
-| Git and repository hygiene | Verified | PR #16 is merged into `main`; current worktree is clean and synchronized with `origin/main` at `9c33964`. |
+| Automated tests | Passed — verified | The latest full suite recorded for A3 was 263/263; the focused notification and route suite was rerun on 2026-10-17 and passed 53/53. |
+| Git and repository hygiene | Verified | Notification paging, category preferences, and their settings UI are merged in PRs #17–#19. Current worktree is clean and synchronized with `origin/main` at `4553f1b`. |
 
 ## 4. Latest Completed Work
 
-### 2026-10-17 — A3: notification settings page (implemented and verified; uncommitted)
+### 2026-10-17 — B: local release-readiness checks (partial; environment-dependent checks outstanding)
+
+- **Build and tests:** With SDK 9.0.319, `dotnet build SoundBite.sln --configuration Release --no-restore` passed with 0 warnings/errors. `dotnet test SoundBite.sln --configuration Release --no-build` passed **263/263**, 0 failed/skipped.
+- **Publish:** `dotnet publish SoundBite/SoundBite.csproj --configuration Release --no-build --output /tmp/soundbite-b-readiness-publish` succeeded.
+- **Startup smoke test:** Started the app with `ConnectionStrings__DefaultConnection` pointing to `/tmp/soundbite-b-readiness.db`, a temporary copy of the tracked database. The home page returned HTTP 200 and the catalogue search page rendered; a local search interaction returned its no-results status without errors. The application database was not used as the runtime target.
+- **Reconnect check:** Stopped the app while the browser page was open. The .NET 9 reconnect dialog entered its rejoining state; after restarting the app against the same temporary copy, the dialog closed and the page remained interactive. The manual Retry/Reload buttons were not reached, so their specific behavior remains unverified.
+- **Spotify:** No credentials are configured in environment variables or `appsettings.Development.json`; live Spotify search/import was not attempted.
+- **Migration safety:** Restored the repository-local EF tool 9.0.21 and ran `dotnet ef migrations list` against the temporary database copy. `20261017064453_AddNotificationOptOuts` is pending there; `dotnet ef migrations has-pending-model-changes` reports no model changes. No migration was applied to the copy or application database. Do not migrate any deployment target without its owner's explicit authorization and a verified backup.
+- **Not verified here:** Windows Visual Studio 2022 17.14 project load, Test Explorer, F5 and publish; live Spotify; deployment administrator/environment setup, backup and migration. This macOS CLI validation does not replace the Windows checks.
+- **Git:** No application source or configuration changed. Progress record updated; no release-readiness branch or deployment-specific changes created.
+
+### 2026-10-17 — A3: notification settings page (implemented, verified, merged in PR #19)
 
 - **What:** New `/notifications/settings` page (`NotificationSettings.razor`) with one native Bootstrap switch per notification category (all six `NotificationType` values), reached from a "Notification settings" link on `/notifications`. Each change saves immediately through the existing A2 `NotificationService.SetTypeEnabledAsync`; settings load through `GetDisabledTypesAsync`. No backend, schema, migration, `Program.cs` or NavMenu changes, no JavaScript or new CSS.
 - **Behaviour:** Switches are disabled while a save runs; success shows "Preferences saved."; a failed save shows an error and the switch stays at the last saved value; a failed load offers Try again; signed-out visitors are asked to log in. The user is always the signed-in user from server-side auth state (no user ID parameter). Settings live in `NotificationOptOuts`, so they survive refresh and sign-out/sign-in. They apply to future notifications only.
@@ -59,9 +70,9 @@
 - **Tests (10 in `NotificationSettingsPageTests`):** The page tests render the real page against an isolated, migrated in-memory SQLite database and raise the page's real `onchange` / `onclick` events through the renderer (`Renderer.DispatchEventAsync` using handler IDs read from the rendered frames), so the markup's `@onchange` wiring is exercised. They cover: interactive routing, default all-on, only the signed-in user's saved settings shown, switching off/on with reload persistence and another user's opt-outs unchanged, the new state shown while saving with the switches locked, failed-save rollback (including an already-disabled category), retry hiding the switches while loading, a failed retry not stuck loading, and the signed-out visitor. Per-user isolation and creation-point filtering are covered by the A2 service tests. Scratch-copy mutations each made the matching tests fail: no rollback (2), no `loading = true` on retry (1), `@onchange` removed (4), no optimistic update (2). A scoped `#pragma warning disable BL0006` covers the test helper that reads render-tree frames.
 - **Verification (SDK 9.0.319 from `~/.dotnet9`):** Release build 0 errors, 3 existing CS1998 warnings. Focused notification and route tests 53/53. Full suite **263/263**. `git diff --check` clean. `SoundBite/soundbite.db` SHA-256 unchanged (`33a52d2d...e53c`). **Limitation:** there is no browser test; the event tests do not run Blazor's JavaScript or a real DOM, so the browser-side checkbox behaviour (the DOM checkbox toggling and being patched back after a failed save) still needs the manual check below.
 - **Manual browser check (not yet performed):** run the app against a copy of the database with all migrations applied (never `SoundBite/soundbite.db`). Log in, open `/notifications/settings`, turn "Someone follows you" off and confirm "Preferences saved."; refresh and confirm it is still off. To see a rollback, leave the page open, delete that user's row from the database copy (the service then rejects the save as the account is gone) and toggle a switch: it should flip, then return to its previous position with "Your preference couldn't be saved." Reload failures can be checked the same way: reload the page with the row missing, see "Try again", restore the row, press Try again, and confirm the switches are hidden under "Loading notification settings..." until they appear.
-- **Git:** nothing committed. Suggested commit: `feat: add notification preference settings page`.
+- **Git:** merged to `main` in PR #19 (`4553f1b`).
 
-### 2026-10-17 — A2: notification category preferences (implemented and verified; uncommitted)
+### 2026-10-17 — A2: notification category preferences (implemented, verified, merged in PR #18)
 
 - **Design:** New `NotificationOptOut` (`UserId`, `Type`; composite key; cascade FK to the user). A row means that category is off; no rows means everything is on, so default delivery is unchanged and no backfill is needed. All six existing categories are optional social notifications (there is no security/system type), so none is marked required.
 - **Service:** `NotificationService` gains `GetDisabledTypesAsync`, `SetTypeEnabledAsync` (idempotent, rejects undefined enum values) and internal `IsEnabledAsync`. The check runs at the three creation points (`FollowService`, and the comment and like paths in `SocialInteractionService`) using the recipient's setting; when disabled, the follow/like/comment is still saved but no notification row or live event is created. No UI was added.
@@ -70,18 +81,18 @@
 - **Files changed:** `Models/NotificationOptOut.cs` (new), `Data/ApplicationDbContext.cs`, `Services/NotificationService.cs`, `Services/FollowService.cs`, `Services/SocialInteractionService.cs`, migration + designer (new), `Migrations/ApplicationDbContextModelSnapshot.cs`, `SoundBite.Tests/NotificationTests.cs` (10 new tests, including a disabled-comment test and migration rollback/upgrade).
 - **Verification (SDK 9.0.319 from `~/.dotnet9`):** focused `NotificationTests` + `NotificationsPageTests` 32/32 passed; full NUnit suite 252/252 passed (baseline 242). `migrations has-pending-model-changes`: no changes. Migration script is the single `CREATE TABLE`. `database update` on a disposable SQLite file applied all 12 migrations; down to `AddNotifications` (11, table dropped) and up again (12, table back) all gave `integrity_check` ok and no `foreign_key_check` rows.
 - **Protected state:** `SoundBite/soundbite.db` SHA-256 unchanged (`33a52d2d...e53c`). The migration has **not** been applied to it. Applying it (and the still-pending `ThreadedReviewComments` and `AddNotifications`) needs the DB owner's approval, a backup first, and a trial on a copy.
-- **Git:** nothing committed. Suggested commit: `feat: add notification category preferences`.
+- **Git:** merged to `main` in PR #18.
 
-### 2026-10-17 — A1: notification paging (committed in da572bf; refresh-recovery fix uncommitted)
+### 2026-10-17 — A1: notification paging (implemented, verified, merged in PR #17)
 
-- **Task completed:** Users can load notifications older than the newest 30 via a "Load more" button on `/notifications`. Notification category preferences (A2/A3) are not started.
+- **Task completed:** Users can load notifications older than the newest 30 via a "Load more" button on `/notifications`. Category preferences and settings UI were completed in A2/A3.
 - **Files changed:** `Models/Notification.cs` (`NotificationPage` gains `HasMore`, default false), `Services/NotificationService.cs`, `Components/Pages/Notifications.razor`, `SoundBite.Tests/NotificationTests.cs`, new `SoundBite.Tests/NotificationsPageTests.cs`, and this progress file. No schema, migration, `Program.cs` or application-database changes.
 - **Decisions:** Keyset paging (`CreatedAt`, then `Id`) rather than Skip, so a notification arriving between loads cannot duplicate or skip items. `GetPageAsync(CancellationToken)` keeps its signature; older pages use the overload `GetPageAsync(beforeCreatedAt, beforeId, cancellationToken)`, which rejects `beforeId <= 0`. The recipient filter is applied before the cursor and paging. Unread count and mark-read stay independent of the displayed page.
 - **Page refresh (after review):** Any refresh (live event, reconnect, mark-read) replaces the list with the newest page and resets paging, so read states and deleted notifications always match the database; users press Load more again. A `loadGeneration` counter is bumped by every refresh, and a Load more request that began earlier discards its result if a refresh has started since. Load more is ignored while a refresh is running, and a successful refresh clears any Load more error.
 - **Refresh-recovery fix (after Codex review of da572bf):** a failed live refresh that overlapped an in-flight Load more used to leave `loadingMore` stuck (the abandoned Load more skipped its cleanup, and only a successful refresh cleared it) and hid the list behind the error. `LoadAsync` now clears the Load more state when a refresh starts and re-renders so Load more shows as disabled during a refresh. If a refresh fails after a successful load, the previous list stays visible with a "couldn't be refreshed" banner and a Try again button; a failed first load also shows Try again. Stale Load more/refresh results are still ignored by `loadGeneration`.
 - **Tests:** `NotificationTests` has 9 paging/authorization tests (the cross-user cursor test now asserts exact expected IDs). `NotificationsPageTests` renders the real page using the same `StaticHtmlRenderer` + reflection approach as `CatalogueIntegrationTests` (no new framework) and covers: Load more without duplicates, live refresh reset with current read states and deleted/new items, Load more failure then retry, refresh clearing the error, and a stale Load more result being ignored. Added for the fix: a failed refresh overlapping Load more keeps the list and recovers on retry, initial-load failure offers retry, and Load more is disabled during a refresh; the live-refresh test also checks older-page read states after Load more. The three new tests fail against da572bf's page. Removing the generation check or the reset in a scratch copy also made the matching tests fail.
 - **Verification:** On this machine only SDK 10.0.302 (no .NET 9 runtime) is installed, so the repo's `global.json` pin blocked builds here; verification used a scratch copy of the working tree with `global.json` removed, built by SDK 10.0.302 for `net9.0` and run with `DOTNET_ROLL_FORWARD=Major`. Release build: 0 warnings, 0 errors. Notification tests: 22/22. Full suite: **242/242 passed**, 0 failed/skipped (225 previous + 17 new). The developer separately ran the pinned .NET 9 build and the earlier 234-test suite successfully; the final 242 total has not been re-run under the pinned SDK. No browser test of the Load more button.
-- **Git:** original A1 work is committed (`da572bf`); the refresh-recovery fix is uncommitted on `feature/notification-preferences-paging`. Suggested commit: `fix: recover notification page from failed live refresh`.
+- **Git:** merged to `main` in PR #17; the refresh-recovery fix is included.
 
 ### 2026-10-17 — Live-notification main update integrated and verified for PR #16
 
@@ -340,31 +351,34 @@
 
 | Check | Result | Notes |
 |---|---|---|
-| Application build | Passed | Combined .NET 9 Release build and publish passed; 0 errors, 3 existing test warnings. |
-| Automated tests | Passed — verified | Combined .NET 9 suite: 225 passed, 0 failed/skipped; includes live-notification coverage and two compatibility 404 cases. |
-| Application startup | Passed | Command: `dotnet run --project SoundBite --urls http://localhost:5080` → app reported `Now listening on: http://localhost:5080` and `Application started.` |
+| Application build | Passed | On 2026-10-17, `dotnet build SoundBite.sln --configuration Release --no-restore` passed under SDK 9.0.319 with 0 warnings and 0 errors. |
+| Automated tests | Passed — verified | Full .NET 9 Release suite: 263 passed, 0 failed/skipped. Focused notification and route suite also passed 53/53. |
+| Application publish | Passed | `dotnet publish SoundBite/SoundBite.csproj --configuration Release --no-build --output /tmp/soundbite-b-readiness-publish` succeeded. |
+| Application startup and local smoke test | Passed | App ran against a disposable copy at `/tmp/soundbite-b-readiness.db`; `/` returned HTTP 200, catalogue search rendered and accepted a local-search interaction. No target database was used. |
+| Circuit reconnect | Partially verified | A running page survived a local server stop/restart: the rejoining dialog appeared and dismissed, and page interaction worked afterward. Manual Retry and Reload buttons were not reached. |
 | Relevant feature behaviour | Passed | Authentication/profile/review/playlist/follow flows were previously verified; rendered tests cover review interactions, feed, and track likes. |
-| Database migrations | Passed | Existing migrations, `20261017012957_ThreadedReviewComments`, and `20261017013935_AddNotifications` are exercised by isolated SQLite tests; EF reports no pending model changes. The configured app database is not migrated. |
+| Database migrations | Not applied to target | EF listed `20261017064453_AddNotificationOptOuts` as pending against the disposable database copy. No migration was applied to the copy or application database; deployment requires an authorized target and verified backup. |
 
 ## 9. Git Status
 
-- **Branch:** `main`, clean and synchronized with `origin/main` at `9c33964` (`Merge pull request #16 from staticpen/Net9Compatibility`).
-- **Database:** Identical to latest main and excluded from PR changes. No application migration performed.
-- **PR #16:** Merged into `main`.
+- **Branch:** `main` at `4553f1b` (`Merge pull request #19 from staticpen/feature/notification-settings-ui`); this progress file has local edits.
+- **Database:** No application migration performed; use a backup and an authorized target database for deployment migrations.
+- **PRs #17–#19:** Notification paging, category preferences, and settings UI are merged into `main`.
 
 ## 10. Next Recommended Tasks
 
-1. **Task:** Notification user preferences (A2/A3); paging (A1) is implemented but uncommitted.
-   - **Reason:** The notification page currently returns only the latest 30 and sends every supported notification type without user controls.
-   - **Dependencies:** Preserve recipient scoping, unread-count correctness, and existing read-state behavior when filtering or loading more notifications.
-   - **Acceptance criteria:** Users can load older notifications and independently disable selected notification categories; persistence, authorization, unread counts, and UI are covered by tests.
+1. **Task B:** Verify and prepare a deployable app.
+   - **Done locally:** Release build, full NUnit suite, publish, HTTP startup smoke test using a disposable database copy, and automatic reconnect recovery.
+   - **Still required:** Validate project load, Test Explorer, F5, and publish in Windows Visual Studio 2022 17.14; exercise the explicit reconnect Retry/Reload controls; smoke-test Spotify search/import using locally configured credentials.
+   - **Deployment requires owner input:** identify the intended host and authorized target database, configure the first administrator/environment settings, arrange and verify a backup, and approve migration before applying it. Keep credentials and database files out of commits.
+2. **Task C (as needed):** Consider album/artist discovery, broader catalogue management, or shared notification delivery only if deploying multiple app instances; these are not blockers for the current single-instance application.
 
 ## 11. Handover for the Next Chat Session
 
-- PR #16 is merged into `main` at `9c33964`, including live notifications and .NET 9 compatibility. Release build/publish and all 225 NUnit tests passed. All 11 migrations verified on disposable SQLite; no pending model changes.
-- Application database matches main and is absent from the PR diff. Do not migrate it without separate authorization.
-- Windows VS2022, manual reconnection and live Spotify checks remain outstanding. Notification events are delivered within one app instance; multi-instance delivery is not implemented. No new browser validation was performed in this integration session.
-- The worktree was clean on `main`, synchronized with `origin/main`, at `9c33964` when this status was checked.
+- A is complete: paging, category opt-outs, and the settings page are implemented and merged in PRs #17–#19. Focused notification and route tests passed 53/53 on 2026-10-17; the A3 record reports the full suite passed 263/263.
+- Current branch is clean `main` at `4553f1b`. No migration has been applied to the application database.
+- B is partially verified locally: Release build, all 263 tests, publish, startup, catalogue UI interaction and automatic reconnect recovery passed. Windows VS2022 17.14 validation, explicit Retry/Reload controls, live Spotify search/import and deployment preparation remain outstanding for environment or owner access. The opt-out migration remains pending; do not apply it without authorization and a verified backup.
+- Notification event delivery is single-instance; shared infrastructure is only needed if deploying multiple instances.
 
 ## 12. Instructions for Updating This File
 
