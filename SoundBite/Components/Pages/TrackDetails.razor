@@ -36,7 +36,14 @@ else
         <div class="col-12 col-lg-6">
             <article class="card">
                 <div class="card-body">
-                    <h1 class="card-title fs-2">@track.Title</h1>
+                    <div class="d-flex align-items-start gap-3 mb-3">
+                        @if (!string.IsNullOrWhiteSpace(track.Album?.CoverUrl))
+                        {
+                            <img class="catalogue-cover catalogue-cover-detail" src="@track.Album.CoverUrl"
+                                 alt="@($"{track.Album.Title} album cover")" />
+                        }
+                        <h1 class="card-title fs-2 mb-0">@track.Title</h1>
+                    </div>
                     <h3 class="h5">Artists</h3>
                     @if (track.Artists.Count == 0)
                     {
@@ -47,7 +54,7 @@ else
                         <ul>
                             @foreach (var artist in track.Artists)
                             {
-                                <li>@artist.Name</li>
+                                <li><a href="@($"/artists/{artist.Id}")">@artist.Name</a></li>
                             }
                         </ul>
                     }

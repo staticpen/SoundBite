@@ -4,14 +4,6 @@
 @inject TrendService Trends
 @inject ILogger<RankingsOverview> Logger
 
-@if (hasDemoData)
-{
-    <p class="alert alert-info" role="note">
-        Rankings include clearly labelled demonstration reviews as well as community reviews.
-        Sample reviews are not real user submissions.
-    </p>
-}
-
 @if (isLoading)
 {
     <p role="status">Loading track rankings...</p>
@@ -36,12 +28,17 @@ else
                     @foreach (var track in topRated)
                     {
                         <li class="list-group-item" @key="track.TrackId">
-                            <a href="@($"/tracks/{track.TrackId}")" class="sb-item-title">@track.Title</a>
-                            <div class="small text-muted">@track.AverageRating.ToString("0.0") / 5 · @track.ReviewCount reviews</div>
-                            @if (track.DemoReviewCount > 0)
-                            {
-                                <span class="badge text-bg-info">Includes @track.DemoReviewCount sample reviews</span>
-                            }
+                            <div class="d-flex align-items-center gap-3">
+                                @if (!string.IsNullOrWhiteSpace(track.AlbumCoverUrl))
+                                {
+                                    <img class="catalogue-cover catalogue-cover-thumb" src="@track.AlbumCoverUrl"
+                                         alt="@($"{track.Title} album cover")" loading="lazy" />
+                                }
+                                <div class="min-w-0">
+                                    <a href="@($"/tracks/{track.TrackId}")" class="sb-item-title">@track.Title</a>
+                                    <div class="small text-muted">@track.AverageRating.ToString("0.0") / 5 · @track.ReviewCount reviews</div>
+                                </div>
+                            </div>
                         </li>
                     }
                 </ol>
@@ -61,12 +58,17 @@ else
                     @foreach (var track in mostReviewed)
                     {
                         <li class="list-group-item" @key="track.TrackId">
-                            <a href="@($"/tracks/{track.TrackId}")" class="sb-item-title">@track.Title</a>
-                            <div class="small text-muted">@track.ReviewCount reviews · @track.AverageRating.ToString("0.0") / 5 average</div>
-                            @if (track.DemoReviewCount > 0)
-                            {
-                                <span class="badge text-bg-info">Includes @track.DemoReviewCount sample reviews</span>
-                            }
+                            <div class="d-flex align-items-center gap-3">
+                                @if (!string.IsNullOrWhiteSpace(track.AlbumCoverUrl))
+                                {
+                                    <img class="catalogue-cover catalogue-cover-thumb" src="@track.AlbumCoverUrl"
+                                         alt="@($"{track.Title} album cover")" loading="lazy" />
+                                }
+                                <div class="min-w-0">
+                                    <a href="@($"/tracks/{track.TrackId}")" class="sb-item-title">@track.Title</a>
+                                    <div class="small text-muted">@track.ReviewCount reviews · @track.AverageRating.ToString("0.0") / 5 average</div>
+                                </div>
+                            </div>
                         </li>
                     }
                 </ol>
@@ -86,12 +88,17 @@ else
                     @foreach (var track in trending)
                     {
                         <li class="list-group-item" @key="track.TrackId">
-                            <a href="@($"/tracks/{track.TrackId}")" class="sb-item-title">@track.Title</a>
-                            <div class="small text-muted">@track.RecentReviewCount recent reviews · @track.RecentAverageRating.ToString("0.0") / 5 average</div>
-                            @if (track.DemoReviewCount > 0)
-                            {
-                                <span class="badge text-bg-info">Includes @track.DemoReviewCount sample reviews</span>
-                            }
+                            <div class="d-flex align-items-center gap-3">
+                                @if (!string.IsNullOrWhiteSpace(track.AlbumCoverUrl))
+                                {
+                                    <img class="catalogue-cover catalogue-cover-thumb" src="@track.AlbumCoverUrl"
+                                         alt="@($"{track.Title} album cover")" loading="lazy" />
+                                }
+                                <div class="min-w-0">
+                                    <a href="@($"/tracks/{track.TrackId}")" class="sb-item-title">@track.Title</a>
+                                    <div class="small text-muted">@track.RecentReviewCount recent reviews · @track.RecentAverageRating.ToString("0.0") / 5 average</div>
+                                </div>
+                            </div>
                         </li>
                     }
                 </ol>
@@ -109,7 +116,6 @@ else
     private IReadOnlyList<TrendingTrackEntry> trending = [];
     private bool isLoading = true;
     private bool loadFailed;
-    private bool hasDemoData;
 
     protected override void OnParametersSet()
     {
@@ -124,9 +130,6 @@ else
             topRated = await RankingService.GetTopRatedTracksAsync();
             mostReviewed = await RankingService.GetMostReviewedTracksAsync();
             trending = await Trends.GetTrendingTracksAsync();
-            hasDemoData = topRated.Any(track => track.DemoReviewCount > 0) ||
-                mostReviewed.Any(track => track.DemoReviewCount > 0) ||
-                trending.Any(track => track.DemoReviewCount > 0);
         }
         catch (Exception exception)
         {

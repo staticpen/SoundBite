@@ -34,28 +34,19 @@ public sealed class TrendService(IDbContextFactory<ApplicationDbContext> context
             {
                 review.TrackId,
                 Title = review.Track!.Title,
+                AlbumCoverUrl = review.Track.Album!.CoverUrl,
                 review.Rating,
-                review.CreatedAt,
-                IsDemo = false
+                review.CreatedAt
             })
-            .Concat(db.DemoReviews.AsNoTracking()
-                .Select(review => new
-                {
-                    review.TrackId,
-                    Title = review.Track!.Title,
-                    review.Rating,
-                    review.CreatedAt,
-                    IsDemo = true
-                }))
             .Where(review => review.CreatedAt >= cutoff)
-            .GroupBy(review => new { review.TrackId, review.Title })
+            .GroupBy(review => new { review.TrackId, review.Title, review.AlbumCoverUrl })
             .Select(group => new TrendingTrackEntry
             {
                 TrackId = group.Key.TrackId,
                 Title = group.Key.Title,
+                AlbumCoverUrl = group.Key.AlbumCoverUrl,
                 RecentReviewCount = group.Count(),
-                RecentAverageRating = group.Average(review => review.Rating),
-                DemoReviewCount = group.Count(review => review.IsDemo)
+                RecentAverageRating = group.Average(review => review.Rating)
             })
             .OrderByDescending(entry => entry.RecentReviewCount)
             .ThenByDescending(entry => entry.RecentAverageRating)

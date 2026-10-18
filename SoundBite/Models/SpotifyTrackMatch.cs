@@ -10,11 +10,13 @@ public sealed record SpotifyAlbumCatalogue(
     string SpotifyId,
     string Title,
     IReadOnlyList<SpotifyArtistMatch> Artists,
-    IReadOnlyList<SpotifyTrackMatch> Tracks);
+    IReadOnlyList<SpotifyTrackMatch> Tracks,
+    string? CoverUrl = null);
 
 public sealed record SpotifyTrackMatch(
     string SpotifyId,
     string Title,
     string AlbumSpotifyId,
     string AlbumTitle,
-    IReadOnlyList<SpotifyArtistMatch> Artists);
+    IReadOnlyList<SpotifyArtistMatch> Artists,
+    string? AlbumCoverUrl = null);

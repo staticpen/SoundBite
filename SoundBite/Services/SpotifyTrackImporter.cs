@@ -50,6 +50,7 @@ public sealed class SpotifyTrackImporter(IDbContextFactory<ApplicationDbContext>
             }
 
             album.Title = albumMatch.Title;
+            CacheAlbumCover(album, albumMatch.CoverUrl);
             var albumArtists = albumMatch.Artists.Count == 0
                 ? [discography.Artist]
                 : albumMatch.Artists.DistinctBy(item => item.SpotifyId);
@@ -99,6 +100,7 @@ public sealed class SpotifyTrackImporter(IDbContextFactory<ApplicationDbContext>
         {
             album.Title = match.AlbumTitle;
         }
+        CacheAlbumCover(album, match.AlbumCoverUrl);
 
         foreach (var artist in artists)
             AddAlbumArtist(album, artist);
@@ -146,6 +148,12 @@ public sealed class SpotifyTrackImporter(IDbContextFactory<ApplicationDbContext>
     {
         if (!album.Artists.Any(existing => existing.SpotifyId == artist.SpotifyId))
             album.Artists.Add(artist);
+    }
+
+    private static void CacheAlbumCover(Album album, string? coverUrl)
+    {
+        if (string.IsNullOrWhiteSpace(album.CoverUrl) && !string.IsNullOrWhiteSpace(coverUrl))
+            album.CoverUrl = coverUrl;
     }
 
     private static void ValidateTrack(SpotifyTrackMatch match)

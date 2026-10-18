@@ -254,6 +254,10 @@ namespace SoundBite.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("CoverUrl")
+                        .HasMaxLength(2048)
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("SpotifyId")
                         .HasColumnType("TEXT");
 

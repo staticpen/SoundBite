@@ -74,11 +74,11 @@ public class SpotifyCatalogServiceTests
                 if (LastSearchPathAndQuery.Contains("offset=10", StringComparison.Ordinal))
                 {
                     return Task.FromResult(JsonResponse(
-                        """{"items":[{"id":"album-2","name":"Second album","artists":[{"id":"artist-1","name":"Artist one"}]}],"next":null}"""));
+                        """{"items":[{"id":"album-2","name":"Second album","artists":[{"id":"artist-1","name":"Artist one"}],"images":[{"url":"https://i.scdn.co/image/album-two-cover","height":640,"width":640}]}],"next":null}"""));
                 }
 
                 return Task.FromResult(JsonResponse(
-                    """{"items":[{"id":"album-1","name":"First album","artists":[{"id":"artist-1","name":"Artist one"}]}],"next":"https://api.spotify.com/v1/artists/artist-1/albums?include_groups=album&limit=10&offset=10"}"""));
+                    """{"items":[{"id":"album-1","name":"First album","artists":[{"id":"artist-1","name":"Artist one"}],"images":[{"url":"https://i.scdn.co/image/album-one-small","height":64,"width":64},{"url":"https://i.scdn.co/image/album-one-large","height":640,"width":640}]}],"next":"https://api.spotify.com/v1/artists/artist-1/albums?include_groups=album&limit=10&offset=10"}"""));
             }
 
             if (LastSearchPathAndQuery?.StartsWith("/v1/albums/album-1/tracks", StringComparison.Ordinal) == true)
@@ -95,7 +95,7 @@ public class SpotifyCatalogServiceTests
 
             return Task.FromResult(JsonResponse(
                 """
-                {"tracks":{"items":[{"id":"track-1","name":"A track","album":{"id":"album-1","name":"An album"},"artists":[{"id":"artist-1","name":"Artist one"},{"id":"artist-2","name":"Artist two"}]}]}}
+                {"tracks":{"items":[{"id":"track-1","name":"A track","album":{"id":"album-1","name":"An album","images":[{"url":"https://i.scdn.co/image/search-cover-small","height":64,"width":64},{"url":"https://i.scdn.co/image/search-cover-large","height":640,"width":640}]},"artists":[{"id":"artist-1","name":"Artist one"},{"id":"artist-2","name":"Artist two"}]}]}}
                 """));
         }
 
@@ -144,6 +144,7 @@ public class SpotifyCatalogServiceTests
         Assert.That(results[0].Title, Is.EqualTo("A track"));
         Assert.That(results[0].AlbumSpotifyId, Is.EqualTo("album-1"));
         Assert.That(results[0].AlbumTitle, Is.EqualTo("An album"));
+        Assert.That(results[0].AlbumCoverUrl, Is.EqualTo("https://i.scdn.co/image/search-cover-large"));
         Assert.That(results[0].Artists, Is.EqualTo(new[]
         {
             new SpotifyArtistMatch("artist-1", "Artist one"),
@@ -166,6 +167,11 @@ public class SpotifyCatalogServiceTests
         Assert.That(await verify.Tracks.CountAsync(), Is.EqualTo(1));
         Assert.That(await verify.Albums.CountAsync(), Is.EqualTo(1));
         Assert.That(await verify.Artists.CountAsync(), Is.EqualTo(2));
+        Assert.That(await verify.Albums.Select(album => album.CoverUrl).SingleAsync(),
+            Is.EqualTo("https://i.scdn.co/image/search-cover-large"));
+        await importer.ImportAsync(results[0] with { AlbumCoverUrl = "https://i.scdn.co/image/replacement-cover" });
+        Assert.That(await verify.Albums.Select(album => album.CoverUrl).SingleAsync(),
+            Is.EqualTo("https://i.scdn.co/image/search-cover-large"));
         var storedTrack = await verify.Tracks.Include(track => track.Artists)
             .Include(track => track.Album).ThenInclude(album => album!.Artists)
             .SingleAsync();
@@ -202,6 +208,8 @@ public class SpotifyCatalogServiceTests
         Assert.That(artists, Is.EqualTo(new[] { new SpotifyArtistMatch("artist-1", "Artist one") }));
         var discography = await spotify.GetArtistDiscographyAsync(artists[0]);
         Assert.That(discography.Albums, Has.Count.EqualTo(2));
+        Assert.That(discography.Albums[0].CoverUrl, Is.EqualTo("https://i.scdn.co/image/album-one-large"));
+        Assert.That(discography.Albums[1].CoverUrl, Is.EqualTo("https://i.scdn.co/image/album-two-cover"));
         Assert.That(discography.Albums.SelectMany(album => album.Tracks).ToArray(), Has.Length.EqualTo(2));
 
         var importer = new SpotifyTrackImporter(factory);

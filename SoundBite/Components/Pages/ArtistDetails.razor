@@ -65,11 +65,20 @@ else
                     @foreach (var track in artist.Tracks.OrderBy(track => track.Title).ThenBy(track => track.Id))
                     {
                         <li class="list-group-item" @key="track.Id">
-                            <a href="@($"/tracks/{track.Id}")" class="sb-item-title">@track.Title</a>
-                            @if (track.Album is not null)
-                            {
-                                <span class="text-muted"> · <a href="@($"/albums/{track.Album.Id}")">@track.Album.Title</a></span>
-                            }
+                            <div class="d-flex align-items-center gap-3">
+                                @if (!string.IsNullOrWhiteSpace(track.Album?.CoverUrl))
+                                {
+                                    <img class="catalogue-cover catalogue-cover-thumb" src="@track.Album.CoverUrl"
+                                         alt="@($"{track.Title} album cover")" loading="lazy" />
+                                }
+                                <div class="min-w-0">
+                                    <a href="@($"/tracks/{track.Id}")" class="sb-item-title">@track.Title</a>
+                                    @if (track.Album is not null)
+                                    {
+                                        <div class="text-muted small"><a href="@($"/albums/{track.Album.Id}")">@track.Album.Title</a></div>
+                                    }
+                                </div>
+                            </div>
                         </li>
                     }
                 </ul>

@@ -184,6 +184,12 @@ public class CatalogueIntegrationTests
                     .And.Contain("Log in</a> to rate and review this track."));
                 Assert.That(detailHtml, Does.Contain(id == 42 ? "First track review" : "Second track review")
                     .And.Not.Contain(id == 42 ? "Second track review" : "First track review"));
+                if (id == 42)
+                {
+                    Assert.That(detailHtml, Does.Contain("href=\"/artists/11\"")
+                        .And.Contain("https://i.scdn.co/image/echo-album-cover")
+                        .And.Contain("catalogue-cover-detail"));
+                }
                 Assert.That(detailHtml, Does.Contain(id == 42 ? "4 / 5 stars" : "2 / 5 stars"));
             }
         });
@@ -240,7 +246,9 @@ public class CatalogueIntegrationTests
                 new Dictionary<string, object?> { [nameof(ArtistDetails.Id)] = 11 }));
             Assert.That(artist.ToHtmlString(), Does.Contain("Echo artist")
                 .And.Contain("href=\"/albums/23\"")
-                .And.Contain("href=\"/tracks/42\""));
+                .And.Contain("href=\"/tracks/42\"")
+                .And.Contain("https://i.scdn.co/image/echo-album-cover")
+                .And.Contain("catalogue-cover-thumb"));
 
             var album = await renderer.RenderComponentAsync<AlbumDetails>(ParameterView.FromDictionary(
                 new Dictionary<string, object?> { [nameof(AlbumDetails.Id)] = 23 }));
@@ -485,7 +493,13 @@ public class CatalogueIntegrationTests
         {
             await db.Database.MigrateAsync();
             var artist = new Artist { Id = 11, Name = "Echo artist" };
-            var album = new Album { Id = 23, Title = "Echo album", Artists = [artist] };
+            var album = new Album
+            {
+                Id = 23,
+                Title = "Echo album",
+                CoverUrl = "https://i.scdn.co/image/echo-album-cover",
+                Artists = [artist]
+            };
             db.AddRange(artist, album,
                 new Track { Id = 42, Title = "Echo <track>", SpotifyId = "spotify-first", Album = album, Artists = [artist] },
                 new Track { Id = 907, Title = "Echo <track>", SpotifyId = "spotify-second" });

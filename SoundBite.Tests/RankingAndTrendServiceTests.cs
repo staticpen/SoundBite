@@ -67,7 +67,17 @@ public sealed class RankingAndTrendServiceTests
             .ToArray();
         var tracks = new[]
         {
-            new Track { Id = 1, Title = "Widely reviewed", SpotifyId = "spotify-1" },
+            new Track
+            {
+                Id = 1,
+                Title = "Widely reviewed",
+                SpotifyId = "spotify-1",
+                Album = new Album
+                {
+                    Title = "Widely reviewed album",
+                    CoverUrl = "https://i.scdn.co/image/test-cover"
+                }
+            },
             new Track { Id = 2, Title = "Highest rated", SpotifyId = "spotify-2" },
             new Track { Id = 3, Title = "Single review", SpotifyId = "spotify-3" },
             new Track { Id = 4, Title = "Old favourite", SpotifyId = "spotify-4" }
@@ -130,7 +140,7 @@ public sealed class RankingAndTrendServiceTests
     }
 
     [Test]
-    public async Task DemoReviewSeedingIsRepeatableAndIncludedInRankings()
+    public async Task DemoReviewsAreExcludedFromRankingsAndTrends()
     {
         var seeder = new DemoReviewSeeder(contextFactory);
         var initialResult = await seeder.SeedAsync();
@@ -143,8 +153,11 @@ public sealed class RankingAndTrendServiceTests
 
         var rankedTracks = await rankings.GetTopRatedTracksAsync();
         var widelyReviewed = rankedTracks.Single(entry => entry.TrackId == 1);
-        Assert.That(widelyReviewed.ReviewCount, Is.EqualTo(7));
-        Assert.That(widelyReviewed.DemoReviewCount, Is.EqualTo(3));
+        Assert.That(widelyReviewed.ReviewCount, Is.EqualTo(4));
+        Assert.That(widelyReviewed.AverageRating, Is.EqualTo(4));
+        Assert.That(widelyReviewed.AlbumCoverUrl, Is.EqualTo("https://i.scdn.co/image/test-cover"));
+        Assert.That((await trends.GetTrendingTracksAsync()).Single(entry => entry.TrackId == 1).RecentReviewCount,
+            Is.EqualTo(3));
     }
 
     [Test]
@@ -162,7 +175,8 @@ public sealed class RankingAndTrendServiceTests
                 .And.Contain("href=\"/tracks/1\"")
                 .And.Contain("href=\"/tracks/2\"")
                 .And.Contain("Widely reviewed")
-                .And.Contain("Highest rated"));
+                .And.Contain("Highest rated")
+                .And.Contain("https://i.scdn.co/image/test-cover"));
             Assert.That(html, Does.Contain("<h1>Ratings and trends</h1>")
                 .And.Contain("<h2 id=\"top-rated-heading\">Top rated</h2>")
                 .And.Contain("<h2 id=\"most-reviewed-heading\">Most reviewed</h2>")
@@ -193,16 +207,15 @@ public sealed class RankingAndTrendServiceTests
     }
 
     [Test]
-    public async Task RankingsOverviewExplainsLabelledDemonstrationReviewsOnlyWhenPresent()
+    public async Task RankingsOverviewNeverShowsDemonstrationReviewData()
     {
         Assert.That(await RenderOverviewAsync(provider), Does.Not.Contain("demonstration reviews")
             .And.Not.Contain("sample reviews"));
 
         await new DemoReviewSeeder(contextFactory).SeedAsync();
 
-        Assert.That(await RenderOverviewAsync(provider), Does.Contain("clearly labelled demonstration reviews")
-            .And.Contain("Sample reviews are not real user submissions.")
-            .And.Contain("sample reviews</span>"));
+        Assert.That(await RenderOverviewAsync(provider), Does.Not.Contain("demonstration reviews")
+            .And.Not.Contain("sample reviews"));
     }
 
     [Test]

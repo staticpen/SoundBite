@@ -15,6 +15,9 @@ public class Album
     [RegularExpression(@"\S+")]
     public string? SpotifyId { get; set; }
 
+    [MaxLength(2048)]
+    public string? CoverUrl { get; set; }
+
     public ICollection<Artist> Artists { get; set; } = new List<Artist>();
 
     public ICollection<Track> Tracks { get; set; } = new List<Track>();

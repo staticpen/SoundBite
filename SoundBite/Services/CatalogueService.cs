@@ -50,6 +50,7 @@ public class CatalogueService(IDbContextFactory<ApplicationDbContext> contextFac
             .Include(artist => artist.Albums.OrderBy(album => album.Title).ThenBy(album => album.Id))
                 .ThenInclude(album => album.Tracks.OrderBy(track => track.Title).ThenBy(track => track.Id))
             .Include(artist => artist.Tracks.OrderBy(track => track.Title).ThenBy(track => track.Id))
+                .ThenInclude(track => track.Album)
             .SingleOrDefaultAsync(artist => artist.Id == id, cancellationToken);
     }
 

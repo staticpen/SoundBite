@@ -49,25 +49,17 @@ public sealed class RankingService(
             {
                 review.TrackId,
                 Title = review.Track!.Title,
+                AlbumCoverUrl = review.Track.Album!.CoverUrl,
                 review.Rating,
-                IsDemo = false
             })
-            .Concat(db.DemoReviews.AsNoTracking()
-                .Select(review => new
-                {
-                    review.TrackId,
-                    Title = review.Track!.Title,
-                    review.Rating,
-                    IsDemo = true
-                }))
-            .GroupBy(review => new { review.TrackId, review.Title })
+            .GroupBy(review => new { review.TrackId, review.Title, review.AlbumCoverUrl })
             .Select(group => new TrackRankingEntry
             {
                 TrackId = group.Key.TrackId,
                 Title = group.Key.Title,
+                AlbumCoverUrl = group.Key.AlbumCoverUrl,
                 ReviewCount = group.Count(),
-                AverageRating = group.Average(review => review.Rating),
-                DemoReviewCount = group.Count(review => review.IsDemo)
+                AverageRating = group.Average(review => review.Rating)
             });
 
     private static void ValidateLimit(int limit)

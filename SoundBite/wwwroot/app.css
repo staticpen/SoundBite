@@ -84,6 +84,24 @@ h5, .h5, .card-title, .sb-item-title {
     font-weight: 600;
 }
 
+.catalogue-cover {
+    display: block;
+    flex: none;
+    object-fit: cover;
+    border-radius: 0.375rem;
+    background-color: var(--sb-surface);
+}
+
+.catalogue-cover-thumb {
+    width: 64px;
+    height: 64px;
+}
+
+.catalogue-cover-detail {
+    width: clamp(128px, 24vw, 224px);
+    height: clamp(128px, 24vw, 224px);
+}
+
 h6, .h6 {
     font-size: 1rem;
     font-weight: 600;

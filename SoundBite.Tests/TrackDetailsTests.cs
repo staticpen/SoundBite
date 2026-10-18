@@ -95,7 +95,7 @@ public class TrackDetailsTests
             var root = await renderer.RenderComponentAsync<TrackDetails>(Parameters(1));
             var html = root.ToHtmlString();
             Assert.That(html, Does.Contain("Reviews (1)")
-                .And.Contain("<h1 class=\"card-title fs-2\">Reviewed track</h1>")
+                .And.Contain("<h1 class=\"card-title fs-2 mb-0\">Reviewed track</h1>")
                 .And.Contain("Alice")
                 .And.Contain("A great track")
                 .And.Contain("Log in to like")
@@ -276,14 +276,31 @@ public class TrackDetailsTests
         var catalog = new CatalogStub { Load = _ => Task.FromResult<Track?>(new Track
         {
             Title = "Track <one>", SpotifyId = "track/id",
-            Artists = [new() { Name = "First artist" }, new() { Name = "Second artist" }],
-            Album = new() { Title = "Album title", SpotifyId = "album-id" }
+            Artists = [new() { Id = 11, Name = "First artist" }, new() { Id = 12, Name = "Second artist" }],
+            Album = new()
+            {
+                Title = "Album title",
+                SpotifyId = "album-id",
+                CoverUrl = "https://i.scdn.co/image/test-cover"
+            }
         }) };
         await RenderAsync(catalog, async renderer =>
         {
             var root = await renderer.RenderComponentAsync<TrackDetails>(Parameters(42));
             var html = root.ToHtmlString();
-            foreach (var expected in new[] { "Track &lt;one&gt;", "First artist", "Second artist", "Album title", "https://open.spotify.com/track/track%2Fid", "https://open.spotify.com/album/album-id" })
+            foreach (var expected in new[]
+                     {
+                         "Track &lt;one&gt;",
+                         "First artist",
+                         "href=\"/artists/11\"",
+                         "Second artist",
+                         "href=\"/artists/12\"",
+                         "Album title",
+                         "https://i.scdn.co/image/test-cover",
+                         "catalogue-cover-detail",
+                         "https://open.spotify.com/track/track%2Fid",
+                         "https://open.spotify.com/album/album-id"
+                     })
                 Assert.That(html, Does.Contain(expected));
             Assert.That(html, Does.Not.Contain("<code>")
                 .And.Not.Contain("Track Spotify ID")

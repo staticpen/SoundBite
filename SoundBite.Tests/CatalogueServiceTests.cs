@@ -111,6 +111,8 @@ public class CatalogueServiceTests
         Assert.That(artist!.Albums.Select(a => a.Id), Is.EqualTo(new[] { 1, 2, 3 }));
         Assert.That(artist.Albums.First().Tracks.Select(t => t.Id), Is.EqualTo(new[] { 1, 2, 3 }));
         Assert.That(artist.Tracks.Select(t => t.Id), Is.EqualTo(new[] { 1, 2, 4, 3 }));
+        Assert.That(artist.Tracks.Where(track => track.Album is not null)
+            .All(track => track.Album!.Title == "Alpha"), Is.True);
     }
 
     [Test]

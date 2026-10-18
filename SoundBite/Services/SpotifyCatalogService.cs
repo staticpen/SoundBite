@@ -79,7 +79,8 @@ public sealed class SpotifyCatalogService(
                 album.Id,
                 album.Name,
                 albumArtists,
-                tracks));
+                tracks,
+                SelectAlbumCoverUrl(album.Images)));
         }
 
         return new SpotifyArtistDiscography(artist, catalogueAlbums);
@@ -111,9 +112,20 @@ public sealed class SpotifyCatalogService(
                 item.Name!,
                 item.Album!.Id!,
                 item.Album.Name!,
-                MapArtists(item.Artists)))
+                MapArtists(item.Artists),
+                SelectAlbumCoverUrl(item.Album.Images)))
             .ToArray();
     }
+
+    private static string? SelectAlbumCoverUrl(IEnumerable<SpotifyImageItem>? images) =>
+        (images ?? [])
+            .Where(image => Uri.TryCreate(image.Url, UriKind.Absolute, out var uri) &&
+                uri.Scheme == Uri.UriSchemeHttps &&
+                (uri.Host.EndsWith(".scdn.co", StringComparison.OrdinalIgnoreCase) ||
+                 uri.Host.EndsWith(".spotifycdn.com", StringComparison.OrdinalIgnoreCase)))
+            .OrderByDescending(image => Math.Max(image.Width ?? 0, image.Height ?? 0))
+            .Select(image => image.Url)
+            .FirstOrDefault();
 
     private async Task<List<T>> GetAllPagesAsync<T>(
         string initialUrl,
@@ -190,6 +202,14 @@ public sealed class SpotifyCatalogService(
         public string? Id { get; set; }
         public string? Name { get; set; }
         public List<SpotifyArtistItem> Artists { get; set; } = [];
+        public List<SpotifyImageItem> Images { get; set; } = [];
+    }
+
+    private sealed class SpotifyImageItem
+    {
+        public string? Url { get; set; }
+        public int? Height { get; set; }
+        public int? Width { get; set; }
     }
 
     private sealed class SpotifyTrackItem
