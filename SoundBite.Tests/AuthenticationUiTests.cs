@@ -104,17 +104,18 @@ public class AuthenticationUiTests
     {
         var signedOut = await client.GetStringAsync("/");
         var signedOutNavbar = NavbarOf(signedOut);
-        Assert.That(signedOutNavbar, Does.Contain("<a href=\"search\" class=\"nav-link\">Search</a>")
+        Assert.That(signedOutNavbar, Does.Contain("<a href=\"/\" class=\"nav-link active\" aria-current=\"page\">Home</a>")
+            .And.Contain("<a href=\"search\" class=\"nav-link\">Search</a>")
             .And.Contain("<a href=\"register\" class=\"nav-link\">Create account</a>")
             .And.Contain("<a href=\"login\" class=\"btn btn-primary nav-cta\">Log in</a>")
             .And.Contain("<a class=\"brand\" href=\"/\" aria-label=\"SoundBite home\"")
             .And.Contain("aria-controls=\"site-nav-menu\"").And.Contain("aria-expanded=\"false\"")
-            .And.Not.Contain(">Home<").And.Not.Contain("href=\"feed\"")
+            .And.Not.Contain("href=\"feed\"")
             .And.Not.Contain("href=\"rankings\"").And.Not.Contain("href=\"playlists\"")
             .And.Not.Contain("href=\"favourites\"").And.Not.Contain("/account/logout").And.Not.Contain("admin/users")
             .And.Not.Contain("href=\"notifications\"").And.Not.Contain("soundbite-logo.svg"));
-        Assert.That(Regex.Matches(signedOutNavbar, "class=\"nav-link\"").Count, Is.EqualTo(2),
-            "Only Search and Create account are secondary links; Log in is the primary button.");
+        Assert.That(Regex.Matches(signedOutNavbar, "class=\"nav-link(?: active)?\"").Count, Is.EqualTo(3),
+            "Only Home, Search and Create account are secondary links; Log in is the primary button.");
         Assert.That(signedOut, Does.Not.Contain("/account/logout"));
 
         foreach (var (pattern, description) in new[]
@@ -132,7 +133,8 @@ public class AuthenticationUiTests
         await Register();
         var signedInHome = await client.GetStringAsync("/");
         var signedIn = NavbarOf(signedInHome);
-        Assert.That(signedIn, Does.Contain("href=\"search\" class=\"nav-link\">Search</a>")
+        Assert.That(signedIn, Does.Contain("href=\"/\" class=\"nav-link active\" aria-current=\"page\">Home</a>")
+            .And.Contain("href=\"search\" class=\"nav-link\">Search</a>")
             .And.Contain("href=\"rankings\" class=\"nav-link\">Ratings and Trends</a>")
             .And.Contain("href=\"favourites\" class=\"nav-link\">Favourites</a>")
             .And.Not.Contain("href=\"feed\"").And.Not.Contain("href=\"playlists\"")
@@ -140,7 +142,7 @@ public class AuthenticationUiTests
             .And.Contain("href=\"account\" class=\"nav-link\">Edit Profile</a>").And.Contain("href=\"notifications\"")
             .And.Contain("action=\"/account/logout\"").And.Contain(">Log out</button>")
             .And.Contain("btn-outline-secondary").And.Not.Contain("btn-outline-light")
-            .And.Not.Contain(">Home<").And.Not.Contain("href=\"register\"")
+            .And.Not.Contain("href=\"register\"")
             .And.Not.Contain("href=\"login\"").And.Not.Contain("admin/users"));
 
         using (var scope = app.Services.CreateScope())
