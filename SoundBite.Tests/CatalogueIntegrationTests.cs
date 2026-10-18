@@ -73,7 +73,51 @@ public class CatalogueIntegrationTests
         }
     }
 
-    private sealed class UnusedSpotifyCatalog : ISpotifyCatalog
+    public sealed class FavouritesSearchPage : Favourites
+    {
+        [Parameter] public string Query { get; set; } = "";
+        [Parameter] public Action<FavouritesSearchPage>? Capture { get; set; }
+
+        protected override void OnInitialized()
+        {
+            base.OnInitialized();
+            Capture?.Invoke(this);
+        }
+
+        protected override async Task OnInitializedAsync()
+        {
+            await base.OnInitializedAsync();
+            typeof(Favourites).GetField("query", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .SetValue(this, Query);
+            typeof(Favourites).GetField("showAddTracks", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .SetValue(this, true);
+            await InvokePageMethodAsync("SearchTracksAsync");
+        }
+
+        public async Task AddFirstArtistAsync()
+        {
+            var artists = (IReadOnlyList<SpotifyArtistMatch>)typeof(Favourites)
+                .GetField("spotifyArtists", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .GetValue(this)!;
+            await InvokePageMethodAsync("AddArtistAsync", artists[0]);
+            StateHasChanged();
+        }
+
+        public async Task AddFirstMatchingTrackAsync()
+        {
+            var tracks = (IReadOnlyList<Track>)typeof(Favourites)
+                .GetField("searchResults", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .GetValue(this)!;
+            await InvokePageMethodAsync("AddAsync", tracks[0]);
+            StateHasChanged();
+        }
+
+        private Task InvokePageMethodAsync(string name, params object[]? arguments) =>
+            (Task)typeof(Favourites).GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(this, arguments)!;
+    }
+
+    private sealed class TestSpotifyCatalog : ISpotifyCatalog
     {
         public Task<IReadOnlyList<SpotifyArtistMatch>> SearchArtistsAsync(
             string query,
@@ -83,7 +127,20 @@ public class CatalogueIntegrationTests
         public Task<SpotifyArtistDiscography> GetArtistDiscographyAsync(
             SpotifyArtistMatch artist,
             CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException("This test does not import Spotify artists.");
+            Task.FromResult(new SpotifyArtistDiscography(
+                artist,
+                [
+                    new SpotifyAlbumCatalogue(
+                        "spotify-album",
+                        "Spotify album",
+                        [artist],
+                        [new SpotifyTrackMatch(
+                            "spotify-track",
+                            "Spotify track",
+                            "spotify-album",
+                            "Spotify album",
+                            [artist])])
+                ]));
 
         public Task<IReadOnlyList<SpotifyTrackMatch>> SearchTracksAsync(
             string query,
@@ -140,6 +197,36 @@ public class CatalogueIntegrationTests
                 new Dictionary<string, object?> { [nameof(SearchPage.Query)] = "echo" }));
             Assert.That(search.ToHtmlString(), Does.Contain("Add to Favourites")
                 .And.Contain("href=\"/tracks/42\""));
+        }, new SignedInAuthenticationStateProvider());
+    }
+
+    [Test]
+    public async Task FavouritesSearchCanImportArtistCatalogueThenAddMatchingTrack()
+    {
+        await WithCatalogue(async renderer =>
+        {
+            FavouritesSearchPage pageInstance = null!;
+            var page = await renderer.RenderComponentAsync<FavouritesSearchPage>(ParameterView.FromDictionary(
+                new Dictionary<string, object?>
+                {
+                    [nameof(FavouritesSearchPage.Query)] = "Spotify",
+                    [nameof(FavouritesSearchPage.Capture)] = (Action<FavouritesSearchPage>)(value => pageInstance = value)
+                }));
+            Assert.That(page.ToHtmlString(), Does.Contain("Artists available to add")
+                .And.Contain("Spotify Artist")
+                .And.Contain("Add artist and tracks"));
+
+            await renderer.Dispatcher.InvokeAsync(pageInstance.AddFirstArtistAsync);
+
+            Assert.That(page.ToHtmlString(), Does.Contain("Added Spotify Artist: 1 albums and 1 tracks.")
+                .And.Contain("Spotify track")
+                .And.Contain("Add to Favourites"));
+
+            await renderer.Dispatcher.InvokeAsync(pageInstance.AddFirstMatchingTrackAsync);
+
+            Assert.That(page.ToHtmlString(), Does.Contain("Added Spotify track to Favourites.")
+                .And.Contain("Spotify track")
+                .And.Contain("Added"));
         }, new SignedInAuthenticationStateProvider());
     }
 
@@ -267,7 +354,7 @@ public class CatalogueIntegrationTests
         await using var services = new ServiceCollection().AddLogging()
             .AddDbContextFactory<ApplicationDbContext>(options => options.UseSqlite(connection))
             .AddScoped<IMusicCatalog, CatalogueService>()
-            .AddSingleton<ISpotifyCatalog, UnusedSpotifyCatalog>()
+            .AddSingleton<ISpotifyCatalog, TestSpotifyCatalog>()
             .AddScoped<SpotifyTrackImporter>()
             .AddScoped<SpotifyArtistCatalogService>()
             .AddScoped<ReviewService>()
@@ -288,7 +375,9 @@ public class CatalogueIntegrationTests
             db.AddRange(artist, album,
                 new Track { Id = 42, Title = "Echo <track>", SpotifyId = "spotify-first", Album = album, Artists = [artist] },
                 new Track { Id = 907, Title = "Echo <track>", SpotifyId = "spotify-second" });
-            db.Users.Add(new ApplicationUser { Id = "reviewer", UserName = "reviewer", DisplayName = "Integration reviewer" });
+            db.Users.AddRange(
+                new ApplicationUser { Id = "reviewer", UserName = "reviewer", DisplayName = "Integration reviewer" },
+                new ApplicationUser { Id = "listener", UserName = "listener" });
             db.Reviews.Add(new Review { UserId = "reviewer", TrackId = 42, Rating = 4, Comment = "First track review" });
             db.Reviews.Add(new Review { UserId = "reviewer", TrackId = 907, Rating = 2, Comment = "Second track review" });
             await db.SaveChangesAsync();

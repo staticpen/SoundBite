@@ -36,7 +36,7 @@
 | Spotify integration | Production seed verified; interactive import fix awaits deployment | The deployed credentials completed five default searches, refreshing 50 unique tracks and creating 26 sample reviews across 12 tracks. A live API probe showed artist-album requests accept limit 10 and reject 20 and 50. |
 | Track ratings and reviews | Implemented — verified | Reviews persist through EF Core; the service supports create/read/update, the database enforces one review per user per track and valid 1–5 ratings, and track details support public review reading plus authenticated submission/editing. |
 | Album-track many-to-many relationship | Implemented — unverified | `ApplicationDbContext` maps `ArtistAlbums` and `ArtistTracks` and `Track.AlbumId` with a nullable optional foreign key. This matches the intended design, but the schema has not been validated via a migration review beyond the code. |
-| Favourites | Implemented — production migration applied and verified | Each user has one private list. Tracks can be added from search, track details, or the Favourites page; the page supports catalogue search and removal. Ratings and reviews are not required to save a track. The production migration preserved the existing playlist track in `FavouriteTracks` and removed the playlist tables. |
+| Favourites | Implemented — production migration and Spotify fallback verified | Each user has one private list. Tracks can be added from search, track details, or the Favourites page; the page supports local catalogue search and, on a track miss, Spotify artist search/import before offering imported tracks to add. Ratings and reviews are not required to save a track. The production migration preserved the existing playlist track in `FavouriteTracks` and removed the playlist tables. |
 | Following and followers | Implemented — verified | Authenticated idempotent follow/unfollow, public counts and expandable 10-user pages; database constraints, concurrent requests, account deletion and browser flows verified. Merged into `main` at `ac92cbe`. |
 | Likes and comments | Implemented — verified | Signed-in users can idempotently like reviews, tracks, and comments. Users can add/edit/delete their own review comments and reply one level deep to top-level comments. Replies are grouped under parents, cannot be nested further, and are preserved as top-level comments if their parent is deleted. |
 | Activity feed | Implemented — shown on Home | Home renders a globally ordered and paginated feed of reviews, comments/replies, and likes by followed users and the signed-in user. The standalone Activity Feed navigation item and route are removed. |
@@ -48,6 +48,12 @@
 | Git and repository hygiene | In progress | `main` is at `f0f2600` (`Removed Playlists, repurposed to Favourites`) and synchronized with `origin/main`; follow-up Home layout and migration diagnostics are uncommitted. |
 
 ## 4. Latest Completed Work
+
+### 2026-10-18 — Added Spotify artist fallback to Favourites track search
+
+- **Change:** Favourites > Add Tracks now searches Spotify artists when a catalogue query has no matching tracks. A signed-in user can choose an artist to import the artist and full discography, then add matching imported tracks to Favourites. Search/import failures and refresh failures display explicit status messages.
+- **Verification:** `CatalogueIntegrationTests` passed **11/11**, including an end-to-end component test covering local miss, Spotify artist selection, artist/album/track import, and adding the matching track to Favourites. `git diff --check` passed.
+- **Deployment:** Local source change only; not deployed.
 
 ### 2026-10-18 — Replaced playlists with Favourites and moved activity feed to Home
 
