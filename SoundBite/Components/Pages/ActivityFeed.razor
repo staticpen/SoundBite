@@ -9,100 +9,102 @@
 
 <PageTitle>Activity Feed - SoundBite</PageTitle>
 
-<h1>Activity feed</h1>
+<div class="content-column">
+    <h1>Activity feed</h1>
 
-@if (loading)
-{
-    <p role="status">Loading your feed...</p>
-}
-else if (!signedIn)
-{
-    <p><a href="/login">Log in</a> to see recent reviews and comments from people you follow.</p>
-}
-else if (loadFailed)
-{
-    <div class="alert alert-danger" role="alert">The activity feed couldn't be loaded. Please try again later.</div>
-}
-else if (items.Count == 0)
-{
-    <p class="text-muted">No recent activity yet. Follow people and explore their reviews.</p>
-}
-else
-{
-    <div class="list-group">
-        @foreach (var item in items)
-        {
-            <article class="list-group-item" @key="(item.Type, item.Id)">
-                <p class="mb-1">
-                    <a href="@($"/users/{Uri.EscapeDataString(item.UserName)}")">@item.ActorName</a>
-                    @if (item.Type == ActivityType.Review)
-                    {
-                        <span> reviewed </span>
-                    }
-                    else if (item.Type == ActivityType.Comment)
-                    {
-                        @if (item.ParentCommentId is not null)
+    @if (loading)
+    {
+        <p role="status">Loading your feed...</p>
+    }
+    else if (!signedIn)
+    {
+        <p><a href="/login">Log in</a> to see recent reviews and comments from people you follow.</p>
+    }
+    else if (loadFailed)
+    {
+        <div class="alert alert-danger" role="alert">The activity feed couldn't be loaded. Please try again later.</div>
+    }
+    else if (items.Count == 0)
+    {
+        <p class="text-muted">No recent activity yet. Follow people and explore their reviews.</p>
+    }
+    else
+    {
+        <div class="list-group">
+            @foreach (var item in items)
+            {
+                <article class="list-group-item" @key="(item.Type, item.Id)">
+                    <p class="mb-1">
+                        <a href="@($"/users/{Uri.EscapeDataString(item.UserName)}")">@item.ActorName</a>
+                        @if (item.Type == ActivityType.Review)
                         {
-                            <span> replied to </span>
-                            <a href="@($"/users/{Uri.EscapeDataString(item.ParentUserName ?? string.Empty)}")">@item.ParentActorName</a>
-                            <span> on a review of </span>
+                            <span> reviewed </span>
+                        }
+                        else if (item.Type == ActivityType.Comment)
+                        {
+                            @if (item.ParentCommentId is not null)
+                            {
+                                <span> replied to </span>
+                                <a href="@($"/users/{Uri.EscapeDataString(item.ParentUserName ?? string.Empty)}")">@item.ParentActorName</a>
+                                <span> on a review of </span>
+                            }
+                            else
+                            {
+                                <span> commented on a review of </span>
+                            }
+                        }
+                        else if (item.TargetType == LikeTargetType.Track)
+                        {
+                            <span> liked the track </span>
+                        }
+                        else if (item.TargetType == LikeTargetType.Playlist)
+                        {
+                            <span> liked a public playlist by </span>
+                            <a href="@($"/users/{Uri.EscapeDataString(item.TargetUserName ?? string.Empty)}")">@item.TargetActorName</a>
+                            <span>: </span>
+                            <a href="@($"/playlists/{item.PlaylistId}")">@item.PlaylistName</a>
                         }
                         else
                         {
-                            <span> commented on a review of </span>
+                            <span> liked a @(item.TargetType == LikeTargetType.Review ? "review" : "comment") by </span>
+                            <a href="@($"/users/{Uri.EscapeDataString(item.TargetUserName ?? string.Empty)}")">@item.TargetActorName</a>
+                            <span> on a review of </span>
                         }
-                    }
-                    else if (item.TargetType == LikeTargetType.Track)
+                        @if (item.TrackId is int trackId && item.TrackTitle is not null)
+                        {
+                            <a href="@($"/tracks/{trackId}{(item.ReviewId is int reviewId ? $"#review-{reviewId}" : string.Empty)}")">@item.TrackTitle</a>
+                        }
+                        @if (item.Rating is int rating)
+                        {
+                            <span class="badge text-bg-warning ms-2">@rating / 5 stars</span>
+                        }
+                    </p>
+                    @if (item.Type == ActivityType.Like && item.TargetType == LikeTargetType.Comment && item.ParentCommentId is not null)
                     {
-                        <span> liked the track </span>
+                        <p class="small text-muted mb-1">The liked comment is a reply to @item.ParentActorName.</p>
                     }
-                    else if (item.TargetType == LikeTargetType.Playlist)
+                    @if (!string.IsNullOrWhiteSpace(item.Content))
                     {
-                        <span> liked a public playlist by </span>
-                        <a href="@($"/users/{Uri.EscapeDataString(item.TargetUserName ?? string.Empty)}")">@item.TargetActorName</a>
-                        <span>: </span>
-                        <a href="@($"/playlists/{item.PlaylistId}")">@item.PlaylistName</a>
+                        <p class="mb-1">@item.Content</p>
                     }
-                    else
-                    {
-                        <span> liked a @(item.TargetType == LikeTargetType.Review ? "review" : "comment") by </span>
-                        <a href="@($"/users/{Uri.EscapeDataString(item.TargetUserName ?? string.Empty)}")">@item.TargetActorName</a>
-                        <span> on a review of </span>
-                    }
-                    @if (item.TrackId is int trackId && item.TrackTitle is not null)
-                    {
-                        <a href="@($"/tracks/{trackId}{(item.ReviewId is int reviewId ? $"#review-{reviewId}" : string.Empty)}")">@item.TrackTitle</a>
-                    }
-                    @if (item.Rating is int rating)
-                    {
-                        <span class="badge text-bg-warning ms-2">@rating / 5 stars</span>
-                    }
-                </p>
-                @if (item.Type == ActivityType.Like && item.TargetType == LikeTargetType.Comment && item.ParentCommentId is not null)
-                {
-                    <p class="small text-muted mb-1">The liked comment is a reply to @item.ParentActorName.</p>
-                }
-                @if (!string.IsNullOrWhiteSpace(item.Content))
-                {
-                    <p class="mb-1">@item.Content</p>
-                }
-                <time class="text-muted small" datetime="@item.CreatedAt.ToString("O")">
-                    @item.CreatedAt.ToLocalTime().ToString("g")
-                </time>
-            </article>
-        }
-    </div>
-    @if (hasNext)
-    {
-        <button type="button" class="btn btn-outline-primary mt-3" @onclick="LoadMoreAsync" disabled="@loadingMore">
-            @(loadingMore ? "Loading..." : "Load more")
-        </button>
-        @if (loadMoreFailed)
+                    <time class="text-muted small" datetime="@item.CreatedAt.ToString("O")">
+                        @item.CreatedAt.ToLocalTime().ToString("g")
+                    </time>
+                </article>
+            }
+        </div>
+        @if (hasNext)
         {
-            <p class="alert alert-danger mt-2" role="alert">More activity couldn't be loaded. Please try again.</p>
+            <button type="button" class="btn btn-outline-primary mt-3" @onclick="LoadMoreAsync" disabled="@loadingMore">
+                @(loadingMore ? "Loading..." : "Load more")
+            </button>
+            @if (loadMoreFailed)
+            {
+                <p class="alert alert-danger mt-2" role="alert">More activity couldn't be loaded. Please try again.</p>
+            }
         }
     }
-}
+</div>
 
 @code {
     private readonly List<ActivityItem> items = [];

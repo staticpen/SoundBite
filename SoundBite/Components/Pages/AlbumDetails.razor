@@ -39,7 +39,7 @@ else
                 <ul class="list-inline">
                     @foreach (var artist in album.Artists.OrderBy(artist => artist.Name).ThenBy(artist => artist.Id))
                     {
-                        <li class="list-inline-item" @key="artist.Id"><a href="@($"/artists/{artist.Id}")">@artist.Name</a></li>
+                        <li class="list-inline-item" @key="artist.Id"><a href="@($"/artists/{artist.Id}")" class="sb-item-title">@artist.Name</a></li>
                     }
                 </ul>
             }
@@ -62,7 +62,7 @@ else
                     @foreach (var track in album.Tracks.OrderBy(track => track.Title).ThenBy(track => track.Id))
                     {
                         <li class="list-group-item" @key="track.Id">
-                            <a href="@($"/tracks/{track.Id}")">@track.Title</a>
+                            <a href="@($"/tracks/{track.Id}")" class="sb-item-title">@track.Title</a>
                         </li>
                     }
                 </ol>

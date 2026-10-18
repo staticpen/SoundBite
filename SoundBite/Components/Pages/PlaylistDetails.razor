@@ -112,7 +112,7 @@ else
                             @foreach (var track in searchResults.Tracks)
                             {
                                 <li class="list-group-item d-flex justify-content-between align-items-center gap-3" @key="track.Id">
-                                    <span>@track.Title</span>
+                                    <span class="sb-item-title">@track.Title</span>
                                     @if (playlist.Items.Any(item => item.TrackId == track.Id))
                                     {
                                         <span class="text-muted">Already added</span>
@@ -142,7 +142,7 @@ else
                     {
                         <li class="list-group-item d-flex justify-content-between align-items-center gap-3" @key="item.Id">
                             <span>
-                                <a href="@($"/tracks/{item.TrackId}")">@item.Track?.Title</a>
+                                <a href="@($"/tracks/{item.TrackId}")" class="sb-item-title">@item.Track?.Title</a>
                                 @if (item.Track is { Artists.Count: > 0 } track)
                                 {
                                     <span class="text-muted"> — @string.Join(", ", track.Artists.Select(artist => artist.Name))</span>
