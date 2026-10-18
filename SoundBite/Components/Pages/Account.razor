@@ -13,10 +13,9 @@
 
 <PageTitle>Account</PageTitle>
 
-<h1>Account</h1>
-
 <AuthorizeView>
     <Authorized Context="authContext">
+        <h1>Account</h1>
         <div class="card mb-3">
             <div class="card-body">
                 <h2 class="h4">Signed in</h2>
@@ -53,34 +52,31 @@
         </div>
     </Authorized>
     <NotAuthorized Context="anonContext">
-        <div class="row g-4">
-            <div class="col-md-6">
-                <div class="card h-100">
-                    <div class="card-body">
-                        <h2 class="h4">Log in</h2>
-                        <p>New here? <a href="/register">Create account</a></p>
-                        <EditForm method="post" FormName="login" Model="loginModel" OnValidSubmit="LoginAsync" OnInvalidSubmit="ClearLoginPassword">
-                            <DataAnnotationsValidator />
-                            <ValidationSummary />
+        <div class="login-container">
+            <div class="login-card">
+                <h1>Log in</h1>
+                <p class="login-subtitle">Welcome back to SoundBite.</p>
+                <p>New here? <a href="/register">Create account</a></p>
+                <EditForm method="post" FormName="login" Model="loginModel" OnValidSubmit="LoginAsync" OnInvalidSubmit="ClearLoginPassword">
+                    <DataAnnotationsValidator />
+                    <ValidationSummary />
 
-                            <div class="mb-3">
-                                <label class="form-label">Username or email</label>
-                                <InputText @bind-Value="loginModel.UserNameOrEmail" class="form-control" />
-                            </div>
-
-                            <div class="mb-3">
-                                <label class="form-label">Password</label>
-                                <InputText type="password" @bind-Value="loginModel.Password" class="form-control" />
-                            </div>
-
-                            <button type="submit" class="btn btn-success" disabled="@isBusy">Log in</button>
-                            @if (!string.IsNullOrWhiteSpace(loginMessage))
-                            {
-                                <div class="alert alert-danger mt-3 mb-0">@loginMessage</div>
-                            }
-                        </EditForm>
+                    <div class="mb-3">
+                        <label class="form-label">Username or email</label>
+                        <InputText @bind-Value="loginModel.UserNameOrEmail" class="form-control" />
                     </div>
-                </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Password</label>
+                        <InputText type="password" @bind-Value="loginModel.Password" class="form-control" />
+                    </div>
+
+                    <button type="submit" class="btn btn-success w-100" disabled="@isBusy">Log in</button>
+                    @if (!string.IsNullOrWhiteSpace(loginMessage))
+                    {
+                        <div class="alert alert-danger mt-3 mb-0">@loginMessage</div>
+                    }
+                </EditForm>
             </div>
         </div>
     </NotAuthorized>

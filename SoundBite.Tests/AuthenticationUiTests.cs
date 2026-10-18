@@ -57,6 +57,19 @@ public class AuthenticationUiTests
         ("model.UserName", "authuser"), ("model.Email", "authuser@example.com"),
         ("model.Password", "TestPass123!"), ("model.ConfirmPassword", confirm));
 
+    [Test]
+    public async Task LoginPageUsesCenteredCardLayoutLikeRegistration()
+    {
+        var login = await client.GetStringAsync("/login");
+        var register = await client.GetStringAsync("/register");
+
+        Assert.That(login, Does.Contain("class=\"login-container\"")
+            .And.Contain("class=\"login-card\"")
+            .And.Not.Contain("<h1>Account</h1>"));
+        Assert.That(register, Does.Contain("class=\"register-container\"")
+            .And.Contain("class=\"register-card\""));
+    }
+
     private async Task<HttpResponseMessage> Logout()
     {
         var home = await client.GetStringAsync("/");
