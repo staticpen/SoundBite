@@ -229,6 +229,7 @@ public class TrackDetailsTests
             .AddSingleton<IDbContextFactory<ApplicationDbContext>>(factory)
             .AddScoped<ReviewService>()
             .AddScoped<DemoReviewService>()
+            .AddScoped<FavouriteService>()
             .AddSingleton<NotificationEventDispatcher>()
             .AddScoped<SocialInteractionService>()
             .AddSingleton<AuthenticationStateProvider>(
@@ -255,6 +256,19 @@ public class TrackDetailsTests
 
     private static ParameterView Parameters(int id) => ParameterView.FromDictionary(new Dictionary<string, object?> { [nameof(TrackDetails.Id)] = id });
 
+    private static int CountOccurrences(string value, string search)
+    {
+        var count = 0;
+        var index = 0;
+        while ((index = value.IndexOf(search, index, StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            index += search.Length;
+        }
+
+        return count;
+    }
+
     [Test]
     public async Task ShowsTrackCollaboratorsAlbumAndStoredSpotifyMetadata()
     {
@@ -270,6 +284,22 @@ public class TrackDetailsTests
             var html = root.ToHtmlString();
             foreach (var expected in new[] { "Track &lt;one&gt;", "First artist", "Second artist", "Album title", "https://open.spotify.com/track/track%2Fid", "https://open.spotify.com/album/album-id" })
                 Assert.That(html, Does.Contain(expected));
+            Assert.That(html, Does.Not.Contain("<code>")
+                .And.Not.Contain("Track Spotify ID")
+                .And.Not.Contain("Album Spotify ID"));
+            Assert.That(CountOccurrences(html, "class=\"btn btn-sm btn-outline-success\""), Is.EqualTo(2));
+            Assert.That(html.IndexOf("Open track on Spotify", StringComparison.Ordinal),
+                Is.LessThan(html.IndexOf("Open album on Spotify", StringComparison.Ordinal)));
+            var trackCardStart = html.IndexOf("<article class=\"card\"", StringComparison.Ordinal);
+            var trackActionsStart = html.IndexOf("aria-label=\"Track actions\"", StringComparison.Ordinal);
+            var trackCardEnd = html.IndexOf("</article>", trackCardStart, StringComparison.Ordinal);
+            Assert.That(trackActionsStart, Is.GreaterThan(trackCardStart).And.LessThan(trackCardEnd));
+            Assert.That(html, Does.Contain("aria-label=\"Track social actions\"")
+                .And.Contain("aria-label=\"Review form\"")
+                .And.Contain("class=\"col-12 col-lg-6\"")
+                .And.Contain("id=\"reviews-heading\"")
+                .And.Not.Contain("<h1>Track details</h1>")
+                .And.Not.Contain("Your review"));
             Assert.That(catalog.RequestedIds, Is.EqualTo(new[] { 42 }));
         });
     }

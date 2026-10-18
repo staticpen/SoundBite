@@ -18,8 +18,7 @@ namespace SoundBite.Data
         public DbSet<Track> Tracks => Set<Track>();
         public DbSet<Review> Reviews => Set<Review>();
         public DbSet<DemoReview> DemoReviews => Set<DemoReview>();
-        public DbSet<Playlist> Playlists => Set<Playlist>();
-        public DbSet<PlaylistItem> PlaylistItems => Set<PlaylistItem>();
+        public DbSet<FavouriteTrack> FavouriteTracks => Set<FavouriteTrack>();
 
         public DbSet<Follow> Follows => Set<Follow>();
         public DbSet<Like> Likes => Set<Like>();
@@ -80,30 +79,19 @@ namespace SoundBite.Data
                     "\"Rating\" >= 1 AND \"Rating\" <= 5"));
             });
 
-            builder.Entity<Playlist>()
-                .HasOne(playlist => playlist.Owner)
-                .WithMany()
-                .HasForeignKey(playlist => playlist.OwnerId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            builder.Entity<PlaylistItem>()
-                .HasOne(item => item.Playlist)
-                .WithMany(playlist => playlist.Items)
-                .HasForeignKey(item => item.PlaylistId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            builder.Entity<PlaylistItem>()
-                .HasOne(item => item.Track)
-                .WithMany()
-                .HasForeignKey(item => item.TrackId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            builder.Entity<PlaylistItem>()
-                .HasIndex(item => new { item.PlaylistId, item.TrackId })
-                .IsUnique();
-
-            builder.Entity<PlaylistItem>()
-                .HasIndex(item => new { item.PlaylistId, item.Position });
+            builder.Entity<FavouriteTrack>(entity =>
+            {
+                entity.HasKey(item => new { item.UserId, item.TrackId });
+                entity.HasOne(item => item.User)
+                    .WithMany()
+                    .HasForeignKey(item => item.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(item => item.Track)
+                    .WithMany()
+                    .HasForeignKey(item => item.TrackId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasIndex(item => new { item.UserId, item.AddedAt, item.TrackId });
+            });
 
             builder.Entity<Follow>(entity =>
             {
@@ -131,10 +119,6 @@ namespace SoundBite.Data
                     .WithMany()
                     .HasForeignKey(like => like.TrackId)
                     .OnDelete(DeleteBehavior.Cascade);
-                entity.HasOne(like => like.Playlist)
-                    .WithMany()
-                    .HasForeignKey(like => like.PlaylistId)
-                    .OnDelete(DeleteBehavior.Cascade);
                 entity.HasOne(like => like.Comment)
                     .WithMany()
                     .HasForeignKey(like => like.CommentId)
@@ -143,8 +127,6 @@ namespace SoundBite.Data
                     .IsUnique().HasFilter("\"ReviewId\" IS NOT NULL");
                 entity.HasIndex(like => new { like.TrackId, like.UserId })
                     .IsUnique().HasFilter("\"TrackId\" IS NOT NULL");
-                entity.HasIndex(like => new { like.PlaylistId, like.UserId })
-                    .IsUnique().HasFilter("\"PlaylistId\" IS NOT NULL");
                 entity.HasIndex(like => new { like.CommentId, like.UserId })
                     .IsUnique().HasFilter("\"CommentId\" IS NOT NULL");
                 entity.ToTable(table => table.HasCheckConstraint(
@@ -152,7 +134,6 @@ namespace SoundBite.Data
                     """
                     (CASE WHEN "ReviewId" IS NOT NULL THEN 1 ELSE 0 END) +
                     (CASE WHEN "TrackId" IS NOT NULL THEN 1 ELSE 0 END) +
-                    (CASE WHEN "PlaylistId" IS NOT NULL THEN 1 ELSE 0 END) +
                     (CASE WHEN "CommentId" IS NOT NULL THEN 1 ELSE 0 END) = 1
                     """));
             });
@@ -196,10 +177,6 @@ namespace SoundBite.Data
                 entity.HasOne(notification => notification.Comment)
                     .WithMany()
                     .HasForeignKey(notification => notification.CommentId)
-                    .OnDelete(DeleteBehavior.Cascade);
-                entity.HasOne(notification => notification.Playlist)
-                    .WithMany()
-                    .HasForeignKey(notification => notification.PlaylistId)
                     .OnDelete(DeleteBehavior.Cascade);
                 entity.HasOne(notification => notification.Like)
                     .WithMany()

@@ -69,7 +69,7 @@ builder.Services.AddScoped<DemoReviewSeeder>();
 builder.Services.AddScoped<DemoReviewService>();
 builder.Services.AddScoped<SpotifyArtistCatalogService>();
 builder.Services.AddScoped<ReviewService>();
-builder.Services.AddScoped<PlaylistService>();
+builder.Services.AddScoped<FavouriteService>();
 builder.Services.AddScoped<FollowService>();
 builder.Services.AddScoped<SocialInteractionService>();
 builder.Services.AddScoped<FeedService>();

@@ -14,30 +14,32 @@ namespace SoundBite.Tests;
 public class ActivityFeedUiTests
 {
     [Test]
-    public async Task SignedInUserCanSeeFeedEntriesFromFollowedUsers()
+    public async Task SignedInUserCanSeeRecentActivityFromUsersTheyDoNotFollow()
     {
         await RenderAsync("alice", async renderer =>
         {
-            var root = await renderer.RenderComponentAsync<ActivityFeed>();
+            var root = await renderer.RenderComponentAsync<Home>();
             var html = root.ToHtmlString();
-            Assert.That(html, Does.Contain("Activity feed")
+            Assert.That(html, Does.Contain("Activity Feed")
                 .And.Contain("Bob")
                 .And.Contain("reviewed")
                 .And.Contain("Test track")
                 .And.Contain("A recent review")
                 .And.Contain("replied to")
                 .And.Contain("liked a review by")
-                .And.Contain("liked the track"));
+                .And.Contain("liked the track")
+                .And.Contain("Carol</a><span> added </span><a href=\"/tracks/")
+                .And.Contain("<span> to Favourites</span>"));
         });
     }
 
     [Test]
-    public async Task AnonymousUserIsPromptedToLogIn()
+    public async Task AnonymousUserIsPromptedToLogInToSeeCommunityActivity()
     {
         await RenderAsync(null, async renderer =>
         {
             var root = await renderer.RenderComponentAsync<ActivityFeed>();
-            Assert.That(root.ToHtmlString(), Does.Contain("Log in").And.Contain("Activity feed"));
+            Assert.That(root.ToHtmlString(), Does.Contain("Log in").And.Contain("Activity Feed"));
         });
     }
 
@@ -52,7 +54,8 @@ public class ActivityFeedUiTests
             await db.Database.MigrateAsync();
             db.Users.AddRange(
                 new ApplicationUser { Id = "alice", UserName = "alice", DisplayName = "Alice" },
-                new ApplicationUser { Id = "bob", UserName = "bob", DisplayName = "Bob" });
+                new ApplicationUser { Id = "bob", UserName = "bob", DisplayName = "Bob" },
+                new ApplicationUser { Id = "carol", UserName = "carol", DisplayName = "Carol" });
             db.Tracks.Add(new Track { Title = "Test track" });
             await db.SaveChangesAsync();
             var track = await db.Tracks.SingleAsync();
@@ -72,7 +75,11 @@ public class ActivityFeedUiTests
             });
             db.Likes.AddRange(
                 new Like { UserId = "bob", ReviewId = review.Id },
-                new Like { UserId = "bob", TrackId = track.Id });
+                new Like { UserId = "bob", TrackId = track.Id },
+                new Like { UserId = "carol", TrackId = track.Id });
+            db.FavouriteTracks.AddRange(
+                new FavouriteTrack { UserId = "carol", TrackId = track.Id },
+                new FavouriteTrack { UserId = "bob", TrackId = track.Id });
             await db.SaveChangesAsync();
         }
 

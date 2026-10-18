@@ -28,14 +28,7 @@ public sealed class FeedService(
         if (!await db.Users.AnyAsync(user => user.Id == actorId, cancellationToken))
             throw new UnauthorizedAccessException("Your account is no longer available.");
 
-        var userIds = await db.Follows
-            .Where(follow => follow.FollowerId == actorId)
-            .Select(follow => follow.FollowingId)
-            .ToListAsync(cancellationToken);
-        userIds.Add(actorId);
-
         IQueryable<ActivityRow> rows = db.Reviews.AsNoTracking()
-            .Where(review => userIds.Contains(review.UserId))
             .Select(review => new ActivityRow
             {
                 Type = (int)ActivityType.Review,
@@ -53,13 +46,10 @@ public sealed class FeedService(
                 TargetDisplayName = null,
                 ParentCommentId = null,
                 ParentUserName = null,
-                ParentDisplayName = null,
-                PlaylistId = null,
-                PlaylistName = null
+                ParentDisplayName = null
             });
 
         rows = rows.Concat(db.Comments.AsNoTracking()
-            .Where(comment => userIds.Contains(comment.UserId))
             .Select(comment => new ActivityRow
             {
                 Type = (int)ActivityType.Comment,
@@ -77,13 +67,11 @@ public sealed class FeedService(
                 ParentDisplayName = comment.ParentComment == null ? null : comment.ParentComment.User!.DisplayName,
                 TargetType = null,
                 TargetUserName = null,
-                TargetDisplayName = null,
-                PlaylistId = null,
-                PlaylistName = null
+                TargetDisplayName = null
             }));
 
         rows = rows.Concat(db.Likes.AsNoTracking()
-            .Where(like => userIds.Contains(like.UserId) && like.ReviewId != null)
+            .Where(like => like.ReviewId != null)
             .Select(like => new ActivityRow
             {
                 Type = (int)ActivityType.Like,
@@ -101,13 +89,11 @@ public sealed class FeedService(
                 TargetDisplayName = like.Review.User.DisplayName,
                 ParentCommentId = null,
                 ParentUserName = null,
-                ParentDisplayName = null,
-                PlaylistId = null,
-                PlaylistName = null
+                ParentDisplayName = null
             }));
 
         rows = rows.Concat(db.Likes.AsNoTracking()
-            .Where(like => userIds.Contains(like.UserId) && like.CommentId != null)
+            .Where(like => like.CommentId != null)
             .Select(like => new ActivityRow
             {
                 Type = (int)ActivityType.Like,
@@ -126,12 +112,10 @@ public sealed class FeedService(
                 ParentCommentId = like.Comment.ParentCommentId,
                 ParentUserName = like.Comment.ParentComment == null ? null : like.Comment.ParentComment.User!.UserName,
                 ParentDisplayName = like.Comment.ParentComment == null ? null : like.Comment.ParentComment.User!.DisplayName,
-                PlaylistId = null,
-                PlaylistName = null
             }));
 
         rows = rows.Concat(db.Likes.AsNoTracking()
-            .Where(like => userIds.Contains(like.UserId) && like.TrackId != null)
+            .Where(like => like.TrackId != null)
             .Select(like => new ActivityRow
             {
                 Type = (int)ActivityType.Like,
@@ -150,36 +134,34 @@ public sealed class FeedService(
                 ParentCommentId = null,
                 ParentUserName = null,
                 ParentDisplayName = null,
-                PlaylistId = null,
-                PlaylistName = null
             }));
 
-        rows = rows.Concat(db.Likes.AsNoTracking()
-            .Where(like => userIds.Contains(like.UserId) && like.Playlist != null && like.Playlist.IsPublic)
-            .Select(like => new ActivityRow
+        rows = rows.Concat(db.FavouriteTracks.AsNoTracking()
+            .Select(favourite => new ActivityRow
             {
-                Type = (int)ActivityType.Like,
-                Id = like.Id,
-                UserName = like.User!.UserName!,
-                DisplayName = like.User.DisplayName,
+                Type = (int)ActivityType.Favourite,
+                Id = favourite.TrackId,
                 ReviewId = null,
-                TrackId = null,
-                TrackTitle = null,
+                UserName = favourite.User!.UserName!,
+                DisplayName = favourite.User.DisplayName,
+                TrackId = favourite.Track!.Id,
+                TrackTitle = favourite.Track.Title,
                 Rating = null,
                 Content = string.Empty,
-                CreatedAt = like.CreatedAt,
-                TargetType = (int)LikeTargetType.Playlist,
-                PlaylistId = like.Playlist!.Id,
-                PlaylistName = like.Playlist.Name,
-                TargetUserName = like.Playlist.Owner!.UserName,
-                TargetDisplayName = like.Playlist.Owner.DisplayName,
+                CreatedAt = favourite.AddedAt,
+                TargetType = null,
+                TargetUserName = null,
+                TargetDisplayName = null,
                 ParentCommentId = null,
                 ParentUserName = null,
                 ParentDisplayName = null
             }));
 
         var results = await rows
-            .OrderByDescending(item => item.CreatedAt).ThenByDescending(item => item.Type).ThenByDescending(item => item.Id)
+            .OrderByDescending(item => item.CreatedAt)
+            .ThenByDescending(item => item.Type)
+            .ThenByDescending(item => item.Id)
+            .ThenBy(item => item.UserName)
             .Skip(page * PageSize)
             .Take(PageSize + 1)
             .ToListAsync(cancellationToken);
@@ -206,8 +188,6 @@ public sealed class FeedService(
         public int? ParentCommentId { get; init; }
         public string? ParentUserName { get; init; }
         public string? ParentDisplayName { get; init; }
-        public int? PlaylistId { get; init; }
-        public string? PlaylistName { get; init; }
 
         public ActivityItem ToActivityItem() => new(
             (ActivityType)Type,
@@ -225,8 +205,6 @@ public sealed class FeedService(
             TargetDisplayName,
             ParentCommentId,
             ParentUserName,
-            ParentDisplayName,
-            PlaylistId,
-            PlaylistName);
+            ParentDisplayName);
     }
 }

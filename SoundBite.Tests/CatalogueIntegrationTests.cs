@@ -73,7 +73,51 @@ public class CatalogueIntegrationTests
         }
     }
 
-    private sealed class UnusedSpotifyCatalog : ISpotifyCatalog
+    public sealed class FavouritesSearchPage : Favourites
+    {
+        [Parameter] public string Query { get; set; } = "";
+        [Parameter] public Action<FavouritesSearchPage>? Capture { get; set; }
+
+        protected override void OnInitialized()
+        {
+            base.OnInitialized();
+            Capture?.Invoke(this);
+        }
+
+        protected override async Task OnInitializedAsync()
+        {
+            await base.OnInitializedAsync();
+            typeof(Favourites).GetField("query", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .SetValue(this, Query);
+            typeof(Favourites).GetField("showAddTracks", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .SetValue(this, true);
+            await InvokePageMethodAsync("SearchTracksAsync");
+        }
+
+        public async Task AddFirstArtistAsync()
+        {
+            var artists = (IReadOnlyList<SpotifyArtistMatch>)typeof(Favourites)
+                .GetField("spotifyArtists", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .GetValue(this)!;
+            await InvokePageMethodAsync("AddArtistAsync", artists[0]);
+            StateHasChanged();
+        }
+
+        public async Task AddFirstMatchingTrackAsync()
+        {
+            var tracks = (IReadOnlyList<Track>)typeof(Favourites)
+                .GetField("searchResults", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .GetValue(this)!;
+            await InvokePageMethodAsync("AddAsync", tracks[0]);
+            StateHasChanged();
+        }
+
+        private Task InvokePageMethodAsync(string name, params object[]? arguments) =>
+            (Task)typeof(Favourites).GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(this, arguments)!;
+    }
+
+    private sealed class TestSpotifyCatalog : ISpotifyCatalog
     {
         public Task<IReadOnlyList<SpotifyArtistMatch>> SearchArtistsAsync(
             string query,
@@ -83,7 +127,20 @@ public class CatalogueIntegrationTests
         public Task<SpotifyArtistDiscography> GetArtistDiscographyAsync(
             SpotifyArtistMatch artist,
             CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException("This test does not import Spotify artists.");
+            Task.FromResult(new SpotifyArtistDiscography(
+                artist,
+                [
+                    new SpotifyAlbumCatalogue(
+                        "spotify-album",
+                        "Spotify album",
+                        [artist],
+                        [new SpotifyTrackMatch(
+                            "spotify-track",
+                            "Spotify track",
+                            "spotify-album",
+                            "Spotify album",
+                            [artist])])
+                ]));
 
         public Task<IReadOnlyList<SpotifyTrackMatch>> SearchTracksAsync(
             string query,
@@ -104,7 +161,8 @@ public class CatalogueIntegrationTests
             var links = Regex.Matches(html, "href=\"([^\"]+)\"").Select(m => m.Groups[1].Value).ToArray();
             Assert.That(links, Is.EqualTo(new[]
             {
-                "/artists/11", "/albums/23", "/tracks/42", "/tracks/907", "/artists/11"
+                "/artists/11", "/albums/23", "/tracks/42", "/login",
+                "/tracks/907", "/login", "/artists/11"
             }));
             Assert.That(typeof(ArtistDetails).GetCustomAttributes<RouteAttribute>().Select(r => r.Template),
                 Does.Contain("/artists/{Id:int}"));
@@ -131,6 +189,48 @@ public class CatalogueIntegrationTests
     }
 
     [Test]
+    public async Task SearchResultsOfferAddingTracksToFavouritesWithoutAReview()
+    {
+        await WithCatalogue(async renderer =>
+        {
+            var search = await renderer.RenderComponentAsync<SearchPage>(ParameterView.FromDictionary(
+                new Dictionary<string, object?> { [nameof(SearchPage.Query)] = "echo" }));
+            Assert.That(search.ToHtmlString(), Does.Contain("Add to Favourites")
+                .And.Contain("href=\"/tracks/42\""));
+        }, new SignedInAuthenticationStateProvider());
+    }
+
+    [Test]
+    public async Task FavouritesSearchCanImportArtistCatalogueThenAddMatchingTrack()
+    {
+        await WithCatalogue(async renderer =>
+        {
+            FavouritesSearchPage pageInstance = null!;
+            var page = await renderer.RenderComponentAsync<FavouritesSearchPage>(ParameterView.FromDictionary(
+                new Dictionary<string, object?>
+                {
+                    [nameof(FavouritesSearchPage.Query)] = "Spotify",
+                    [nameof(FavouritesSearchPage.Capture)] = (Action<FavouritesSearchPage>)(value => pageInstance = value)
+                }));
+            Assert.That(page.ToHtmlString(), Does.Contain("Artists available to add")
+                .And.Contain("Spotify Artist")
+                .And.Contain("Add artist and tracks"));
+
+            await renderer.Dispatcher.InvokeAsync(pageInstance.AddFirstArtistAsync);
+
+            Assert.That(page.ToHtmlString(), Does.Contain("Added Spotify Artist: 1 albums and 1 tracks.")
+                .And.Contain("Spotify track")
+                .And.Contain("Add to Favourites"));
+
+            await renderer.Dispatcher.InvokeAsync(pageInstance.AddFirstMatchingTrackAsync);
+
+            Assert.That(page.ToHtmlString(), Does.Contain("Added Spotify track to Favourites.")
+                .And.Contain("Spotify track")
+                .And.Contain("Added"));
+        }, new SignedInAuthenticationStateProvider());
+    }
+
+    [Test]
     public async Task ArtistAndAlbumDetailsLinkThroughTheirRelatedCatalogueRecords()
     {
         await WithCatalogue(async renderer =>
@@ -150,7 +250,7 @@ public class CatalogueIntegrationTests
     }
 
     [Test]
-    public async Task HomePageProvidesCatalogueAndCommunityEntryPoints()
+    public async Task HomePageShowsCatalogueSearchAndActivityFeed()
     {
         await WithCatalogue(async renderer =>
         {
@@ -158,10 +258,13 @@ public class CatalogueIntegrationTests
             var html = home.ToHtmlString();
             Assert.That(html, Does.Contain("Discover music")
                 .And.Contain("href=\"/search\"")
-                .And.Contain("href=\"/playlists\"")
-                .And.Contain("href=\"/feed\"")
-                .And.Contain("href=\"/rankings\""));
-        });
+                .And.Contain("Activity Feed")
+                .And.Contain("col-lg-6")
+                .And.Not.Contain("Browse music")
+                .And.Not.Contain("Discover playlists")
+                .And.Not.Contain("Join the community")
+                .And.Not.Contain("Ratings and trends"));
+        }, new SignedInAuthenticationStateProvider());
     }
 
     private static string HeroOf(string html)
@@ -181,13 +284,31 @@ public class CatalogueIntegrationTests
         await WithCatalogue(async renderer =>
         {
             var home = await renderer.RenderComponentAsync<Home>(ParameterView.Empty);
-            var hero = HeroOf(home.ToHtmlString());
+            var html = home.ToHtmlString();
+            var hero = HeroOf(html);
             Assert.That(PrimaryHeroActions(hero), Is.EqualTo(new[] { "/login|Log in" }));
             Assert.That(hero, Does.Contain("href=\"/register\">Create account</a>")
                 .And.Contain("Rate tracks").And.Contain("Write reviews")
-                .And.Contain("Follow other listeners").And.Contain("Create playlists")
+                .And.Contain("Follow other listeners").And.Contain("Save favourite tracks")
+                .And.Not.Contain("playlist").And.Not.Contain("Playlist")
                 .And.Not.Contain("href=\"/search\"").And.Not.Contain("Welcome,"));
+            Assert.That(html, Does.Not.Contain("activity-feed-heading")
+                .And.Not.Contain("to see recent community activity"));
         });
+    }
+
+    [Test]
+    public async Task HomePageFallsBackToGenericWelcomeWhenTheUserHasNoName()
+    {
+        await WithCatalogue(async renderer =>
+        {
+            var home = await renderer.RenderComponentAsync<Home>(ParameterView.Empty);
+            var html = home.ToHtmlString();
+            var hero = HeroOf(html);
+            Assert.That(hero, Does.Contain("Welcome back to SoundBite.").And.Not.Contain("Welcome,"));
+            Assert.That(PrimaryHeroActions(hero), Is.EqualTo(new[] { "/search|Search the catalogue" }));
+            Assert.That(html, Does.Contain("activity-feed-heading"));
+        }, new UnnamedSignedInAuthenticationStateProvider());
     }
 
     [Test]
@@ -271,6 +392,14 @@ public class CatalogueIntegrationTests
             "test"))));
     }
 
+    private sealed class UnnamedSignedInAuthenticationStateProvider : AuthenticationStateProvider
+    {
+        public override Task<AuthenticationState> GetAuthenticationStateAsync() =>
+            Task.FromResult(new AuthenticationState(new ClaimsPrincipal(new ClaimsIdentity(
+                [new Claim(ClaimTypes.NameIdentifier, "listener")],
+                "test"))));
+    }
+
     private static async Task WithCatalogue(
         Func<TestRenderer, Task> assertion,
         AuthenticationStateProvider? authenticationStateProvider = null)
@@ -280,11 +409,13 @@ public class CatalogueIntegrationTests
         await using var services = new ServiceCollection().AddLogging()
             .AddDbContextFactory<ApplicationDbContext>(options => options.UseSqlite(connection))
             .AddScoped<IMusicCatalog, CatalogueService>()
-            .AddSingleton<ISpotifyCatalog, UnusedSpotifyCatalog>()
+            .AddSingleton<ISpotifyCatalog, TestSpotifyCatalog>()
             .AddScoped<SpotifyTrackImporter>()
             .AddScoped<SpotifyArtistCatalogService>()
             .AddScoped<ReviewService>()
             .AddScoped<DemoReviewService>()
+            .AddScoped<FavouriteService>()
+            .AddScoped<FeedService>()
             .AddSingleton<NotificationEventDispatcher>()
             .AddScoped<SocialInteractionService>()
             .AddSingleton<AuthenticationStateProvider>(
@@ -299,7 +430,9 @@ public class CatalogueIntegrationTests
             db.AddRange(artist, album,
                 new Track { Id = 42, Title = "Echo <track>", SpotifyId = "spotify-first", Album = album, Artists = [artist] },
                 new Track { Id = 907, Title = "Echo <track>", SpotifyId = "spotify-second" });
-            db.Users.Add(new ApplicationUser { Id = "reviewer", UserName = "reviewer", DisplayName = "Integration reviewer" });
+            db.Users.AddRange(
+                new ApplicationUser { Id = "reviewer", UserName = "reviewer", DisplayName = "Integration reviewer" },
+                new ApplicationUser { Id = "listener", UserName = "listener" });
             db.Reviews.Add(new Review { UserId = "reviewer", TrackId = 42, Rating = 4, Comment = "First track review" });
             db.Reviews.Add(new Review { UserId = "reviewer", TrackId = 907, Rating = 2, Comment = "Second track review" });
             await db.SaveChangesAsync();

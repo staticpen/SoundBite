@@ -22,9 +22,9 @@
 
 - **Overall status:** In progress
 - **Current development phase:** Presentation and deployment readiness
-- **Current focus:** Registration-button focus fix is verified but uncommitted; commit it, then deploy the UI and earlier logout fix
+- **Current focus:** Complete PR review and deployment after resolving and verifying the visual-system branch against the Favourites/global-feed changes on `main`
 - **Last verified:** 2026-10-18
-- **Current blocker:** The top-row logout fix (antiforgery-validated HTTP POST) is committed as `182edc6` but its deployment is not yet confirmed. Deployment also requires interactive macOS administrator authorization. The Spotify album-pagination fix is committed as `55f9a20`; its deployment status still needs confirmation.
+- **Current blocker:** No production database migration blocker remains: `ReplacePlaylistsWithFavourites` was applied and verified on 2026-10-18 after a private backup. The app does not run migrations at startup. The UI, logout, and Favourites integration still require deployment, which needs interactive macOS administrator authorization. The Spotify album-pagination fix is committed as `55f9a20`; its deployment status still needs confirmation.
 
 ## 3. Feature Implementation Tracker
 
@@ -36,19 +36,63 @@
 | Spotify integration | Production seed verified; interactive import fix awaits deployment | The deployed credentials completed five default searches, refreshing 50 unique tracks and creating 26 sample reviews across 12 tracks. A live API probe showed artist-album requests accept limit 10 and reject 20 and 50. |
 | Track ratings and reviews | Implemented — verified | Reviews persist through EF Core; the service supports create/read/update, the database enforces one review per user per track and valid 1–5 ratings, and track details support public review reading plus authenticated submission/editing. |
 | Album-track many-to-many relationship | Implemented — unverified | `ApplicationDbContext` maps `ArtistAlbums` and `ArtistTracks` and `Track.AlbumId` with a nullable optional foreign key. This matches the intended design, but the schema has not been validated via a migration review beyond the code. |
-| Playlist management | Implemented — verified | Users can create, edit, and delete playlists; add/remove tracks; and browse public playlist listings/details. Owner checks are enforced in the service. |
-| Playlist duplicate prevention | Implemented — verified | Service validation and a unique database index on playlist and track prevent duplicates. Playlist item positions preserve order. |
+| Favourites | Implemented — production migration and Spotify fallback verified | Each user has one private list. Tracks can be added from search, track details, or the Favourites page; the page supports local catalogue search and, on a track miss, Spotify artist search/import before offering imported tracks to add. Ratings and reviews are not required to save a track. The production migration preserved the existing playlist track in `FavouriteTracks` and removed the playlist tables. |
 | Following and followers | Implemented — verified | Authenticated idempotent follow/unfollow, public counts and expandable 10-user pages; database constraints, concurrent requests, account deletion and browser flows verified. Merged into `main` at `ac92cbe`. |
-| Likes and comments | Implemented — verified | Signed-in users can idempotently like reviews, tracks, public playlists, and comments; private playlist likes are owner-only. Users can add/edit/delete their own review comments and reply one level deep to top-level comments. Replies are grouped under parents, cannot be nested further, and are preserved as top-level comments if their parent is deleted. |
-| Activity feed | Implemented — verified | `/feed` globally orders and paginates reviews, comments/replies, and likes by followed users and the signed-in user. Reply entries identify the parent author. Like activity covers reviews, comments, tracks, and public playlists; private-playlist likes are excluded. |
+| Likes and comments | Implemented — verified | Signed-in users can idempotently like reviews, tracks, and comments. Users can add/edit/delete their own review comments and reply one level deep to top-level comments. Replies are grouped under parents, cannot be nested further, and are preserved as top-level comments if their parent is deleted. |
+| Activity feed | Implemented — global signed-in feed shown on Home | Home renders globally ordered, paginated reviews, comments/replies, likes, and Favourites additions from all users to signed-in viewers, regardless of follow relationships. Favourite-list contents remain private. The standalone Activity Feed navigation item and route are removed. |
 | Notifications | Implemented — verified | In addition to recipient-scoped notifications, `/notifications` uses keyset paging to load older items without duplicates; unread counts and read-state behavior remain independent of the displayed page. Users can persist per-category opt-outs from `/notifications/settings`, affecting future notifications only. Paging, authorization, read state, preference persistence/isolation, and UI behavior are covered by tests. The single-instance event dispatcher updates active recipient circuits; navigation and reconnection reload persisted state. |
 | Rankings and trends | Implemented — verified in isolated SQLite tests | `/rankings` shows top-rated tracks (minimum two reviews), most-reviewed tracks overall, and tracks with the most reviews in the last seven days. Separately stored, labelled sample reviews can populate these lists without masquerading as community reviews. |
-| Navigation and home | Implemented — tested | Light navbar with the unchanged horizontal `soundbite-logo.png` wordmark linking to `/`, plus an explicit Home NavLink (active state renders `aria-current="page"`). On desktop all links form one right-aligned cluster beside the logo. Signed-out: Home, Search, Create account, primary Log in button. Signed-in: Home, Search, Activity Feed, Ratings and Trends, Playlists, then the Account dropdown (Edit Profile, Notifications, role-gated Admin, antiforgery-protected Log out). The hamburger menu is preserved below 992px. Feed, rankings and playlists stay publicly routable. The signed-out home hero promotes Log in (with Create account secondary); the signed-in hero shows a personalized welcome and a "Search the catalogue" button. |
+| Navigation and home | Implemented — verified after conflict resolution | Light navbar with the horizontal `soundbite-logo.png` wordmark linking to `/`, an explicit Home NavLink, a mobile toggle, and keyboard focus styles. Signed-out: Home, Search, Create account, and a primary Log in button. Signed-in: Home, Search, Ratings and Trends, Favourites, then the Account dropdown (Edit Profile, Notifications with unread badge, role-gated Admin, antiforgery-protected POST Log out). `/feed` and `/playlists` return 404; `/favourites` shows only a login prompt to anonymous visitors and uses the shared centred content column. The signed-out Home shows only the login-first hero. The signed-in Home shows the personalized welcome, a "Search the catalogue" button, and the embedded global activity feed. |
 | Administrative user management | Implemented — verified | `/admin/users` supports user search/paging, account lock/unlock, and admin-role grants/revocation. Every service operation checks live role membership and lockout state server-side. The front-end label is “Admin.” |
-| Automated tests | Passed — verified | Full NUnit suite passed **279/279** on 2026-10-18 after the visual-system change (`dotnet test SoundBite.sln`, Debug). |
-| Git and repository hygiene | In progress | The logout fix is committed (`182edc6`). The visual-system change is committed on `feature/frontend-and-user-flow`. The tracked `SoundBite/soundbite.db` has user-owned local modifications that are deliberately left unstaged. |
+| Automated tests | Passed — verified | The combined conflict resolution passed **283/283**, with 0 failed and 0 skipped. |
+| Git and repository hygiene | In progress | Branch `feature/frontend-and-user-flow` incorporates `origin/main` (`94d0add`) through a resolved and verified merge. The tracked `SoundBite/soundbite.db` has user-owned local modifications that remain deliberately unstaged and uncommitted. |
 
 ## 4. Latest Completed Work
+
+### 2026-10-18 — Resolved visual-system PR conflicts with current `main`
+
+- **Resolution:** Merged `origin/main` (`94d0add`) into `feature/frontend-and-user-flow`, retaining `main`'s Favourites replacement, global Home activity feed, removed `/feed` and `/playlists` routes, migrations, services, and tests. Preserved the visual branch's explicit Home link, navigation ordering, primary login treatment, visual tokens, typography, focus styles, and entity-title styling. Applied the shared 1024px content column to Search and the replacement Favourites page, without resurrecting deleted playlist pages.
+- **Tests:** Updated the rendered navigation expectations to Home → Search → Ratings and Trends → Favourites → Account and moved the shared-column coverage from removed routes to `/favourites`. The login-style assertion checks the semantic class and label without depending on Blazor's generated scoped-CSS attribute placement.
+- **Verification:** `dotnet build SoundBite.sln --no-restore` passed with 0 errors and the 2 existing `CS1998` warnings. `dotnet test SoundBite.sln --no-build` passed **283/283**, 0 failed and 0 skipped. `git diff --check` passed and no conflict markers remain. The pre-existing tracked `SoundBite/soundbite.db` stayed byte-identical at SHA-256 `9321727cfeb0cfd61ab43996b4149a658b5486300e3112a1ff8ed2896fd3cd39`. Browser checks were not rerun for the combined merge.
+- **State:** Conflict resolution is complete and verified; no deployment was performed.
+
+### 2026-10-18 — Integrated the login-first navbar and homepage with Favourites
+
+- **Change:** Merged `feature/frontend-and-user-flow` (light responsive navbar, PNG wordmark, navbar logout, login-first hero) into `origin/main` (Favourites, global Home feed). The signed-in navbar now shows Search, Ratings and Trends, Favourites, and Account. Activity Feed and Playlists items are gone. Signed-out Home shows only the hero; the embedded activity feed renders only for signed-in users. The hero bullet "Create playlists" now reads "Save favourite tracks". Tests were updated for Favourites, and anonymous `/favourites` is checked to expose only the login prompt.
+- **Verification:** `dotnet build` passed with 0 errors. Focused tests passed **51/51**; the full NUnit suite passed **280/280**. `dotnet format --verify-no-changes` reports 27 whitespace diagnostics that are identical to `origin/main` (none introduced by the merge). No browser testing, deployment, or database migration was performed.
+- **Deployment:** Local, uncommitted merge only; not deployed.
+
+### 2026-10-18 — Expanded Home activity feed to all users and Favourites additions
+
+- **Change:** The signed-in Home feed now includes recent reviews, comments/replies, and likes from every user, not only followed accounts. Adding a track to Favourites creates a visible activity entry without exposing the user's full private list. Feed paging uses deterministic tie-breaking and UI keys include the actor so two users favouriting the same track render as distinct entries.
+- **Verification:** `FeedServiceTests` and `ActivityFeedUiTests` passed **7/7**, including activity by users not followed and multiple users adding the same track to Favourites. The full NUnit suite passed **273/273**; `git diff --check` passed.
+- **Deployment:** Local source change only; not deployed.
+
+### 2026-10-18 — Added Spotify artist fallback to Favourites track search
+
+- **Change:** Favourites > Add Tracks now searches Spotify artists when a catalogue query has no matching tracks. A signed-in user can choose an artist to import the artist and full discography, then add matching imported tracks to Favourites. Search/import failures and refresh failures display explicit status messages.
+- **Verification:** `CatalogueIntegrationTests` passed **11/11**, including an end-to-end component test covering local miss, Spotify artist selection, artist/album/track import, and adding the matching track to Favourites. `git diff --check` passed.
+- **Deployment:** Local source change only; not deployed.
+
+### 2026-10-18 — Replaced playlists with Favourites and moved activity feed to Home
+
+- **Favourites:** Added one private, per-user track list with database-enforced uniqueness. Users can add/remove tracks from the Favourites page, add a track directly from catalogue search or track details, and search the catalogue under the page's Add Tracks control. Saving favourites does not require a rating or review.
+- **Playlist removal:** Removed playlist pages, navigation, service, entities, social likes, and playlist notifications. Added an EF migration that merges every existing user's playlist tracks into one Favourites list (deduplicating tracks), then removes legacy playlist storage and obsolete notification preferences.
+- **Home/navigation:** Removed the four home cards and the Activity Feed navigation item/route. Embedded the activity feed on Home.
+- **Verification:** Focused Favourites, migration, feed, navigation, and notification tests passed **118/118**; full NUnit suite passed **269/269**. `dotnet ef migrations has-pending-model-changes` reports no pending changes, and `git diff --check` is clean. No deployment or browser testing was performed.
+
+### 2026-10-18 — Diagnosed Favourites availability and adjusted Home layout
+
+- **Favourites failure:** The app does not run EF migrations at startup. The replacement introduces `FavouriteTracks` in `ReplacePlaylistsWithFavourites`, so a deployment without the database update will fail when listing or adding favourites. Added explicit UI guidance when SQLite reports the missing table; the ordinary error remains logged.
+- **Home layout:** Constrained the embedded activity feed to the left half on desktop (`col-lg-6`), with full width on smaller screens.
+- **Verification:** Full NUnit suite passed **270/270**; focused favourite, migration, catalogue-search, Home, and upgrade tests passed **40/40**. The production migration and its backup are recorded below.
+
+### 2026-10-18 — Applied the production Favourites migration
+
+- **Pre-migration state:** The production database passed `PRAGMA integrity_check` and `PRAGMA foreign_key_check`; `FavouriteTracks` and `ReplacePlaylistsWithFavourites` were absent. One playlist with one track was present.
+- **Backup:** Created `~/Library/Application Support/SoundBite/backups/soundbite-pre-favourites-20261018-184812.db` before changing the database. The backup is mode 600 and passed integrity and foreign-key checks; it retains the source playlist and its track.
+- **Migration:** Applied only `20261018072907_ReplacePlaylistsWithFavourites` to the production database. The migrated database passed integrity and foreign-key checks, records the migration, contains `FavouriteTracks` with one preserved track, and no longer contains playlist tables.
+- **Availability:** Both `http://127.0.0.1:5081/` and the Tailscale URL returned HTTP 200 afterward. No deployment or authenticated browser flow was performed. The Home layout and clearer missing-schema UI follow-ups remain uncommitted and are not yet live.
 
 ### 2026-10-17 — B: local release-readiness checks (partial; environment-dependent checks outstanding)
 
@@ -389,7 +433,7 @@
 - **Computed styles/resources:** Body text resolved to DM Sans at 16px/400/25.6px in `#091227`; headings resolved to Outfit (hero 48px/800 desktop and 34px/800 mobile; page titles 32px/700 desktop and 27px/700 mobile). Primary actions resolved to `#D91668` with white text, with hover/active token `#B61863`; secondary controls resolve from `#7E0C8B`. The Google Fonts stylesheet and DM Sans/Outfit WOFF2 resources all returned HTTP 200, and weight-specific FontFace checks passed.
 - **Isolation:** Browser screenshots and the detailed report are under `/tmp/soundbite-verify-5f7b69d.vLwwbs`. The pre-existing tracked `SoundBite/soundbite.db` remained byte-identical during verification at SHA-256 `9321727cfeb0cfd61ab43996b4149a658b5486300e3112a1ff8ed2896fd3cd39`; it remains the user's only pre-existing unstaged change. No implementation fix, stage, commit, push, deployment, or repository dependency installation was performed.
 
-### 2026-10-18 — Registration button keyboard-focus fix (uncommitted)
+### 2026-10-18 — Registration button keyboard-focus fix (`357eef7`)
 
 - **Change:** `SoundBite/Components/Pages/Register.razor.css` only. Added `.register-button:focus-visible { outline: 2px solid var(--sb-primary); outline-offset: 2px; }`, matching the global `.btn`/link focus treatment, and added `:active` to the existing `:hover` rule so pressed and hovered states both use `--sb-primary-hover`. No markup, navigation, or other styles changed.
 - **Diff hygiene:** Plain `git diff --check` and `git -c core.whitespace=cr-at-eol diff --check` both pass with no output. `Register.razor.css` uses LF, so there are no CRLF false positives for this change.
@@ -415,8 +459,8 @@
 - `Album`, `Artist`, and `Track` models initialize empty navigation collections and enforce basic validation requirements.
 - `Endpoints/AccountEndpoints.cs` exposes registration, login, logout, and current-user endpoints.
 - `Data/ApplicationUser.cs` includes `DisplayName` and optional `Bio`. The account page edits these fields; `/users/{username}` displays a public profile without exposing email.
-- Remaining model and service placeholders include `UserService`. Rankings combine community reviews with clearly labelled `DemoReviews`; Spotify access requires configured credentials. Likes support reviews, tracks, playlists, and comments; comments/feed entries remain review-scoped.
-- The NUnit test project is active; the full suite passed 279/279 for the current worktree.
+- Remaining model and service placeholders include `UserService`. Rankings combine community reviews with clearly labelled `DemoReviews`; Spotify access requires configured credentials. Likes support reviews, tracks, and comments (playlist likes were removed by `ReplacePlaylistsWithFavourites`); comments/feed entries remain review-scoped.
+- The NUnit test project is active; the combined conflict resolution passed 283/283.
 - `20261018035010_AddDemoReviews` adds the separate sample-review table and has been applied to the configured deployment database after an integrity-checked backup.
 
 ## 6. Important Decisions and Assumptions
@@ -440,7 +484,7 @@
 
 | Issue | Impact | Evidence | Next action | Status |
 |---|---|---|---|---|
-| Interactive logout cannot update the auth cookie after response start | The top-row logout handler previously ran inside an interactive Blazor circuit, causing the global unhandled-error banner | Logout now uses an antiforgery-validated native POST to `/account/logout`; 15 focused authentication tests and 269 full tests pass | Commit and deploy the fix; then verify browser logout clears the session without a Blazor error | Fixed locally; deployment pending |
+| Interactive logout cannot update the auth cookie after response start | The top-row logout handler previously ran inside an interactive Blazor circuit, causing the global unhandled-error banner | Logout now uses an antiforgery-validated native POST to `/account/logout`, submitted from the navbar Account dropdown; the merged tree passes the focused authentication, catalogue, Favourites, and feed tests (51/51) and the full suite (280/280) | Commit and deploy the fix; then verify browser logout clears the session without a Blazor error | Fixed locally; deployment pending |
 | Registration form cannot reach endpoint | Resolved | Replaced server-side loopback HTTP call with static SSR form processing | Verified in browser and HTTP tests | Closed |
 | Interactive login cannot set cookie | Resolved | Cookie operations now execute during HTTP form requests before rendering | Verified registration, login and logout | Closed |
 | Multi-instance notification delivery | Notifications are not backed by a distributed event bus | Live delivery uses an in-process dispatcher by design for the current single-instance app | Add a distributed backplane only if deploying multiple instances | Open |
@@ -452,8 +496,8 @@
 
 | Check | Result | Notes |
 |---|---|---|
-| Application build | Passed | `dotnet build SoundBite.sln` on 2026-10-18 after the visual-system change; 0 errors, three existing `CS1998` warnings in test files. |
-| Automated tests | Passed — verified | Full .NET 9 suite: 279 passed, 0 failed/skipped (2026-10-18, visual-system change). |
+| Application build | Passed | `dotnet build SoundBite.sln --no-restore` (default Debug configuration) on the resolved visual-system/Favourites merge, 2026-10-18: 0 errors and 2 existing `CS1998` warnings in `AdminServiceTests.cs:136` and `ReviewServiceTests.cs:88`. A Release build was not run for this merge. |
+| Automated tests | Passed — verified | Resolved visual-system/Favourites merge, 2026-10-18, `dotnet test SoundBite.sln --no-build` (Debug): full suite **283 passed**, 0 failed/skipped. |
 | Application publish | Passed | `dotnet publish SoundBite/SoundBite.csproj --configuration Release --no-build --output /tmp/soundbite-b-readiness-publish` succeeded. |
 | Application startup and local smoke test | Passed | App ran against a disposable copy at `/tmp/soundbite-b-readiness.db`; `/` returned HTTP 200, catalogue search rendered and accepted a local-search interaction. No target database was used. |
 | Circuit reconnect | Partially verified | A running page survived a local server stop/restart: the rejoining dialog appeared and dismissed, and page interaction worked afterward. Manual Retry and Reload buttons were not reached. |
@@ -462,8 +506,8 @@
 
 ## 9. Git Status
 
-- **Branch:** `feature/frontend-and-user-flow`. The visual-system change is committed as `feat(ui): apply SoundBite visual system and responsive layout`; not pushed. The logout fix is `182edc6`. The user-owned modification to the tracked `SoundBite/soundbite.db` is intentionally left unstaged and uncommitted.
-- **Database:** `AddDemoReviews` is applied to the deployment database after a mode-600 integrity-checked backup at `~/Library/Application Support/SoundBite/backups/soundbite-pre-demo-reviews-20261018-150136.db`.
+- **Branch:** `feature/frontend-and-user-flow`, incorporating `origin/main` (`94d0add`) through a resolved and verified merge. The visual-system commits (`5f7b69d`, `357eef7`) and navbar logout fix (`182edc6`) are included.
+- **Database:** `AddDemoReviews` is applied to the deployment database after a mode-600 integrity-checked backup at `~/Library/Application Support/SoundBite/backups/soundbite-pre-demo-reviews-20261018-150136.db`. `ReplacePlaylistsWithFavourites` was later applied after the backup `soundbite-pre-favourites-20261018-184812.db` (see §4). This merge applies no migrations.
 - **PRs #17–#19:** Notification paging, category preferences, and settings UI are merged into `main`.
 
 ## 10. Next Recommended Tasks
@@ -480,7 +524,7 @@
 
 - A is complete: paging, category opt-outs, and the settings page are implemented and merged in PRs #17–#19. Focused notification and route tests passed 53/53 on 2026-10-17; the A3 record reports the full suite passed 263/263.
 - User confirmed code commit `41f90ca` was deployed. Following explicit authorization, backed up the production DB, applied `AddDemoReviews`, and seeded 50 tracks plus 26 labelled demo reviews. Artist import then exposed Spotify's 10-album page-size cap; its correction is commit `55f9a20`. This session fixed the separate top-row logout error with a native antiforgery-validated HTTP POST; focused authentication tests passed 15/15 and the full suite passed 269/269. Logout fix is not yet deployed; run the deploy script in a local interactive terminal for sudo authorization, then browser-test logout. Windows Tailscale viewer access remains outstanding.
-- 2026-10-18: SoundBite visual system and responsive layout committed (tokens and type scale in `app.css`, Home nav link, right-aligned desktop nav, `.content-column` on feed/search/playlists); independent review passed 279/279 tests and real Chrome checks at desktop/tablet/mobile widths. That review's low-severity registration-button focus issue is now fixed and browser-verified at 1440x900 and 390x844 (uncommitted; 279/279 tests pass).
+- 2026-10-18: SoundBite visual system and responsive layout committed (tokens and type scale in `app.css`, Home nav link, right-aligned desktop nav); independent review passed 279/279 tests and real Chrome checks at desktop/tablet/mobile widths. The registration-button focus issue was fixed, browser-verified, committed as `357eef7`, and pushed. Conflicts with current `main` were resolved by retaining Favourites and the embedded global Home feed, moving the shared centred column to Search and Favourites, and keeping the visual navigation system; the combined suite passes 283/283. The combined merge was not browser-retested.
 - Notification event delivery is single-instance; shared infrastructure is only needed if deploying multiple instances.
 
 ## 12. Instructions for Updating This File

@@ -8,174 +8,187 @@
 @inject IMusicCatalog Catalog
 @inject ISpotifyCatalog SpotifyCatalog
 @inject SpotifyArtistCatalogService ArtistCatalog
+@inject FavouriteService FavouriteManager
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject ILogger<CatalogueSearch> Logger
 
 <PageTitle>Search</PageTitle>
 
 <div class="content-column">
-    <h1>Search</h1>
-    <p>Find artists by name, or albums and tracks by title.</p>
+<h1>Search</h1>
+<p>Find artists by name, or albums and tracks by title.</p>
 
-    <form @onsubmit="SearchAsync" @onsubmit:preventDefault>
-        <label for="catalogue-query" class="form-label">Search the catalogue</label>
-        <div class="input-group mb-3">
-            <input id="catalogue-query" type="search" class="form-control"
-                   @bind="query" @bind:event="oninput" disabled="@isLoading"
-                   placeholder="Enter a name or title" />
-            <button type="submit" class="btn btn-primary" disabled="@isLoading">Search</button>
-        </div>
-    </form>
+<form @onsubmit="SearchAsync" @onsubmit:preventDefault>
+    <label for="catalogue-query" class="form-label">Search the catalogue</label>
+    <div class="input-group mb-3">
+        <input id="catalogue-query" type="search" class="form-control"
+               @bind="query" @bind:event="oninput" disabled="@isLoading"
+               placeholder="Enter a name or title" />
+        <button type="submit" class="btn btn-primary" disabled="@isLoading">Search</button>
+    </div>
+</form>
 
-    @if (artistImportMessage is not null)
+@if (artistImportMessage is not null)
+{
+    <p class="alert @(artistImportFailed ? "alert-danger" : artistRefreshFailed ? "alert-warning" : "alert-success") mt-3" role="status">
+        @artistImportMessage
+    </p>
+}
+
+<div aria-live="polite" aria-busy="@isLoading">
+    @if (isLoading)
     {
-        <p class="alert @(artistImportFailed ? "alert-danger" : artistRefreshFailed ? "alert-warning" : "alert-success") mt-3" role="status">
-            @artistImportMessage
-        </p>
+        <p role="status"><span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Searching...</p>
     }
-
-    <div aria-live="polite" aria-busy="@isLoading">
-        @if (isLoading)
+    else if (error is not null)
+    {
+        <p class="alert alert-danger" role="alert">@error</p>
+    }
+    else if (results is null)
+    {
+        <p class="text-muted">Enter a name or title to search.</p>
+    }
+    else if (results.TotalCount == 0)
+    {
+        <p role="status">No local results found for “@searchedQuery”.</p>
+        @if (artistSearchLoading)
         {
-            <p role="status"><span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Searching...</p>
+            <p role="status">Searching Spotify for artists...</p>
         }
-        else if (error is not null)
+        else if (artistSearchError is not null)
         {
-            <p class="alert alert-danger" role="alert">@error</p>
+            <p class="alert alert-danger" role="alert">@artistSearchError</p>
         }
-        else if (results is null)
+        else if (spotifyArtists is { Count: 0 })
         {
-            <p class="text-muted">Enter a name or title to search.</p>
+            <p role="status">No Spotify artists found for “@searchedQuery”.</p>
         }
-        else if (results.TotalCount == 0)
+        else if (spotifyArtists is { Count: > 0 })
         {
-            <p role="status">No local results found for “@searchedQuery”.</p>
-            @if (artistSearchLoading)
-            {
-                <p role="status">Searching Spotify for artists...</p>
-            }
-            else if (artistSearchError is not null)
-            {
-                <p class="alert alert-danger" role="alert">@artistSearchError</p>
-            }
-            else if (spotifyArtists is { Count: 0 })
-            {
-                <p role="status">No Spotify artists found for “@searchedQuery”.</p>
-            }
-            else if (spotifyArtists is { Count: > 0 })
-            {
-                <section aria-labelledby="spotify-artist-results">
-                    <h2 id="spotify-artist-results" class="h4">Artists available to add</h2>
-                    <p class="text-muted">Choose an artist to add their albums and tracks to the catalogue.</p>
-                    <ul class="list-group">
-                        @foreach (var artist in spotifyArtists)
-                        {
-                            <li class="list-group-item d-flex justify-content-between align-items-center gap-3"
-                                @key="artist.SpotifyId">
-                                <span class="sb-item-title text-break">@artist.Name</span>
-                                @if (signedIn)
+            <section aria-labelledby="spotify-artist-results">
+                <h2 id="spotify-artist-results" class="h4">Artists available to add</h2>
+                <p class="text-muted">Choose an artist to add their albums and tracks to the catalogue.</p>
+                <ul class="list-group">
+                    @foreach (var artist in spotifyArtists)
+                    {
+                        <li class="list-group-item d-flex justify-content-between align-items-center gap-3"
+                            @key="artist.SpotifyId">
+                            <span class="sb-item-title text-break">@artist.Name</span>
+                            @if (signedIn)
+                            {
+                                <button type="button" class="btn btn-sm btn-outline-primary flex-shrink-0"
+                                        disabled="@isAddingArtist"
+                                        @onclick="() => AddArtistAsync(artist)">
+                                    @(addingArtistId == artist.SpotifyId ? "Adding albums and tracks..." : "Add artist")
+                                </button>
+                            }
+                            else
+                            {
+                                <button type="button" class="btn btn-sm btn-outline-primary flex-shrink-0"
+                                        @onclick="() => PromptAccountCreation(artist.Name)">
+                                    Add artist
+                                </button>
+                            }
+                        </li>
+                    }
+                </ul>
+                @if (accountPromptArtist is not null)
+                {
+                    <p class="alert alert-info mt-3" role="status">
+                        Create an account or log in to add @accountPromptArtist and their catalogue.
+                        <a href="/register">Create account</a> · <a href="/login">Log in</a>
+                    </p>
+                }
+            </section>
+        }
+    }
+    else
+    {
+        <p role="status">@results.TotalCount local results for “@searchedQuery”.</p>
+        <div class="row g-3">
+            <section class="col-md-4" aria-labelledby="artist-results">
+                <h2 id="artist-results" class="h4">Artists (@results.Artists.Count)</h2>
+                @if (results.Artists.Count == 0)
+                {
+                    <p class="text-muted">No matching artists.</p>
+                }
+                <ul class="list-group">
+                    @foreach (var artist in results.Artists)
+                    {
+                        <li class="list-group-item text-break" @key="artist.Id">
+                            <a href="@($"/artists/{artist.Id}")" class="sb-item-title">@artist.Name</a>
+                        </li>
+                    }
+                </ul>
+            </section>
+            <section class="col-md-4" aria-labelledby="album-results">
+                <h2 id="album-results" class="h4">Albums (@results.Albums.Count)</h2>
+                @if (results.Albums.Count == 0)
+                {
+                    <p class="text-muted">No matching albums.</p>
+                }
+                <ul class="list-group">
+                    @foreach (var album in results.Albums)
+                    {
+                        <li class="list-group-item text-break" @key="album.Id">
+                            <a href="@($"/albums/{album.Id}")" class="sb-item-title">@album.Title</a>
+                        </li>
+                    }
+                </ul>
+            </section>
+            <section class="col-md-4" aria-labelledby="track-results">
+                <h2 id="track-results" class="h4">Tracks (@results.Tracks.Count)</h2>
+                @if (results.Tracks.Count == 0)
+                {
+                    <p class="text-muted">No matching tracks.</p>
+                }
+                <ul class="list-group">
+                    @foreach (var track in results.Tracks)
+                    {
+                        <li class="list-group-item text-break" @key="track.Id">
+                            <a href="@($"/tracks/{track.Id}")" class="sb-item-title">@track.Title</a>
+                            <div class="mt-2">
+                                @if (signedIn && favouriteTrackIds is null)
                                 {
-                                    <button type="button" class="btn btn-sm btn-outline-primary flex-shrink-0"
-                                            disabled="@isAddingArtist"
-                                            @onclick="() => AddArtistAsync(artist)">
-                                        @(addingArtistId == artist.SpotifyId ? "Adding albums and tracks..." : "Add artist")
-                                    </button>
+                                    <span class="text-danger small" role="alert">@favouritesError</span>
                                 }
                                 else
                                 {
-                                    <button type="button" class="btn btn-sm btn-outline-primary flex-shrink-0"
-                                            @onclick="() => PromptAccountCreation(artist.Name)">
-                                        Add artist
-                                    </button>
+                                    <FavouriteButton TrackId="@track.Id"
+                                                     IsFavouriteOnLoad="@(signedIn ? favouriteTrackIds?.Contains(track.Id) : null)"
+                                                     StatusVersion="@favouriteStatusVersion" />
                                 }
-                            </li>
-                        }
-                    </ul>
-                    @if (accountPromptArtist is not null)
-                    {
-                        <p class="alert alert-info mt-3" role="status">
-                            Create an account or log in to add @accountPromptArtist and their catalogue.
-                            <a href="/register">Create account</a> · <a href="/login">Log in</a>
-                        </p>
+                            </div>
+                        </li>
                     }
-                </section>
-            }
-        }
-        else
-        {
-            <p role="status">@results.TotalCount local results for “@searchedQuery”.</p>
-            <div class="row g-3">
-                <section class="col-md-4" aria-labelledby="artist-results">
-                    <h2 id="artist-results" class="h4">Artists (@results.Artists.Count)</h2>
-                    @if (results.Artists.Count == 0)
-                    {
-                        <p class="text-muted">No matching artists.</p>
-                    }
-                    <ul class="list-group">
-                        @foreach (var artist in results.Artists)
-                        {
-                            <li class="list-group-item text-break" @key="artist.Id">
-                                <a href="@($"/artists/{artist.Id}")" class="sb-item-title">@artist.Name</a>
-                            </li>
-                        }
-                    </ul>
-                </section>
-                <section class="col-md-4" aria-labelledby="album-results">
-                    <h2 id="album-results" class="h4">Albums (@results.Albums.Count)</h2>
-                    @if (results.Albums.Count == 0)
-                    {
-                        <p class="text-muted">No matching albums.</p>
-                    }
-                    <ul class="list-group">
-                        @foreach (var album in results.Albums)
-                        {
-                            <li class="list-group-item text-break" @key="album.Id">
-                                <a href="@($"/albums/{album.Id}")" class="sb-item-title">@album.Title</a>
-                            </li>
-                        }
-                    </ul>
-                </section>
-                <section class="col-md-4" aria-labelledby="track-results">
-                    <h2 id="track-results" class="h4">Tracks (@results.Tracks.Count)</h2>
-                    @if (results.Tracks.Count == 0)
-                    {
-                        <p class="text-muted">No matching tracks.</p>
-                    }
-                    <ul class="list-group">
-                        @foreach (var track in results.Tracks)
-                        {
-                            <li class="list-group-item text-break" @key="track.Id">
-                                <a href="@($"/tracks/{track.Id}")" class="sb-item-title">@track.Title</a>
-                            </li>
-                        }
-                    </ul>
-                </section>
-            </div>
-        }
-    </div>
+                </ul>
+            </section>
+        </div>
+    }
+</div>
 
-    <section class="mt-5" aria-labelledby="catalogue-artists">
-        <h2 id="catalogue-artists">Artists</h2>
-        @if (artistsError is not null)
-        {
-            <p class="alert alert-danger" role="alert">@artistsError</p>
-        }
-        else if (catalogueArtists.Count == 0)
-        {
-            <p class="text-muted">No artists have been added to the catalogue yet.</p>
-        }
-        else
-        {
-            <ul class="list-group">
-                @foreach (var artist in catalogueArtists)
-                {
-                    <li class="list-group-item" @key="artist.Id">
-                        <a href="@($"/artists/{artist.Id}")" class="sb-item-title">@artist.Name</a>
-                    </li>
-                }
-            </ul>
-        }
-    </section>
+<section class="mt-5" aria-labelledby="catalogue-artists">
+    <h2 id="catalogue-artists">Artists</h2>
+    @if (artistsError is not null)
+    {
+        <p class="alert alert-danger" role="alert">@artistsError</p>
+    }
+    else if (catalogueArtists.Count == 0)
+    {
+        <p class="text-muted">No artists have been added to the catalogue yet.</p>
+    }
+    else
+    {
+        <ul class="list-group">
+            @foreach (var artist in catalogueArtists)
+            {
+                <li class="list-group-item" @key="artist.Id">
+                    <a href="@($"/artists/{artist.Id}")" class="sb-item-title">@artist.Name</a>
+                </li>
+            }
+        </ul>
+    }
+</section>
 </div>
 
 @code {
@@ -183,6 +196,7 @@
     private string searchedQuery = string.Empty;
     private CatalogueSearchResults? results;
     private IReadOnlyList<Artist> catalogueArtists = [];
+    private HashSet<int>? favouriteTrackIds = [];
     private IReadOnlyList<SpotifyArtistMatch>? spotifyArtists;
     private bool isLoading;
     private bool artistSearchLoading;
@@ -196,6 +210,8 @@
     private string? artistImportMessage;
     private string? addingArtistId;
     private string? accountPromptArtist;
+    private int favouriteStatusVersion;
+    private string favouritesError = "Favourites are unavailable.";
 
     protected override async Task OnInitializedAsync()
     {
@@ -226,6 +242,9 @@
         artistImportMessage = null;
         accountPromptArtist = null;
         spotifyArtists = null;
+        favouriteTrackIds = [];
+        favouritesError = "Favourites are unavailable.";
+        favouriteStatusVersion++;
         if (searchedQuery.Length == 0)
             return;
 
@@ -233,6 +252,20 @@
         try
         {
             results = await Catalog.SearchAsync(searchedQuery);
+            if (signedIn && results.Tracks.Count > 0)
+            {
+                try
+                {
+                    favouriteTrackIds = (await FavouriteManager.GetMineTrackIdsAsync()).ToHashSet();
+                }
+                catch (Exception exception)
+                {
+                    Logger.LogError(exception, "Unable to load the user's favourite track IDs");
+                    favouriteTrackIds = null;
+                    if (FavouriteService.IsStorageNotMigrated(exception))
+                        favouritesError = "Favourites database update required. Ask the administrator to apply the latest migration.";
+                }
+            }
             if (results.TotalCount == 0)
             {
                 artistSearchLoading = true;

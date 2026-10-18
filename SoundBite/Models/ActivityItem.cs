@@ -4,7 +4,8 @@ public enum ActivityType
 {
     Review,
     Comment,
-    Like
+    Like,
+    Favourite
 }
 
 public sealed record ActivityItem(
@@ -23,9 +24,7 @@ public sealed record ActivityItem(
     string? TargetDisplayName = null,
     int? ParentCommentId = null,
     string? ParentUserName = null,
-    string? ParentDisplayName = null,
-    int? PlaylistId = null,
-    string? PlaylistName = null)
+    string? ParentDisplayName = null)
 {
     public string ActorName => string.IsNullOrWhiteSpace(DisplayName) ? UserName : DisplayName;
     public string TargetActorName => string.IsNullOrWhiteSpace(TargetDisplayName) ? TargetUserName ?? string.Empty : TargetDisplayName;

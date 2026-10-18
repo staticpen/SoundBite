@@ -23,7 +23,6 @@ public class NotificationTests
     private int reviewId;
     private int trackId;
     private int commentId;
-    private int playlistId;
 
     [SetUp]
     public async Task SetUp()
@@ -45,10 +44,8 @@ public class NotificationTests
             new ApplicationUser { Id = "alice", UserName = "alice", DisplayName = "Alice" },
             new ApplicationUser { Id = "bob", UserName = "bob", DisplayName = "Bob" });
         db.Tracks.Add(new Track { Title = "Test track" });
-        db.Playlists.Add(new Playlist { OwnerId = "bob", Name = "Bob's playlist", IsPublic = true });
         await db.SaveChangesAsync();
         trackId = await db.Tracks.Select(track => track.Id).SingleAsync();
-        playlistId = await db.Playlists.Select(playlist => playlist.Id).SingleAsync();
         db.Reviews.Add(new Review { UserId = "bob", TrackId = trackId, Rating = 4, Comment = "Bob's review" });
         await db.SaveChangesAsync();
         reviewId = await db.Reviews.Select(review => review.Id).SingleAsync();
@@ -82,8 +79,6 @@ public class NotificationTests
         await socialService.LikeReviewAsync(reviewId);
         await socialService.LikeCommentAsync(commentId);
         await socialService.LikeCommentAsync(commentId);
-        await socialService.LikePlaylistAsync(playlistId);
-        await socialService.LikePlaylistAsync(playlistId);
         await socialService.LikeTrackAsync(trackId);
 
         var comment = await socialService.AddCommentAsync(reviewId, "A new comment");
@@ -100,8 +95,7 @@ public class NotificationTests
             NotificationType.ReviewComment,
             NotificationType.CommentReply,
             NotificationType.ReviewLike,
-            NotificationType.CommentLike,
-            NotificationType.PlaylistLike
+            NotificationType.CommentLike
         }));
         Assert.That(notifications.Single(notification => notification.Type == NotificationType.ReviewComment).CommentId,
             Is.EqualTo(comment.Id));
@@ -109,8 +103,8 @@ public class NotificationTests
             Is.EqualTo(reply.Id));
         Assert.That(notifications.Single(notification => notification.Type == NotificationType.ReviewLike).LikeId,
             Is.Not.Null);
-        Assert.That(notifications.Count(notification => notification.LikeId is not null), Is.EqualTo(3));
-        Assert.That(bobUpdates, Is.EqualTo(6));
+        Assert.That(notifications.Count(notification => notification.LikeId is not null), Is.EqualTo(2));
+        Assert.That(bobUpdates, Is.EqualTo(5));
         Assert.That(aliceUpdates, Is.Zero);
 
         authentication.Set("bob");
@@ -118,7 +112,7 @@ public class NotificationTests
         await socialService.LikeCommentAsync(commentId);
         await using var verify = factory.CreateDbContext();
         Assert.That(await verify.Notifications.CountAsync(notification => notification.RecipientUserId == "bob"),
-            Is.EqualTo(6));
+            Is.EqualTo(5));
     }
 
     [Test]

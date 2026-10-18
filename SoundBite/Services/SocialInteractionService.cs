@@ -81,12 +81,6 @@ public sealed class SocialInteractionService(
     public Task UnlikeTrackAsync(int trackId, CancellationToken cancellationToken = default) =>
         SetLikeAsync(LikeTargetType.Track, trackId, false, cancellationToken);
 
-    public Task LikePlaylistAsync(int playlistId, CancellationToken cancellationToken = default) =>
-        SetLikeAsync(LikeTargetType.Playlist, playlistId, true, cancellationToken);
-
-    public Task UnlikePlaylistAsync(int playlistId, CancellationToken cancellationToken = default) =>
-        SetLikeAsync(LikeTargetType.Playlist, playlistId, false, cancellationToken);
-
     public Task LikeCommentAsync(int commentId, CancellationToken cancellationToken = default) =>
         SetLikeAsync(LikeTargetType.Comment, commentId, true, cancellationToken);
 
@@ -256,11 +250,10 @@ public sealed class SocialInteractionService(
             var notified = false;
             await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
             var inserted = await db.Database.ExecuteSqlInterpolatedAsync($"""
-                INSERT INTO "Likes" ("ReviewId", "TrackId", "PlaylistId", "CommentId", "UserId", "CreatedAt")
+                INSERT INTO "Likes" ("ReviewId", "TrackId", "CommentId", "UserId", "CreatedAt")
                 VALUES (
                     {(targetType == LikeTargetType.Review ? targetId : null)},
                     {(targetType == LikeTargetType.Track ? targetId : null)},
-                    {(targetType == LikeTargetType.Playlist ? targetId : null)},
                     {(targetType == LikeTargetType.Comment ? targetId : null)},
                     {user.Id},
                     {DateTime.UtcNow})
@@ -320,10 +313,6 @@ public sealed class SocialInteractionService(
                 .Where(comment => comment.Id == targetId)
                 .Select(comment => comment.UserId)
                 .SingleAsync(cancellationToken),
-            LikeTargetType.Playlist => await db.Playlists
-                .Where(playlist => playlist.Id == targetId)
-                .Select(playlist => playlist.OwnerId)
-                .SingleAsync(cancellationToken),
             LikeTargetType.Track => null,
             _ => throw new ArgumentOutOfRangeException(nameof(targetType))
         };
@@ -354,14 +343,6 @@ public sealed class SocialInteractionService(
                 CommentId = targetId,
                 LikeId = likeId
             },
-            LikeTargetType.Playlist => new Notification
-            {
-                RecipientUserId = recipientId,
-                ActorUserId = actorId,
-                Type = NotificationType.PlaylistLike,
-                PlaylistId = targetId,
-                LikeId = likeId
-            },
             LikeTargetType.Track => null,
             _ => throw new ArgumentOutOfRangeException(nameof(targetType))
         };
@@ -371,7 +352,6 @@ public sealed class SocialInteractionService(
         {
             LikeTargetType.Review => likes.Where(like => like.ReviewId == targetId),
             LikeTargetType.Track => likes.Where(like => like.TrackId == targetId),
-            LikeTargetType.Playlist => likes.Where(like => like.PlaylistId == targetId),
             LikeTargetType.Comment => likes.Where(like => like.CommentId == targetId),
             _ => throw new ArgumentOutOfRangeException(nameof(targetType))
         };
@@ -387,9 +367,6 @@ public sealed class SocialInteractionService(
         {
             LikeTargetType.Review => await db.Reviews.AnyAsync(review => review.Id == targetId, cancellationToken),
             LikeTargetType.Track => await db.Tracks.AnyAsync(track => track.Id == targetId, cancellationToken),
-            LikeTargetType.Playlist => await db.Playlists.AnyAsync(
-                playlist => playlist.Id == targetId && (playlist.IsPublic || playlist.OwnerId == actorId),
-                cancellationToken),
             LikeTargetType.Comment => await db.Comments.AnyAsync(comment => comment.Id == targetId, cancellationToken),
             _ => throw new ArgumentOutOfRangeException(nameof(targetType))
         };

@@ -1,0 +1,375 @@
+@page "/favourites"
+@rendermode InteractiveServer
+
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using SoundBite.Interfaces
+@using SoundBite.Models
+@using SoundBite.Services
+@inject FavouriteService FavouriteManager
+@inject IMusicCatalog Catalog
+@inject ISpotifyCatalog SpotifyCatalog
+@inject SpotifyArtistCatalogService ArtistCatalog
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ILogger<Favourites> Logger
+
+<PageTitle>Favourites - SoundBite</PageTitle>
+
+<div class="content-column">
+<h1>Favourites</h1>
+
+@if (loading)
+{
+    <p role="status">Loading your favourites...</p>
+}
+else if (!signedIn)
+{
+    <p><a href="/login">Log in</a> or <a href="/register">sign up</a> to view and manage your favourites.</p>
+}
+else if (loadFailed)
+{
+    <div class="alert alert-danger" role="alert">@loadErrorMessage</div>
+}
+else if (items.Count == 0)
+{
+    <p class="text-muted">You haven't added any tracks to your favourites yet.</p>
+}
+else
+{
+    <ul class="list-group mb-3">
+        @foreach (var item in items)
+        {
+            <li class="list-group-item d-flex justify-content-between align-items-center gap-3" @key="item.TrackId">
+                <div>
+                    <a href="@($"/tracks/{item.TrackId}")" class="sb-item-title">@item.Track?.Title</a>
+                    @if (item.Track?.Artists.Count > 0)
+                    {
+                        <span class="text-muted"> · @string.Join(", ", item.Track.Artists.Select(artist => artist.Name))</span>
+                    }
+                </div>
+                <button type="button" class="btn btn-sm btn-outline-secondary flex-shrink-0"
+                        @onclick="() => RemoveAsync(item.TrackId)" disabled="@busy">
+                    Remove
+                </button>
+            </li>
+        }
+    </ul>
+}
+
+@if (signedIn && !loadFailed)
+{
+    <section aria-labelledby="add-tracks-heading">
+        <button type="button" class="btn btn-primary" @onclick="ToggleAddTracks">
+            @(showAddTracks ? "Close Add Tracks" : "Add Tracks")
+        </button>
+        @if (showAddTracks)
+        {
+            <div class="card mt-3">
+                <div class="card-body">
+                    <h2 id="add-tracks-heading" class="h4">Add Tracks</h2>
+                    <form @onsubmit="SearchTracksAsync" @onsubmit:preventDefault>
+                        <label for="favourite-search" class="form-label">Search tracks</label>
+                        <div class="input-group">
+                            <input id="favourite-search" type="search" class="form-control"
+                                   @bind="query" @bind:event="oninput" placeholder="Enter a song title" />
+                            <button class="btn btn-outline-primary" type="submit" disabled="@(searching || isAddingArtist)">Search</button>
+                        </div>
+                    </form>
+                    @if (artistImportMessage is not null)
+                    {
+                        <p class="alert @(artistImportFailed ? "alert-danger" : artistRefreshFailed ? "alert-warning" : "alert-success") mt-3" role="status">
+                            @artistImportMessage
+                        </p>
+                    }
+                    @if (searchFailed)
+                    {
+                        <p class="alert alert-danger mt-3" role="alert">Tracks couldn't be searched. Please try again.</p>
+                    }
+                    else if (searching)
+                    {
+                        <p class="mt-3" role="status">Searching the catalogue...</p>
+                    }
+                    else if (searchResults is not null)
+                    {
+                        @if (searchResults.Count == 0)
+                        {
+                            <p class="text-muted mt-3">No tracks found for “@searchedQuery”.</p>
+                            @if (artistSearchLoading)
+                            {
+                                <p role="status">Searching Spotify for artists...</p>
+                            }
+                            else if (artistSearchError is not null)
+                            {
+                                <p class="alert alert-danger" role="alert">@artistSearchError</p>
+                            }
+                            else if (spotifyArtists is { Count: 0 })
+                            {
+                                <p role="status">No Spotify artists found for “@searchedQuery”.</p>
+                            }
+                            else if (spotifyArtists is { Count: > 0 })
+                            {
+                                <section aria-labelledby="favourite-spotify-artists">
+                                    <h3 id="favourite-spotify-artists" class="h5">Artists available to add</h3>
+                                    <p class="text-muted">Choose an artist to add their albums and tracks, then add a matching track to Favourites.</p>
+                                    <ul class="list-group">
+                                        @foreach (var artist in spotifyArtists)
+                                        {
+                                            <li class="list-group-item d-flex justify-content-between align-items-center gap-3"
+                                                @key="artist.SpotifyId">
+                                                <span class="sb-item-title text-break">@artist.Name</span>
+                                                <button type="button" class="btn btn-sm btn-outline-primary flex-shrink-0"
+                                                        disabled="@isAddingArtist"
+                                                        @onclick="() => AddArtistAsync(artist)">
+                                                    @(addingArtistId == artist.SpotifyId ? "Adding albums and tracks..." : "Add artist and tracks")
+                                                </button>
+                                            </li>
+                                        }
+                                    </ul>
+                                </section>
+                            }
+                        }
+                        else
+                        {
+                            <ul class="list-group mt-3">
+                                @foreach (var track in searchResults)
+                                {
+                                    <li class="list-group-item d-flex justify-content-between align-items-center gap-3" @key="track.Id">
+                                        <a href="@($"/tracks/{track.Id}")" class="sb-item-title">@track.Title</a>
+                                        @if (items.Any(item => item.TrackId == track.Id))
+                                        {
+                                            <span class="badge text-bg-secondary">Added</span>
+                                        }
+                                        else
+                                        {
+                                            <button type="button" class="btn btn-sm btn-outline-primary"
+                                                    @onclick="() => AddAsync(track)" disabled="@busy">
+                                                @(addingTrackId == track.Id ? "Adding..." : "Add to Favourites")
+                                            </button>
+                                        }
+                                    </li>
+                                }
+                            </ul>
+                        }
+                    }
+                </div>
+            </div>
+        }
+    </section>
+}
+
+@if (!string.IsNullOrWhiteSpace(message))
+{
+    <p class="mt-3" role="status">@message</p>
+}
+</div>
+
+@code {
+    private readonly List<FavouriteTrack> items = [];
+    private IReadOnlyList<Track>? searchResults;
+    private IReadOnlyList<SpotifyArtistMatch>? spotifyArtists;
+    private string? userId;
+    private string query = string.Empty;
+    private string searchedQuery = string.Empty;
+    private bool signedIn;
+    private bool loading = true;
+    private bool loadFailed;
+    private bool showAddTracks;
+    private bool searching;
+    private bool searchFailed;
+    private bool artistSearchLoading;
+    private bool isAddingArtist;
+    private bool artistImportFailed;
+    private bool artistRefreshFailed;
+    private bool busy;
+    private int? addingTrackId;
+    private string? message;
+    private string? artistSearchError;
+    private string? artistImportMessage;
+    private string? addingArtistId;
+    private string loadErrorMessage = "Your favourites couldn't be loaded. Please try again later.";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var principal = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+        userId = principal.FindFirstValue(ClaimTypes.NameIdentifier);
+        signedIn = principal.Identity?.IsAuthenticated == true && !string.IsNullOrWhiteSpace(userId);
+        if (!signedIn)
+        {
+            loading = false;
+            return;
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        loading = true;
+        loadFailed = false;
+        loadErrorMessage = "Your favourites couldn't be loaded. Please try again later.";
+        try
+        {
+            items.Clear();
+            items.AddRange(await FavouriteManager.GetMineAsync());
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Unable to load favourites for user {UserId}", userId);
+            loadFailed = true;
+            if (FavouriteService.IsStorageNotMigrated(exception))
+                loadErrorMessage = "The Favourites database update hasn't been applied yet. Ask the administrator to apply the latest migration.";
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task SearchTracksAsync()
+    {
+        searchedQuery = query.Trim();
+        searchResults = null;
+        searchFailed = false;
+        spotifyArtists = null;
+        artistSearchError = null;
+        artistImportMessage = null;
+        if (searchedQuery.Length == 0)
+            return;
+
+        searching = true;
+        try
+        {
+            var results = await Catalog.SearchAsync(searchedQuery);
+            searchResults = results.Tracks;
+            if (searchResults.Count == 0)
+            {
+                artistSearchLoading = true;
+                spotifyArtists = await SpotifyCatalog.SearchArtistsAsync(searchedQuery);
+            }
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Unable to search the catalogue or Spotify artists to add tracks to favourites");
+            if (searchResults is { Count: 0 })
+                artistSearchError = "Spotify artist search failed. Please try again later.";
+            else
+                searchFailed = true;
+        }
+        finally
+        {
+            artistSearchLoading = false;
+            searching = false;
+        }
+    }
+
+    private async Task AddArtistAsync(SpotifyArtistMatch artist)
+    {
+        if (!signedIn || isAddingArtist)
+            return;
+
+        isAddingArtist = true;
+        addingArtistId = artist.SpotifyId;
+        artistImportMessage = null;
+        artistImportFailed = false;
+        artistRefreshFailed = false;
+        SpotifyArtistImportResult result;
+        try
+        {
+            result = await ArtistCatalog.AddArtistAsync(artist);
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Unable to add Spotify artist {SpotifyArtistId} from Favourites", artist.SpotifyId);
+            artistImportFailed = true;
+            artistImportMessage = "The artist catalogue could not be added. Please try again.";
+            addingArtistId = null;
+            isAddingArtist = false;
+            return;
+        }
+
+        artistImportMessage =
+            $"Added {artist.Name}: {result.AlbumsImported} albums and {result.TracksImported} tracks.";
+        try
+        {
+            var results = await Catalog.SearchAsync(searchedQuery);
+            searchResults = results.Tracks;
+            spotifyArtists = null;
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Artist {SpotifyArtistId} was added but favourite track results could not refresh", artist.SpotifyId);
+            artistRefreshFailed = true;
+            artistImportMessage += " The track results could not refresh; search again to see the changes.";
+        }
+        finally
+        {
+            addingArtistId = null;
+            isAddingArtist = false;
+        }
+    }
+
+    private async Task AddAsync(Track track)
+    {
+        if (busy)
+            return;
+
+        busy = true;
+        addingTrackId = track.Id;
+        message = null;
+        try
+        {
+            await FavouriteManager.AddAsync(track.Id);
+            items.Add(new FavouriteTrack { UserId = userId!, TrackId = track.Id, Track = track });
+            message = $"Added {track.Title} to Favourites.";
+        }
+        catch (InvalidOperationException exception)
+        {
+            message = exception.Message;
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Unable to add track {TrackId} to favourites", track.Id);
+            message = "The track couldn't be added. Please try again.";
+        }
+        finally
+        {
+            addingTrackId = null;
+            busy = false;
+        }
+    }
+
+    private async Task RemoveAsync(int trackId)
+    {
+        if (busy)
+            return;
+
+        busy = true;
+        message = null;
+        try
+        {
+            await FavouriteManager.RemoveAsync(trackId);
+            items.RemoveAll(item => item.TrackId == trackId);
+            message = "Removed track from Favourites.";
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Unable to remove track {TrackId} from favourites", trackId);
+            message = "The track couldn't be removed. Please try again.";
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private void ToggleAddTracks()
+    {
+        showAddTracks = !showAddTracks;
+        searchResults = null;
+        spotifyArtists = null;
+        searchFailed = false;
+        artistSearchError = null;
+        artistImportMessage = null;
+        message = null;
+    }
+}

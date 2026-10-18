@@ -192,24 +192,86 @@ public class FollowServiceTests
     }
 
     [Test]
-    public async Task MigrationUpgradeAndRollbackPreserveExistingDataAndModelMatchesSnapshot()
+    public async Task MigrationUpgradeAndRollbackPreserveExistingTracksAndModelMatchesSnapshot()
     {
         await using var db = factory.CreateDbContext();
         var migrator = db.GetService<IMigrator>();
         await migrator.MigrateAsync("20261015084204_AddPlaylists");
         db.Tracks.Add(new Track { Title = "Preserved track" });
-        db.Playlists.Add(new Playlist { OwnerId = "alice", Name = "Preserved playlist" });
         await db.SaveChangesAsync();
+        var trackId = await db.Tracks.Select(track => track.Id).SingleAsync();
+        var addedAt = DateTime.UtcNow;
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO "Playlists" ("OwnerId", "Name", "Description", "IsPublic", "CreatedAt", "UpdatedAt")
+            VALUES ('alice', 'Legacy playlist', '', 1, {addedAt}, {addedAt});
+            """);
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO "PlaylistItems" ("PlaylistId", "TrackId", "Position", "AddedAt")
+            SELECT "Id", {trackId}, 0, {addedAt} FROM "Playlists" WHERE "OwnerId" = 'alice';
+            """);
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO "Playlists" ("OwnerId", "Name", "Description", "IsPublic", "CreatedAt", "UpdatedAt")
+            VALUES ('alice', 'Another legacy playlist', '', 1, {addedAt}, {addedAt});
+            """);
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO "PlaylistItems" ("PlaylistId", "TrackId", "Position", "AddedAt")
+            SELECT "Id", {trackId}, 0, {addedAt.AddMinutes(1)}
+            FROM "Playlists" WHERE "Name" = 'Another legacy playlist';
+            """);
         await db.Database.MigrateAsync();
         Assert.That(db.Database.HasPendingModelChanges(), Is.False);
         await service.FollowAsync("bob");
         Assert.That(await db.Users.CountAsync(), Is.EqualTo(25));
         Assert.That((await db.Tracks.SingleAsync()).Title, Is.EqualTo("Preserved track"));
-        Assert.That((await db.Playlists.SingleAsync()).Name, Is.EqualTo("Preserved playlist"));
+        var favourite = await db.FavouriteTracks.SingleAsync();
+        Assert.That(favourite.TrackId, Is.EqualTo(trackId));
+        Assert.That(favourite.UserId, Is.EqualTo("alice"));
         await migrator.MigrateAsync("20261015084204_AddPlaylists");
         Assert.That(await db.Users.CountAsync(), Is.EqualTo(25));
         await db.Database.MigrateAsync();
         Assert.That(await db.Follows.CountAsync(), Is.Zero);
+        Assert.That(await db.FavouriteTracks.CountAsync(), Is.EqualTo(1));
+    }
+
+    [Test]
+    public async Task PlaylistMigrationRemovesLegacySocialRowsAndKeepsPlaylistTracksAsFavourites()
+    {
+        await using var db = factory.CreateDbContext();
+        var migrator = db.GetService<IMigrator>();
+        await migrator.MigrateAsync("20261017064453_AddNotificationOptOuts");
+        db.Tracks.Add(new Track { Title = "Legacy favourite" });
+        await db.SaveChangesAsync();
+        var trackId = await db.Tracks.Select(track => track.Id).SingleAsync();
+        var createdAt = DateTime.UtcNow;
+
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO "Playlists" ("Id", "OwnerId", "Name", "Description", "IsPublic", "CreatedAt", "UpdatedAt")
+            VALUES (9001, 'alice', 'Legacy playlist', '', 1, {createdAt}, {createdAt});
+            """);
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO "PlaylistItems" ("Id", "PlaylistId", "TrackId", "Position", "AddedAt")
+            VALUES (9001, 9001, {trackId}, 0, {createdAt});
+            """);
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO "Likes" ("Id", "ReviewId", "TrackId", "PlaylistId", "CommentId", "UserId", "CreatedAt")
+            VALUES (9001, NULL, NULL, 9001, NULL, 'bob', {createdAt});
+            """);
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO "Notifications" ("Id", "RecipientUserId", "ActorUserId", "Type", "PlaylistId", "LikeId", "CreatedAt")
+            VALUES (9001, 'alice', 'bob', 5, 9001, 9001, {createdAt});
+            """);
+        await db.Database.ExecuteSqlRawAsync("""
+            INSERT INTO "NotificationOptOuts" ("UserId", "Type") VALUES ('alice', 5);
+            """);
+
+        await db.Database.MigrateAsync();
+
+        Assert.That(await db.FavouriteTracks.CountAsync(), Is.EqualTo(1));
+        Assert.That(await db.FavouriteTracks.AnyAsync(item =>
+            item.UserId == "alice" && item.TrackId == trackId), Is.True);
+        Assert.That(await db.Likes.CountAsync(), Is.Zero);
+        Assert.That(await db.Notifications.CountAsync(), Is.Zero);
+        Assert.That(await db.NotificationOptOuts.CountAsync(), Is.Zero);
     }
 
     private sealed class Factory(DbContextOptions<ApplicationDbContext> options) : IDbContextFactory<ApplicationDbContext>

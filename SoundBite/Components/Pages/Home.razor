@@ -24,7 +24,7 @@
                 <li>Rate tracks</li>
                 <li>Write reviews</li>
                 <li>Follow other listeners</li>
-                <li>Create playlists</li>
+                <li>Save favourite tracks</li>
             </ul>
             <div class="d-flex flex-wrap gap-2">
                 <a class="btn btn-primary btn-lg" href="/login">Log in</a>
@@ -34,44 +34,14 @@
     </div>
 </section>
 
-<div class="row g-3">
-    <section class="col-md-6 col-xl-3">
-        <div class="card h-100">
-            <div class="card-body">
-                <h2 class="h4">Browse music</h2>
-                <p>Explore artists, albums, and tracks currently available in the catalogue.</p>
-                <a href="/search">Search artists, albums, and tracks</a>
-            </div>
-        </div>
-    </section>
-    <section class="col-md-6 col-xl-3">
-        <div class="card h-100">
-            <div class="card-body">
-                <h2 class="h4">Discover playlists</h2>
-                <p>Browse public playlists and find a new collection of tracks.</p>
-                <a href="/playlists">Explore playlists</a>
-            </div>
-        </div>
-    </section>
-    <section class="col-md-6 col-xl-3">
-        <div class="card h-100">
-            <div class="card-body">
-                <h2 class="h4">Join the community</h2>
-                <p>Follow listeners, rate tracks, and share your perspective.</p>
-                <a href="/feed">View the activity feed</a>
-            </div>
-        </div>
-    </section>
-    <section class="col-md-6 col-xl-3">
-        <div class="card h-100">
-            <div class="card-body">
-                <h2 class="h4">Ratings and trends</h2>
-                <p>See the community's highest-rated, most-reviewed, and currently trending tracks.</p>
-                <a href="/rankings">Explore track rankings</a>
-            </div>
-        </div>
-    </section>
-</div>
+@if (signedIn)
+{
+    <div class="row">
+        <section class="col-12 col-lg-6">
+            <ActivityFeed />
+        </section>
+    </div>
+}
 
 @code {
     private bool signedIn;

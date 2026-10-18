@@ -28,7 +28,7 @@ public class PageRouteTests
     [TestCase("/register", typeof(Register))]
     [TestCase("/login", typeof(Account))]
     [TestCase("/account", typeof(Account))]
-    [TestCase("/feed", typeof(ActivityFeed))]
+    [TestCase("/favourites", typeof(Favourites))]
     [TestCase("/notifications", typeof(Notifications))]
     [TestCase("/notifications/settings", typeof(NotificationSettings))]
     [TestCase("/rankings", typeof(Rankings))]

@@ -59,6 +59,19 @@ public class AuthenticationUiTests
         ("model.UserName", "authuser"), ("model.Email", "authuser@example.com"),
         ("model.Password", "TestPass123!"), ("model.ConfirmPassword", confirm));
 
+    [Test]
+    public async Task LoginPageUsesCenteredCardLayoutLikeRegistration()
+    {
+        var login = await client.GetStringAsync("/login");
+        var register = await client.GetStringAsync("/register");
+
+        Assert.That(login, Does.Contain("class=\"login-container\"")
+            .And.Contain("class=\"login-card\"")
+            .And.Not.Contain("<h1>Account</h1>"));
+        Assert.That(register, Does.Contain("class=\"register-container\"")
+            .And.Contain("class=\"register-card\""));
+    }
+
     private async Task<HttpResponseMessage> Logout()
     {
         var home = await client.GetStringAsync("/");
@@ -110,7 +123,7 @@ public class AuthenticationUiTests
             .And.Contain("aria-controls=\"site-nav-menu\"").And.Contain("aria-expanded=\"false\"")
             .And.Not.Contain("href=\"feed\"")
             .And.Not.Contain("href=\"rankings\"").And.Not.Contain("href=\"playlists\"")
-            .And.Not.Contain("/account/logout").And.Not.Contain("admin/users")
+            .And.Not.Contain("href=\"favourites\"").And.Not.Contain("/account/logout").And.Not.Contain("admin/users")
             .And.Not.Contain("href=\"notifications\"").And.Not.Contain("soundbite-logo.svg"));
         Assert.That(Regex.Matches(signedOutNavbar, "class=\"nav-link[\" ]").Count, Is.EqualTo(3),
             "Only Home, Search and Create account are secondary links; Log in is the primary button.");
@@ -134,17 +147,17 @@ public class AuthenticationUiTests
         var signedIn = NavbarOf(signedInHome);
         Assert.That(signedIn, Does.Contain("href=\"\" class=\"nav-link active\" aria-current=\"page\">Home</a>")
             .And.Contain("href=\"search\" class=\"nav-link\">Search</a>")
-            .And.Contain("href=\"feed\" class=\"nav-link\">Activity Feed</a>")
             .And.Contain("href=\"rankings\" class=\"nav-link\">Ratings and Trends</a>")
-            .And.Contain("href=\"playlists\" class=\"nav-link\">Playlists</a>")
+            .And.Contain("href=\"favourites\" class=\"nav-link\">Favourites</a>")
+            .And.Not.Contain("href=\"feed\"").And.Not.Contain("href=\"playlists\"")
             .And.Contain(">Account</summary>")
             .And.Contain("href=\"account\" class=\"nav-link\">Edit Profile</a>").And.Contain("href=\"notifications\"")
             .And.Contain("action=\"/account/logout\"").And.Contain(">Log out</button>")
             .And.Contain("btn-outline-secondary").And.Not.Contain("btn-outline-light")
             .And.Not.Contain("href=\"register\"")
             .And.Not.Contain("href=\"login\"").And.Not.Contain("admin/users"));
-        AssertInOrder(signedIn, ">Home</a>", ">Search</a>", ">Activity Feed</a>",
-            ">Ratings and Trends</a>", ">Playlists</a>", ">Account</summary>");
+        AssertInOrder(signedIn, ">Home</a>", ">Search</a>",
+            ">Ratings and Trends</a>", ">Favourites</a>", ">Account</summary>");
 
         using (var scope = app.Services.CreateScope())
         {
@@ -168,10 +181,13 @@ public class AuthenticationUiTests
     [Test]
     public async Task HomepageHeroPromotesLogInWhenSignedOutAndCatalogueSearchWhenSignedIn()
     {
-        var signedOutHero = HeroOf(await client.GetStringAsync("/"));
-        Assert.That(signedOutHero, Does.Contain("<a class=\"btn btn-primary btn-lg\" href=\"/login\">Log in</a>")
+        var signedOutHome = await client.GetStringAsync("/");
+        Assert.That(HeroOf(signedOutHome), Does.Contain("<a class=\"btn btn-primary btn-lg\" href=\"/login\">Log in</a>")
             .And.Contain("href=\"/register\">Create account</a>")
             .And.Not.Contain("Search the catalogue"));
+        Assert.That(signedOutHome, Does.Not.Contain("activity-feed-heading")
+            .And.Not.Contain("to see recent community activity"),
+            "The anonymous homepage must show only the login-first hero, not the activity feed prompt.");
 
         await Register();
         var signedInHero = HeroOf(await client.GetStringAsync("/"));
@@ -182,16 +198,14 @@ public class AuthenticationUiTests
 
     [TestCase("/search")]
     [TestCase("/rankings")]
-    [TestCase("/playlists")]
     public async Task DestinationsHiddenFromTheSignedOutNavbarRemainPublic(string path)
     {
         var response = await client.GetAsync(path);
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
     }
 
-    [TestCase("/feed")]
     [TestCase("/search")]
-    [TestCase("/playlists")]
+    [TestCase("/favourites")]
     public async Task SingleColumnPagesUseTheSharedCentredContentColumn(string path)
     {
         Assert.That(await client.GetStringAsync(path), Does.Contain("<div class=\"content-column\">"));
@@ -200,12 +214,27 @@ public class AuthenticationUiTests
     [Test]
     public async Task LoginFormUsesThePrimaryActionStyle()
     {
-        Assert.That(await client.GetStringAsync("/login"), Does.Contain("class=\"btn btn-primary\">Log in</button>")
+        Assert.That(await client.GetStringAsync("/login"), Does.Contain("class=\"btn btn-primary w-100\"")
+            .And.Contain(">Log in</button>")
             .And.Not.Contain("btn-success"));
+    }
+
+    [Test]
+    public async Task AnonymousFavouritesPageOnlyPromptsToLogIn()
+    {
+        var response = await client.GetAsync("/favourites");
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        var html = await response.Content.ReadAsStringAsync();
+        Assert.That(html, Does.Contain("<a href=\"/login\">Log in</a> or <a href=\"/register\">sign up</a> to view and manage your favourites.")
+            .And.Not.Contain("Add Tracks").And.Not.Contain("add-tracks-heading")
+            .And.Not.Contain("favourite-search").And.Not.Contain("Add to Favourites")
+            .And.Not.Contain(">Remove<").And.Not.Contain("Remove</button>"));
     }
 
     [TestCase("/missing-net9-page")]
     [TestCase("/missing/deep/link")]
+    [TestCase("/feed")]
+    [TestCase("/playlists")]
     public async Task UnknownRouteReturns404AndApplicationNotFoundContent(string path)
     {
         var response = await client.GetAsync(path);
@@ -230,14 +259,23 @@ public class AuthenticationUiTests
         Assert.That(await saved.Content.ReadAsStringAsync(), Does.Contain("Profile saved."));
         Assert.That(await client.GetStringAsync("/account"), Does.Contain("Updated name").And.Contain("My music biography"));
         Assert.That(await client.GetStringAsync("/users/authuser"), Does.Contain("Updated name").And.Not.Contain("authuser@example.com"));
-        Assert.That(await client.GetStringAsync("/playlists"), Does.Contain("Create a playlist"));
+        Assert.That(await client.GetStringAsync("/favourites"), Does.Contain("Favourites").And.Contain("Add Tracks"));
+        var home = await client.GetStringAsync("/");
+        Assert.That(NavbarOf(home), Does.Contain("href=\"favourites\" class=\"nav-link\">Favourites</a>"));
+        Assert.That(home, Does.Contain("Activity Feed")
+            .And.Not.Contain("href=\"feed\"")
+            .And.Not.Contain("href=\"playlists\"")
+            .And.Not.Contain("Browse music")
+            .And.Not.Contain("Discover playlists")
+            .And.Not.Contain("Join the community")
+            .And.Not.Contain("Ratings and trends"));
         Assert.That(await client.GetStringAsync("/tracks/1"), Does.Contain("Write a review"));
         var logout = await Logout();
         Assert.That(logout.StatusCode, Is.EqualTo(HttpStatusCode.Redirect));
         Assert.That((await client.GetAsync("/api/account/me")).StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized));
         Assert.That(await client.GetStringAsync("/notifications"), Does.Contain("Log in")
             .And.Not.Contain("You don't have any notifications yet."));
-        Assert.That(await client.GetStringAsync("/playlists"), Does.Contain("to create your own playlists").And.Not.Contain("Create a playlist"));
+        Assert.That(await client.GetStringAsync("/favourites"), Does.Contain("Log in").And.Not.Contain("Remove"));
         Assert.That(await client.GetStringAsync("/tracks/1"), Does.Contain("to rate and review this track").And.Not.Contain("Submit review"));
         foreach (var identifier in new[] { "authuser", "authuser@example.com" })
         {

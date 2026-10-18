@@ -68,13 +68,6 @@ else if (loaded)
                                     <a href="@($"/users/{Uri.EscapeDataString(item.ActorUserName)}")">@item.ActorName</a>
                                     <span> followed you.</span>
                                 }
-                                else if (item.Type == NotificationType.PlaylistLike)
-                                {
-                                    <a href="@($"/users/{Uri.EscapeDataString(item.ActorUserName)}")">@item.ActorName</a>
-                                    <span> liked your playlist </span>
-                                    <a href="@($"/playlists/{item.PlaylistId}")">@item.PlaylistName</a>
-                                    <span>.</span>
-                                }
                                 else
                                 {
                                     <a href="@($"/users/{Uri.EscapeDataString(item.ActorUserName)}")">@item.ActorName</a>

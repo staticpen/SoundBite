@@ -6,7 +6,6 @@ public enum LikeTargetType
 {
     Review,
     Track,
-    Playlist,
     Comment
 }
 
@@ -19,9 +18,6 @@ public class Like
 
     public int? TrackId { get; set; }
     public Track? Track { get; set; }
-
-    public int? PlaylistId { get; set; }
-    public Playlist? Playlist { get; set; }
 
     public int? CommentId { get; set; }
     public Comment? Comment { get; set; }

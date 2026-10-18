@@ -2,7 +2,7 @@
 
 ## 1. Project Overview
 
-SoundBite is a web-based social music platform inspired by Letterboxd. Users can discover music, rate and review tracks, create playlists, follow other users, and interact with music-related activity.
+SoundBite is a web-based social music platform inspired by Letterboxd. Users can discover music, optionally save tracks to one private Favourites list, rate and review tracks, follow other users, and interact with music-related activity.
 
 The project serves two purposes:
 
@@ -192,32 +192,32 @@ Requirements:
 - Editing an existing review updates that record rather than creating a duplicate.
 - Validation must be applied in the UI and enforced appropriately in the application and database layers.
 
-### 6.4 Playlists
+### 6.4 Favourites
 
-Users should be able to:
+Each user has one private favourites list. Users should be able to:
 
-- Create playlists.
-- Edit playlist details.
-- Add and remove tracks.
-- Discover playlists.
-- Save or follow playlists, if supported by the chosen design.
-- Share playlists.
-- View playlist details.
+- Add tracks from catalogue search or track details without submitting a rating or review.
+- Search the catalogue and add tracks from the Favourites page.
+- Remove tracks from the list.
+- Keep favourites private to the owning user.
 
-A track must not appear more than once in the same playlist.
+A track must not appear more than once in a user's favourites list.
 
 Use appropriate database constraints and service-level validation to enforce this rule.
+
+Playlists are not a current feature. The former Playlists feature was replaced by the `20261018072907_ReplacePlaylistsWithFavourites` migration. It combined all tracks a user owned across playlists into that user's single Favourites list, deduplicating tracks. It then dropped playlist storage, playlist likes, playlist notifications, and playlist notification opt-outs. Playlist names, descriptions, privacy, ordering, and grouping were not preserved. The `/playlists` route is removed and should return 404. Do not reintroduce playlists without explicit direction.
 
 ### 6.5 Social activity and interactions
 
 The social layer should support:
 
-- A feed of relevant user activity.
+- A signed-in user's global feed of recent activity from all users, regardless of follow relationships.
 - Recent reviews, ratings, and other supported music-related actions.
-- Likes on reviews, comments, tracks, and playlists.
+- Activity entries when users like music or add a track to Favourites; the Favourites list itself remains private.
+- Likes on reviews, comments, and tracks.
 - Comments on reviews.
 - Replies to comments, where supported by the final data model.
-- Viewing other users' activity.
+- Viewing relevant recent activity on Home.
 - Following and unfollowing users.
 
 Prevent duplicate likes and invalid relationships. Apply suitable authorization checks before users modify or delete content.
@@ -255,8 +255,7 @@ Expected entities include:
 - `Album`
 - `Artist`, if required by the catalogue design
 - `Review` or an equivalent track-rating entity
-- `Playlist`
-- A playlist-track join entity, if needed
+- `FavouriteTrack` (one row per user-track pair in the user's private Favourites list)
 - Follow relationships
 - Likes
 - Comments and comment replies
@@ -283,12 +282,14 @@ Do not assume that a track belongs to exactly one album.
 - Enforce uniqueness for the user-track combination.
 - Validate input on the server and use database constraints where appropriate.
 
-### Playlist rules
+### Favourites rules
 
-- A playlist has an owner.
-- A playlist can contain multiple tracks.
-- A track cannot be duplicated within the same playlist.
-- Track ordering should be supported if the product design requires it.
+- Each user has exactly one implicit Favourites list; there is no separate list entity, name, description, or visibility setting.
+- A `FavouriteTrack` references a valid user and a valid track and records when it was added (`AddedAt`). Favourites are listed in the order they were added, oldest first.
+- The composite key on user and track prevents the same track appearing twice in a user's Favourites. The service also reports a duplicate add as a validation failure.
+- Favourites are private. Only the owning user can list, add, or remove their own entries; anonymous users cannot use Favourites.
+- Removing a favourite does not delete the track. Deleting a user or track removes the corresponding favourites.
+- Adding a favourite does not require a rating or review. The global activity feed may show that a user added a track, but never exposes the full list.
 
 ### Social relationship rules
 
@@ -324,7 +325,7 @@ Introduce services where they provide a useful separation of responsibilities. P
 - Account or profile services.
 - Music catalogue services.
 - Review and rating services.
-- Playlist services.
+- Favourites services.
 - Social interaction services.
 - Feed services.
 - Ranking and trend services.
@@ -423,7 +424,8 @@ Test relevant behaviour such as:
 - Valid and invalid ratings.
 - Required ratings and optional review text.
 - Duplicate reviews for the same user and track.
-- Playlist duplicate prevention.
+- Favourites duplicate prevention, privacy between users, and rejection of anonymous or missing-track requests.
+- Upgrade from the historical Playlists schema, preserving each user's playlist tracks as Favourites.
 - Valid and invalid follow relationships.
 - Duplicate likes.
 - Authorization and access control.
