@@ -27,7 +27,7 @@
             else
             {
                 <span>@interactions.LikeCount likes</span>
-                <a href="/register">Create an account to like</a>
+                <a class="btn btn-sm btn-outline-primary" href="/register">Like</a>
             }
             <span>@interactions.Comments.Count comments</span>
         </div>
@@ -55,8 +55,8 @@
                                 }
                                 else
                                 {
-                                    <span class="small">@comment.LikeCount likes</span>
-                                    <a class="small ms-2" href="/register">Create an account to like</a>
+                                    <span class="small me-2">@comment.LikeCount likes</span>
+                                    <a class="btn btn-sm btn-outline-primary" href="/register">Like</a>
                                 }
                             </div>
                             @if (comment.IsOwner)
@@ -93,8 +93,8 @@
                                                 }
                                                 else
                                                 {
-                                                    <span class="small">@reply.LikeCount likes</span>
-                                                    <a class="small ms-2" href="/register">Create an account to like</a>
+                                                    <span class="small me-2">@reply.LikeCount likes</span>
+                                                    <a class="btn btn-sm btn-outline-primary" href="/register">Like</a>
                                                 }
                                             </div>
                                             @if (reply.IsOwner)

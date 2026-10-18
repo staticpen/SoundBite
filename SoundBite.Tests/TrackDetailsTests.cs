@@ -98,9 +98,12 @@ public class TrackDetailsTests
                 .And.Contain("<h1 class=\"card-title fs-2 mb-0\">Reviewed track</h1>")
                 .And.Contain("Alice")
                 .And.Contain("A great track")
-                .And.Contain("Create an account to like")
+                .And.Contain("class=\"btn btn-sm btn-outline-primary\" href=\"/register\">Like</a>")
+                .And.Contain("class=\"btn btn-sm btn-outline-primary\" href=\"/register\">Add to Favourites</a>")
                 .And.Contain("to comment or reply.")
                 .And.Contain("href=\"/register\"")
+                .And.Not.Contain("Create an account to like")
+                .And.Not.Contain("Create an account to add to Favourites")
                 .And.Not.Contain("private@example.com"));
         }, db =>
         {
