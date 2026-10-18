@@ -1,57 +1,86 @@
 ﻿@page "/"
+@using System.Security.Claims
 @using Microsoft.AspNetCore.Components.Authorization
+@using SoundBite.Services
 @inject AuthenticationStateProvider AuthenticationStateProvider
+@inject UserService Users
+@inject ILogger<Home> Logger
 
 <PageTitle>SoundBite — Discover music</PageTitle>
 
-<section id="home-hero" class="p-4 p-md-5 mb-4 bg-body-tertiary rounded-3" aria-labelledby="home-hero-title">
-    <div class="container-fluid py-2">
+<section id="home-hero" class="p-4 p-md-5 mb-4 bg-body-tertiary rounded-3 text-center" aria-labelledby="home-hero-title">
+    <div class="sb-hero-copy mx-auto py-2">
         @if (signedIn)
         {
-            <h1 id="home-hero-title" class="sb-hero-title">@welcomeMessage</h1>
-            <p class="col-md-8 fs-5">
-                Find artists, albums, and tracks in the SoundBite catalogue, then read and share reviews with the community.
+            <h1 id="home-hero-title" class="sb-hero-title">@welcomeHeading</h1>
+            <p class="fs-5">
+                SoundBite is a community for discovering, rating, and reviewing music. Explore our catalogue of artists, albums, and tracks, discover what other listeners think, and share your own opinions through ratings and reviews.
+            </p>
+            <p class="fs-5">
+                <strong>Ready to get started?</strong> Search for your favourite artist, explore an album, or find a track you've listened to. Read community reviews, leave your own rating, and connect with other music lovers through shared experiences.
             </p>
             <a class="btn btn-primary btn-lg" href="/search">Search the catalogue</a>
         }
         else
         {
-            <h1 id="home-hero-title" class="sb-hero-title">Discover music with SoundBite</h1>
-            <p class="col-md-8 fs-5">
-                Log in to join the SoundBite community and make the catalogue your own.
+            <h1 id="home-hero-title" class="sb-hero-title">Your music taste deserves a place of its own.</h1>
+            <p class="fs-5">
+                Discover new favourites, rate the tracks you love, and share your taste with people who get it.
             </p>
-            <ul class="col-md-8 fs-5 mb-4">
-                <li>Rate tracks</li>
-                <li>Write reviews</li>
-                <li>Follow other listeners</li>
-                <li>Save favourite tracks</li>
+            <p class="fs-5"><strong>Every track has a story. What's yours?</strong></p>
+            <ul class="sb-hero-features list-unstyled fs-5">
+                <li><span aria-hidden="true">⭐</span> <strong>Rate</strong> the music that moves you.</li>
+                <li><span aria-hidden="true">✍️</span> <strong>Review</strong> tracks worth talking about.</li>
+                <li><span aria-hidden="true">👥</span> <strong>Follow</strong> listeners who share your taste.</li>
+                <li><span aria-hidden="true">❤️</span> <strong>Save</strong> your favourites, all in one place.</li>
             </ul>
-            <div class="d-flex flex-wrap gap-2">
-                <a class="btn btn-primary btn-lg" href="/login">Log in</a>
-                <a class="btn btn-outline-secondary btn-lg" href="/register">Create account</a>
-            </div>
+            <a class="btn btn-primary btn-lg" href="/register">Get Started</a>
+            <p class="sb-hero-tagline"><em>Your music. Your ratings. Your SoundBite.</em></p>
         }
     </div>
 </section>
 
 @if (signedIn)
 {
-    <div class="row">
-        <section class="col-12 col-lg-6">
-            <ActivityFeed />
-        </section>
+    <div id="home-activity" class="content-column">
+        <ActivityFeed />
     </div>
 }
 
 @code {
     private bool signedIn;
-    private string welcomeMessage = "Welcome back to SoundBite. Discover music and share what you love.";
+    private string welcomeHeading = "Welcome back! Your music journey starts here.";
 
     protected override async Task OnInitializedAsync()
     {
         var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
         signedIn = user.Identity?.IsAuthenticated == true;
-        if (signedIn && !string.IsNullOrWhiteSpace(user.Identity?.Name))
-            welcomeMessage = $"Welcome, {user.Identity.Name}. Discover music and share what you love.";
+        if (!signedIn)
+            return;
+
+        var name = await GetPreferredNameAsync(user);
+        if (!string.IsNullOrWhiteSpace(name))
+            welcomeHeading = $"Welcome back, {name}! Your music journey starts here.";
+    }
+
+    // A failed lookup only loses personalisation; the homepage still renders with the claim name or generic welcome.
+    private async Task<string?> GetPreferredNameAsync(ClaimsPrincipal user)
+    {
+        var userId = user.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrWhiteSpace(userId))
+        {
+            Logger.LogWarning("Signed-in principal has no user identifier; using the claim name for the welcome");
+            return user.Identity?.Name;
+        }
+
+        try
+        {
+            return await Users.GetPreferredNameAsync(userId) ?? user.Identity?.Name;
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Unable to load the preferred name for the homepage welcome");
+            return user.Identity?.Name;
+        }
     }
 }

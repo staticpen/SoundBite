@@ -73,6 +73,7 @@ builder.Services.AddScoped<FavouriteService>();
 builder.Services.AddScoped<FollowService>();
 builder.Services.AddScoped<SocialInteractionService>();
 builder.Services.AddScoped<FeedService>();
+builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<NotificationService>();
 builder.Services.AddSingleton<NotificationEventDispatcher>();
 builder.Services.AddScoped<NotificationCircuitHandler>();

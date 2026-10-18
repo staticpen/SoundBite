@@ -1,0 +1,145 @@
+@using SoundBite.Models
+@using SoundBite.Services
+@inject RankingService RankingService
+@inject TrendService Trends
+@inject ILogger<RankingsOverview> Logger
+
+@if (hasDemoData)
+{
+    <p class="alert alert-info" role="note">
+        Rankings include clearly labelled demonstration reviews as well as community reviews.
+        Sample reviews are not real user submissions.
+    </p>
+}
+
+@if (isLoading)
+{
+    <p role="status">Loading track rankings...</p>
+}
+else if (loadFailed)
+{
+    <p class="alert alert-danger" role="alert">Rankings couldn't be loaded. Please try again later.</p>
+}
+else
+{
+    <div class="row g-4">
+        <section class="col-12 col-lg-4" aria-labelledby="top-rated-heading">
+            @Heading("top-rated-heading", "Top rated")
+            <p class="text-muted">Highest average rating; tracks need at least @RankingService.MinimumReviewsForRating reviews.</p>
+            @if (topRated.Count == 0)
+            {
+                <p role="status">There aren't enough reviews to rank tracks yet.</p>
+            }
+            else
+            {
+                <ol class="list-group list-group-numbered">
+                    @foreach (var track in topRated)
+                    {
+                        <li class="list-group-item" @key="track.TrackId">
+                            <a href="@($"/tracks/{track.TrackId}")" class="sb-item-title">@track.Title</a>
+                            <div class="small text-muted">@track.AverageRating.ToString("0.0") / 5 · @track.ReviewCount reviews</div>
+                            @if (track.DemoReviewCount > 0)
+                            {
+                                <span class="badge text-bg-info">Includes @track.DemoReviewCount sample reviews</span>
+                            }
+                        </li>
+                    }
+                </ol>
+            }
+        </section>
+
+        <section class="col-12 col-lg-4" aria-labelledby="most-reviewed-heading">
+            @Heading("most-reviewed-heading", "Most reviewed")
+            <p class="text-muted">Tracks with the most reviews of all time.</p>
+            @if (mostReviewed.Count == 0)
+            {
+                <p role="status">No tracks have reviews yet.</p>
+            }
+            else
+            {
+                <ol class="list-group list-group-numbered">
+                    @foreach (var track in mostReviewed)
+                    {
+                        <li class="list-group-item" @key="track.TrackId">
+                            <a href="@($"/tracks/{track.TrackId}")" class="sb-item-title">@track.Title</a>
+                            <div class="small text-muted">@track.ReviewCount reviews · @track.AverageRating.ToString("0.0") / 5 average</div>
+                            @if (track.DemoReviewCount > 0)
+                            {
+                                <span class="badge text-bg-info">Includes @track.DemoReviewCount sample reviews</span>
+                            }
+                        </li>
+                    }
+                </ol>
+            }
+        </section>
+
+        <section class="col-12 col-lg-4" aria-labelledby="trending-heading">
+            @Heading("trending-heading", "Trending this week")
+            <p class="text-muted">Most reviews in the last @TrendService.DefaultWindowDays days.</p>
+            @if (trending.Count == 0)
+            {
+                <p role="status">No tracks have been reviewed in the last week.</p>
+            }
+            else
+            {
+                <ol class="list-group list-group-numbered">
+                    @foreach (var track in trending)
+                    {
+                        <li class="list-group-item" @key="track.TrackId">
+                            <a href="@($"/tracks/{track.TrackId}")" class="sb-item-title">@track.Title</a>
+                            <div class="small text-muted">@track.RecentReviewCount recent reviews · @track.RecentAverageRating.ToString("0.0") / 5 average</div>
+                            @if (track.DemoReviewCount > 0)
+                            {
+                                <span class="badge text-bg-info">Includes @track.DemoReviewCount sample reviews</span>
+                            }
+                        </li>
+                    }
+                </ol>
+            }
+        </section>
+    </div>
+}
+
+@code {
+    // Metric headings sit under the host page's heading: h2 below a page h1, or h3 below a section h2.
+    [Parameter] public int HeadingLevel { get; set; } = 2;
+
+    private IReadOnlyList<TrackRankingEntry> topRated = [];
+    private IReadOnlyList<TrackRankingEntry> mostReviewed = [];
+    private IReadOnlyList<TrendingTrackEntry> trending = [];
+    private bool isLoading = true;
+    private bool loadFailed;
+    private bool hasDemoData;
+
+    protected override void OnParametersSet()
+    {
+        if (HeadingLevel is not (2 or 3))
+            throw new ArgumentOutOfRangeException(nameof(HeadingLevel), HeadingLevel, "Ranking headings must be level 2 or 3.");
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            topRated = await RankingService.GetTopRatedTracksAsync();
+            mostReviewed = await RankingService.GetMostReviewedTracksAsync();
+            trending = await Trends.GetTrendingTracksAsync();
+            hasDemoData = topRated.Any(track => track.DemoReviewCount > 0) ||
+                mostReviewed.Any(track => track.DemoReviewCount > 0) ||
+                trending.Any(track => track.DemoReviewCount > 0);
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Unable to load track rankings and trends");
+            loadFailed = true;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private RenderFragment Heading(string id, string text) => HeadingLevel == 3
+        ? @<h3 id="@id">@text</h3>
+        : @<h2 id="@id">@text</h2>;
+}

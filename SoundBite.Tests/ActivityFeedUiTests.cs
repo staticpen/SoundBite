@@ -90,6 +90,7 @@ public class ActivityFeedUiTests
             .AddLogging()
             .AddSingleton<IDbContextFactory<ApplicationDbContext>>(factory)
             .AddScoped<FeedService>()
+            .AddScoped<UserService>()
             .AddSingleton<AuthenticationStateProvider>(
                 new TestAuthentication(new ClaimsPrincipal(identity)))
             .BuildServiceProvider();
