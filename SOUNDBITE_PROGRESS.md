@@ -22,9 +22,9 @@
 
 - **Overall status:** In progress
 - **Current development phase:** Presentation and deployment readiness
-- **Current focus:** Verify the expanded Search, artist-import, demo-ranking, and presentation UX changes; deploy and seed only after the required production migration is approved
+- **Current focus:** Complete a browser-level acceptance pass for the seeded catalogue, artist import, and account/navigation UX
 - **Last verified:** 2026-10-18
-- **Current blocker:** No code-level blocker. The additive `AddDemoReviews` migration must be applied before the updated seed command can run against a target database. No live Spotify request, target-database migration, or production seed has been performed for these changes. Deployment and Windows-viewer checks remain outstanding.
+- **Current blocker:** No code-level blocker. The production migration and seed have now been applied successfully. A manual signed-in artist-import flow and Windows-viewer access remain unverified.
 
 ## 3. Feature Implementation Tracker
 
@@ -32,8 +32,8 @@
 |---|---|---|
 | Authentication | Implemented — verified | Website registration, username/email login, logout, profile editing, cookie persistence and authorization checks pass using isolated migrated databases; see latest work. |
 | User profiles | Implemented — verified | `ApplicationUser` stores a display name and bio; the account page can edit them, and `/users/{username}` displays the public profile without exposing account email. The migration and persistence round-trip are tested. |
-| Music catalogue | In progress — local search and mocked artist import verified; live run outstanding | `/search` searches local artists, albums, and tracks, then searches Spotify artists on a local miss. Signed-in users can add a selected artist with its album releases and tracks; anonymous users are prompted to register or log in. The Artists section lists locally stored artists. |
-| Spotify integration | In progress — artist search/import and repeatable seed tested with mocks | Client-credentials authentication, token caching, artist/album/track pagination, and idempotent transactional artist-discography import are implemented. The repeatable `--seed-catalogue` command imports tracks and clearly labelled demo reviews; the API and target database remain unverified. Production credentials remain in protected external configuration. |
+| Music catalogue | Seeded in production — routes verified; artist-import UX still needs manual test | `/search` searches local artists, albums, and tracks, then searches Spotify artists on a local miss. Signed-in users can add a selected artist with its album releases and tracks; anonymous users are prompted to register or log in. The deployed database has 17 artists, 38 albums, and 50 tracks. |
+| Spotify integration | Live seed verified; interactive artist import still needs manual test | The deployed production Spotify credentials successfully obtained a token and completed five default searches, refreshing 50 unique tracks. The seed created 26 clearly labelled sample reviews across 12 tracks. |
 | Track ratings and reviews | Implemented — verified | Reviews persist through EF Core; the service supports create/read/update, the database enforces one review per user per track and valid 1–5 ratings, and track details support public review reading plus authenticated submission/editing. |
 | Album-track many-to-many relationship | Implemented — unverified | `ApplicationDbContext` maps `ArtistAlbums` and `ArtistTracks` and `Track.AlbumId` with a nullable optional foreign key. This matches the intended design, but the schema has not been validated via a migration review beyond the code. |
 | Playlist management | Implemented — verified | Users can create, edit, and delete playlists; add/remove tracks; and browse public playlist listings/details. Owner checks are enforced in the service. |
@@ -46,7 +46,7 @@
 | Navigation and home | Implemented — tested | Navigation order is Home, Search, Activity Feed, Ratings and Trends, Playlists, Account. Account opens a dropdown with Edit Profile, Notifications, and role-gated Admin. Home shows a personalized welcome to signed-in users. |
 | Administrative user management | Implemented — verified | `/admin/users` supports user search/paging, account lock/unlock, and admin-role grants/revocation. Every service operation checks live role membership and lockout state server-side. The front-end label is “Admin.” |
 | Automated tests | Passed — verified | Full NUnit suite passed **268/268** on 2026-10-18; the focused catalogue, Spotify, rankings, track-detail, and route suite passed **46/46**. EF reports no pending model changes. |
-| Git and repository hygiene | In progress | `main` remains at `3a18cae`; the current Search/artist import/demo-ranking/navigation changes and additive migration are uncommitted. Deployment scripts intentionally require a clean `main` worktree. |
+| Git and repository hygiene | Deployed | Feature commit `41f90ca` is on `main` and synchronized with `origin/main`. The only current local change is this progress record's production-verification update. |
 
 ## 4. Latest Completed Work
 
@@ -344,7 +344,14 @@
 - **Files or components changed:** `CatalogueSearch.razor`, `SpotifyCatalogService.cs`, `SpotifyTrackImporter.cs`, `SpotifyArtistCatalogService.cs`, `ISpotifyCatalog.cs`, `SpotifyTrackMatch.cs`, `DemoReview.cs`, `DemoReviewService.cs`, `DemoReviewSeeder.cs`, `ApplicationDbContext.cs`, migration `20261018035010_AddDemoReviews` and its designer/model snapshot, `RankingService.cs`, `TrendService.cs`, `TrackRankingEntry.cs`, `TrendingTrackEntry.cs`, `Rankings.razor`, `TrackDetails.razor`, `NavMenu.razor` and its CSS, `Home.razor`, `AdminUsers.razor`, `Program.cs`, relevant catalogue/Spotify/ranking/track tests, and this file.
 - **Important implementation decisions:** Artist imports are server-authorized for signed-in users, transactional, and idempotent; they include album releases and associated tracks, not only a selected track. Spotify pagination URLs are restricted to HTTPS `api.spotify.com`. Demonstration reviews remain separate from community reviews and are visibly labelled on rankings and track details. `--seed-catalogue` seeds catalogue records and the sample rankings but does not apply migrations.
 - **Verification performed and its result:** Focused catalogue, Spotify, rankings, track-detail, and route tests passed **46/46**; the full NUnit suite passed **268/268**. `dotnet ef migrations has-pending-model-changes` reports no pending model changes. Tests exercise the new migration in isolated SQLite databases, cover anonymous import rejection, repeatable demo-review seeding, and personalized home greeting, and do not migrate the target database.
-- **Remaining limitations:** No live Spotify call, target-database migration, seed run, or deployment was performed. Apply the additive migration to the intended database only after authorization and backup; then deploy and run the seed command. Changes remain uncommitted.
+- **Remaining limitations at implementation checkpoint:** Live Spotify, production migration, and seeding were still outstanding; those steps were subsequently completed as recorded below after the user authorized production database changes.
+
+### 2026-10-18 — Production migration and presentation seed
+
+- **What:** After the user confirmed deployment and explicitly authorized database changes, verified commit `41f90cabf56e90cccd1e6122875305b0a87bd199` was clean and synchronized with `origin/main`. Confirmed the production app was live, the SQLite database passed `PRAGMA quick_check`, and only `20261018035010_AddDemoReviews` was pending.
+- **Backup and migration:** Created `/Users/aaronurayan/Library/Application Support/SoundBite/backups/soundbite-pre-demo-reviews-20261018-150136.db` using SQLite's online backup API. Backup integrity passed and mode is `0600`. Applied `AddDemoReviews` to the production database; no earlier migrations were pending.
+- **Seed and verification:** The deployed app used the protected LaunchDaemon Spotify configuration. Five Spotify queries refreshed/imported 50 unique tracks; demo seeding created 26 sample reviews on 12 tracks. Post-seed SQLite integrity passed, catalogue counts are 17 artists / 38 albums / 50 tracks, and all 26 demo seed keys are unique. Local `/`, `/search`, and `/rankings` and the deployed HTTPS tailnet versions of those pages returned HTTP 200; the pages contained the expected Artists and ranking sections.
+- **Still to verify:** Manually test a signed-in Spotify artist add, anonymous account prompt, Account dropdown/Admin role display, and access from a Windows tailnet viewer. No credentials were displayed or changed.
 
 ## 5. Current Implementation Details
 
@@ -357,7 +364,7 @@
 - `Data/ApplicationUser.cs` includes `DisplayName` and optional `Bio`. The account page edits these fields; `/users/{username}` displays a public profile without exposing email.
 - Remaining model and service placeholders include `UserService`. Rankings combine community reviews with clearly labelled `DemoReviews`; Spotify access requires configured credentials. Likes support reviews, tracks, playlists, and comments; comments/feed entries remain review-scoped.
 - The NUnit test project is active; the full suite passed 268/268 for the current worktree.
-- `20261018035010_AddDemoReviews` adds the separate sample-review table; it has not been applied to the configured deployment database.
+- `20261018035010_AddDemoReviews` adds the separate sample-review table and has been applied to the configured deployment database after an integrity-checked backup.
 
 ## 6. Important Decisions and Assumptions
 
@@ -383,8 +390,8 @@
 | Registration form cannot reach endpoint | Resolved | Replaced server-side loopback HTTP call with static SSR form processing | Verified in browser and HTTP tests | Closed |
 | Interactive login cannot set cookie | Resolved | Cookie operations now execute during HTTP form requests before rendering | Verified registration, login and logout | Closed |
 | Multi-instance notification delivery | Notifications are not backed by a distributed event bus | Live delivery uses an in-process dispatcher by design for the current single-instance app | Add a distributed backplane only if deploying multiple instances | Open |
-| Spotify access has not been exercised against a live account | External search/import cannot be confirmed without valid API credentials | Spotify client credentials are read from environment variables; automated tests use a mock HTTP handler | Configure approved credentials locally and smoke-test search/import while respecting Spotify's policies | Open |
-| Catalogue seed and artist discovery have not been live-verified | Spotify fallback search/import and the repeatable presentation seed are implemented, but target content has not been populated | Tests use mock API responses; the new additive review migration is not applied to the deployment database | Deploy the code, obtain authorization and back up before applying the migration, then run the seed and verify `/search` and `/rankings` | Open |
+| Interactive Spotify artist import has not been manually exercised | Local fallback and full-discography import are covered by mocked tests; browser interaction is not yet confirmed | Production OAuth/API credentials worked for the seed command; the public `/search` route is healthy | Sign in, search for a Spotify artist absent locally, add it, and confirm its albums/tracks appear; optionally confirm the anonymous prompt | Open |
+| Windows viewer access not recently confirmed | Tailnet pages work from the host but not yet verified on the viewer | Prior deployment records require Windows Tailscale authorization | Have the Windows viewer join the tailnet and smoke-test the deployed link | Open |
 | Initial administrator needs deployment configuration | The first admin must exist before the app can assign its admin role | Startup reads indexed `Admin:UserIds` settings and fails explicitly if an ID is unknown | Register the first user, configure the ID, apply migrations, then restart; keep settings in trusted environment configuration | Open |
 
 ## 8. Verification Record
@@ -397,11 +404,11 @@
 | Application startup and local smoke test | Passed | App ran against a disposable copy at `/tmp/soundbite-b-readiness.db`; `/` returned HTTP 200, catalogue search rendered and accepted a local-search interaction. No target database was used. |
 | Circuit reconnect | Partially verified | A running page survived a local server stop/restart: the rejoining dialog appeared and dismissed, and page interaction worked afterward. Manual Retry and Reload buttons were not reached. |
 | Relevant feature behaviour | Passed | Authentication/profile/review/playlist/follow flows were previously verified; rendered tests cover review interactions, feed, and track likes. |
-| Database migrations | Model current; target not migrated for these changes | `AddDemoReviews` is additive, tests migrate isolated SQLite databases successfully, and EF reports no pending model changes. It has not been applied to the configured deployment database. |
+| Database migrations | Applied and integrity-checked | `AddDemoReviews` is recorded in the production migration history; `PRAGMA quick_check` returned `ok`. A protected pre-migration backup is retained under Application Support. |
 
 ## 9. Git Status
 
-- **Branch:** `main` at `3a18cae`; the Search, artist import, demo-ranking, presentation UX, migration, tests, and progress updates are uncommitted.
+- **Branch:** `main` at `41f90ca` (`Pre populated the database`), synchronized with `origin/main`. This progress record contains the current operational verification notes.
 - **Database:** No application migration performed; use a backup and an authorized target database for deployment migrations.
 - **PRs #17–#19:** Notification paging, category preferences, and settings UI are merged into `main`.
 
@@ -412,13 +419,13 @@
    - **Done:** Release build, all 263 NUnit tests, Production publish, fresh 12-migration deployment DB, verified integrity and backups, first account/Admin role, Tailscale HTTPS Serve, active LaunchAgent, and protected external Production Spotify config file.
    - **Still required:** Confirm whether `938f573` has been deployed; if the host must be available before login, run the LaunchDaemon installer with local administrator authorization and verify service startup. Verify Spotify through the deployed Production configuration and have a Windows viewer install/authorize Tailscale and test access. Windows VS2022 and explicit Retry/Reload checks are waived/optional per user.
    - **Safety:** Never use the tracked `SoundBite/soundbite.db` or `/tmp/soundbite-spotify-test.db` for deployment. Keep Spotify credentials and DB/backup files outside Git. Keep router forwarding disabled.
-2. **Deploy and seed the presentation catalogue:** First commit/deploy the changes using the repository's clean-`main` deployment process. Back up the intended DB; obtain explicit authorization before applying the additive `AddDemoReviews` migration. Then run `--seed-catalogue` with `ConnectionStrings__DefaultConnection` set to the absolute target path and Spotify credentials supplied through the protected external config. Verify `/search`, artist import, and the labelled ranking lists. No live API use or target database write has yet occurred for this work.
+2. **Complete presentation acceptance checks:** Test the deployed `/search` Spotify fallback and signed-in artist import, verify its albums/tracks are added, check the anonymous account prompt, and confirm the Account menu/role-specific Admin link. Inspect `/rankings` to ensure sample review labels are clear.
 3. **Task C (as needed):** Consider album/artist discovery, broader catalogue management, or shared notification delivery only if deploying multiple app instances; these are not blockers for the current single-instance application.
 
 ## 11. Handover for the Next Chat Session
 
 - A is complete: paging, category opt-outs, and the settings page are implemented and merged in PRs #17–#19. Focused notification and route tests passed 53/53 on 2026-10-17; the A3 record reports the full suite passed 263/263.
-- B is user-reported as working in Safari after a Mac restart. The deployment has the earlier 12 migrations and one verified Administrator; verified backups are under `~/Library/Application Support/SoundBite/backups/`. `main` is at `3a18cae`; current worktree changes are uncommitted. The new additive `AddDemoReviews` migration is required before demo-ranking seeding; do not apply it to the target without explicit authorization and a backup. After deployment/migration, run `--seed-catalogue` with an absolute `ConnectionStrings__DefaultConnection` path; it does not apply migrations. The previously verified LaunchAgent starts at login; install the LaunchDaemon only if before-login availability remains required. Production Spotify configuration and Windows Tailscale access still need verification. User waived Windows VS2022 checks; explicit Retry/Reload is optional/unverified.
+- B is user-reported as working in Safari after a Mac restart. User confirmed code commit `41f90ca` was deployed. Following explicit authorization, backed up the production DB, applied `AddDemoReviews`, and ran the deployed seed command successfully: 50 tracks refreshed/imported and 26 labelled demo reviews added for 12 tracks. Backups, live migration history, SQLite integrity, and host + tailnet routes were verified. Manually test Spotify artist add and account/admin UI; Windows Tailscale viewer access also remains to check. Windows VS2022 and explicit Retry/Reload are optional/unverified.
 - Notification event delivery is single-instance; shared infrastructure is only needed if deploying multiple instances.
 
 ## 12. Instructions for Updating This File
