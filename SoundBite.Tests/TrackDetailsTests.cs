@@ -98,9 +98,9 @@ public class TrackDetailsTests
                 .And.Contain("<h1 class=\"card-title fs-2 mb-0\">Reviewed track</h1>")
                 .And.Contain("Alice")
                 .And.Contain("A great track")
-                .And.Contain("Log in to like")
-                .And.Contain("to comment.")
-                .And.Contain("/login")
+                .And.Contain("Create an account to like")
+                .And.Contain("to comment or reply.")
+                .And.Contain("href=\"/register\"")
                 .And.Not.Contain("private@example.com"));
         }, db =>
         {

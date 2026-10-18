@@ -22,7 +22,7 @@
 
 - **Overall status:** In progress
 - **Current development phase:** Presentation and deployment readiness
-- **Current focus:** Profile visibility and review presentation; local changes are verified, with deployment not performed
+- **Current focus:** Public profile visibility and clear registration prompts for anonymous user actions; local changes are verified, with deployment not performed
 - **Last verified:** 2026-10-19
 - **Current blocker:** The current local source changes have not been committed or deployed.
 
@@ -42,12 +42,19 @@
 | Activity feed | Implemented — global signed-in feed shown on Home | Home renders globally ordered, paginated reviews, comments/replies, likes, and Favourites additions from all users to signed-in viewers, regardless of follow relationships. The feed remains an activity snapshot; full Favourites lists are displayed on public user profiles. The standalone Activity Feed navigation item and route are removed. |
 | Notifications | Implemented — verified | In addition to recipient-scoped notifications, `/notifications` uses keyset paging to load older items without duplicates; unread counts and read-state behavior remain independent of the displayed page. Users can persist per-category opt-outs from `/notifications/settings`, affecting future notifications only. Paging, authorization, read state, preference persistence/isolation, and UI behavior are covered by tests. The single-instance event dispatcher updates active recipient circuits; navigation and reconnection reload persisted state. |
 | Rankings and trends | Implemented — verified in isolated SQLite tests and headless Chrome | Shared `RankingsOverview` component shows top-rated tracks (minimum two reviews), most-reviewed tracks overall, and tracks with the most reviews in the last seven days on the separate `/rankings` page. Its navbar link is shown to signed-in users. Separately stored, labelled sample reviews can populate these lists without masquerading as community reviews. |
-| Navigation and home | Implemented — verified | Light navbar with the horizontal `soundbite-logo.png` wordmark linking to `/`, an explicit Home NavLink, a mobile toggle, and keyboard focus styles. Signed-out: Home, Search, Create account, and a primary Log in button. Signed-in: Home, Search, Ratings and Trends, Favourites, then the Account dropdown (Edit Profile, Notifications with unread badge, role-gated Admin, antiforgery-protected POST Log out). `/feed` and `/playlists` return 404; `/favourites` shows only a login prompt to anonymous visitors and uses the shared centred content column. Home shows a centred anonymous hero with a single "Get Started" → `/register` CTA, or a centred signed-in hero welcoming the user by display name (falling back to username, then the claim name, then a generic greeting) with "Search the catalogue". Signed-in Home then shows the global activity feed in the centred 1024px content column; ratings and trends remain on `/rankings`. Successful login redirects to `/`. |
+| Navigation and home | Implemented — verified | Light navbar with the horizontal `soundbite-logo.png` wordmark linking to `/`, an explicit Home NavLink, a mobile toggle, and keyboard focus styles. Signed-out: Home, Search, Create account, and a primary Log in button. Signed-in: Home, Search, Ratings and Trends, Favourites, then the Account dropdown (Edit Profile, Notifications with unread badge, role-gated Admin, antiforgery-protected POST Log out). Anonymous users selecting an action requiring an account (artist import, favourite, like, follow, review, comment, or reply) are linked directly to `/register`; signed-in actions remain unchanged. `/feed` and `/playlists` return 404; `/favourites` shows only a login prompt to anonymous visitors and uses the shared centred content column. Home shows a centred anonymous hero with a single "Get Started" → `/register` CTA, or a centred signed-in hero welcoming the user by display name (falling back to username, then the claim name, then a generic greeting) with "Search the catalogue". Signed-in Home then shows the global activity feed in the centred 1024px content column; ratings and trends remain on `/rankings`. Successful login redirects to `/`. |
 | Administrative user management | Implemented — verified | `/admin/users` supports user search/paging, account lock/unlock, and admin-role grants/revocation. Every service operation checks live role membership and lockout state server-side. The front-end label is “Admin.” |
 | Automated tests | Passed — verified | Full NUnit suite: **313/313**, with 0 failed and 0 skipped. |
-| Git and repository hygiene | In progress | Current profile and review-presentation changes are uncommitted. No tracked database modification was present in the working tree at the start of this task. |
+| Git and repository hygiene | In progress | Current profile, review-presentation, and registration-prompt changes are uncommitted. No tracked database modification was present in the working tree at the start of this task. |
 
 ## 4. Latest Completed Work
+
+### 2026-10-19 — Send anonymous user actions to registration
+
+- **Task completed:** Replaced anonymous action handlers and login prompts with direct `/register` links for Spotify artist import, track favourites and likes, review and comment likes, following, reviews, comments, and replies. This makes the Add artist action navigate immediately instead of requiring an event handler to reveal a prompt. Signed-in actions are unchanged.
+- **Files or components changed:** `CatalogueSearch.razor`, `FavouriteButton.razor`, `LikeButton.razor`, `ReviewSocialPanel.razor`, `ProfileFollowPanel.razor`, `TrackDetails.razor`, affected catalogue/authentication/track UI tests, and this file.
+- **Verification:** Focused catalogue, track, and authentication UI tests passed 68/68. Full `dotnet test SoundBite.sln --no-restore` passed **313/313**, 0 failed and 0 skipped. `git diff --check` passed.
+- **Remaining limitations:** Changes are local and have not been committed or deployed.
 
 ### 2026-10-19 — Remove sample reviews from track details
 

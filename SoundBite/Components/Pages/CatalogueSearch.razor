@@ -84,21 +84,13 @@
                             }
                             else
                             {
-                                <button type="button" class="btn btn-sm btn-outline-primary flex-shrink-0"
-                                        @onclick="() => PromptAccountCreation(artist.Name)">
+                                <a class="btn btn-sm btn-outline-primary flex-shrink-0" href="/register">
                                     Add artist
-                                </button>
+                                </a>
                             }
                         </li>
                     }
                 </ul>
-                @if (accountPromptArtist is not null)
-                {
-                    <p class="alert alert-info mt-3" role="status">
-                        Create an account or log in to add @accountPromptArtist and their catalogue.
-                        <a href="/register">Create account</a> · <a href="/login">Log in</a>
-                    </p>
-                }
             </section>
         }
     }
@@ -209,7 +201,6 @@
     private string? artistSearchError;
     private string? artistImportMessage;
     private string? addingArtistId;
-    private string? accountPromptArtist;
     private int favouriteStatusVersion;
     private string favouritesError = "Favourites are unavailable.";
 
@@ -240,7 +231,6 @@
         error = null;
         artistSearchError = null;
         artistImportMessage = null;
-        accountPromptArtist = null;
         spotifyArtists = null;
         favouriteTrackIds = [];
         favouritesError = "Favourites are unavailable.";
@@ -287,9 +277,6 @@
         }
     }
 
-    private void PromptAccountCreation(string artistName) =>
-        accountPromptArtist = artistName;
-
     private async Task AddArtistAsync(SpotifyArtistMatch artist)
     {
         if (!signedIn || isAddingArtist)
@@ -300,7 +287,6 @@
         artistImportMessage = null;
         artistImportFailed = false;
         artistRefreshFailed = false;
-        accountPromptArtist = null;
         SpotifyArtistImportResult result;
         try
         {

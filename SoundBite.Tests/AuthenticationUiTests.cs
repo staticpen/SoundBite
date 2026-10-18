@@ -408,7 +408,7 @@ public class AuthenticationUiTests
         Assert.That(other, Does.Not.Contain("authuser@example.com"));
         await Logout();
         var anonymous = await client.GetStringAsync("/users/other");
-        Assert.That(anonymous, Does.Contain("Followers (1)").And.Contain("Log in to follow")
+        Assert.That(anonymous, Does.Contain("Followers (1)").And.Contain("Create an account to follow")
             .And.Not.Contain(">Follow</button>").And.Not.Contain(">Unfollow</button>"));
     }
 

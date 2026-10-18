@@ -168,8 +168,8 @@ public class CatalogueIntegrationTests
             var links = Regex.Matches(html, "href=\"([^\"]+)\"").Select(m => m.Groups[1].Value).ToArray();
             Assert.That(links, Is.EqualTo(new[]
             {
-                "/artists/11", "/albums/23", "/tracks/42", "/login",
-                "/tracks/907", "/login", "/artists/11"
+                "/artists/11", "/albums/23", "/tracks/42", "/register",
+                "/tracks/907", "/register", "/artists/11"
             }));
             Assert.That(typeof(ArtistDetails).GetCustomAttributes<RouteAttribute>().Select(r => r.Template),
                 Does.Contain("/artists/{Id:int}"));
@@ -187,7 +187,7 @@ public class CatalogueIntegrationTests
                 var detailHtml = details.ToHtmlString();
                 Assert.That(detailHtml, Does.Contain(id == 42 ? "spotify-first" : "spotify-second"));
                 Assert.That(detailHtml, Does.Contain("Reviews (1)").And.Contain("Integration reviewer")
-                    .And.Contain("Log in</a> to rate and review this track."));
+                    .And.Contain("Create an account</a> to rate and review this track."));
                 Assert.That(detailHtml, Does.Contain(id == 42 ? "First track review" : "Second track review")
                     .And.Not.Contain(id == 42 ? "Second track review" : "First track review"));
                 if (id == 42)
@@ -426,7 +426,7 @@ public class CatalogueIntegrationTests
     }
 
     [Test]
-    public async Task UnmatchedSearchOffersSpotifyArtistAndPromptsAnonymousUserToCreateAccount()
+    public async Task UnmatchedSearchOffersSpotifyArtistWithRegistrationLinkForAnonymousUser()
     {
         await WithCatalogue(async renderer =>
         {
@@ -436,11 +436,8 @@ public class CatalogueIntegrationTests
                 .And.Contain("Spotify Artist")
                 .And.Contain("Add artist"));
 
-            await renderer.RaiseFirstButtonClickAsync();
-
-            Assert.That(search.ToHtmlString(), Does.Contain("Create an account or log in")
-                .And.Contain("href=\"/register\"")
-                .And.Contain("href=\"/login\""));
+            Assert.That(search.ToHtmlString(), Does.Contain("href=\"/register\"")
+                .And.Not.Contain("onclick="));
         });
     }
 

@@ -17,7 +17,7 @@
             {
                 <button class="btn btn-primary" disabled="@busy" @onclick="ToggleAsync">@(summary.IsFollowing ? "Unfollow" : "Follow")</button>
             }
-            <AuthorizeView><NotAuthorized><a href="/login">Log in to follow</a></NotAuthorized></AuthorizeView>
+            <AuthorizeView><NotAuthorized><a href="/register">Create an account to follow</a></NotAuthorized></AuthorizeView>
         </div>
         @if (expanded is not null && results is not null)
         {
