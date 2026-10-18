@@ -23,10 +23,6 @@
                 <p class="mb-1"><strong>Username:</strong> @authContext.User.Identity?.Name</p>
                 <p class="mb-1"><strong>Email:</strong> @userEmail</p>
                 <p class="mb-3"><strong>Public profile:</strong> <a href="@profileUrl">@profileName</a></p>
-                <form method="post" @formname="logout" @onsubmit="LogoutAsync">
-                    <AntiforgeryToken />
-                    <button type="submit" class="btn btn-outline-secondary">Log out</button>
-                </form>
             </div>
         </div>
 
@@ -163,11 +159,6 @@
 
     private void ClearLoginPassword() => loginModel.Password = string.Empty;
 
-    private async Task LogoutAsync()
-    {
-        await SignInManager.SignOutAsync();
-        Navigation.NavigateTo("/account", forceLoad: true);
-    }
 
     private async Task SaveProfileAsync()
     {
