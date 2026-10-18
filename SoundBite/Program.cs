@@ -1,6 +1,7 @@
 using System.Net;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using SoundBite.Components;
 using SoundBite.Configuration;
@@ -10,7 +11,32 @@ using SoundBite.Interfaces;
 using SoundBite.Services;
 using SoundBite.Strategies;
 
-var builder = WebApplication.CreateBuilder(args);
+var seedCatalogue = false;
+var seedQueries = new List<string>();
+var applicationArgs = new List<string>();
+for (var index = 0; index < args.Length; index++)
+{
+    if (args[index] == "--seed-catalogue")
+    {
+        seedCatalogue = true;
+    }
+    else if (args[index] == "--seed-query")
+    {
+        if (++index >= args.Length || string.IsNullOrWhiteSpace(args[index]))
+            throw new ArgumentException("--seed-query requires a non-empty search term.");
+
+        seedQueries.Add(args[index]);
+    }
+    else
+    {
+        applicationArgs.Add(args[index]);
+    }
+}
+
+if (!seedCatalogue && seedQueries.Count > 0)
+    throw new ArgumentException("--seed-query can only be used with --seed-catalogue.");
+
+var builder = WebApplication.CreateBuilder(applicationArgs.ToArray());
 
 var externalConfigurationFile =
     Environment.GetEnvironmentVariable("SOUNDBITE_CONFIG_FILE");
@@ -21,7 +47,7 @@ if (!string.IsNullOrWhiteSpace(externalConfigurationFile))
         optional: false,
         reloadOnChange: false);
     builder.Configuration.AddEnvironmentVariables();
-    builder.Configuration.AddCommandLine(args);
+    builder.Configuration.AddCommandLine(applicationArgs.ToArray());
 }
 
 builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
@@ -37,6 +63,8 @@ builder.Services.AddHttpClient("SpotifyAuth", client =>
     client.BaseAddress = new Uri("https://accounts.spotify.com/"));
 builder.Services.AddHttpClient<ISpotifyCatalog, SpotifyCatalogService>(client =>
     client.BaseAddress = new Uri("https://api.spotify.com/v1/"));
+builder.Services.AddScoped<SpotifyTrackImporter>();
+builder.Services.AddScoped<SpotifyCatalogueSeeder>();
 builder.Services.AddScoped<ReviewService>();
 builder.Services.AddScoped<PlaylistService>();
 builder.Services.AddScoped<FollowService>();
@@ -91,6 +119,29 @@ builder.Services.AddHttpClient();
 var app = builder.Build();
 
 app.UseForwardedHeaders();
+
+if (seedCatalogue)
+{
+    var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+    if (string.IsNullOrWhiteSpace(connectionString))
+        throw new InvalidOperationException("Catalogue seeding requires an explicitly configured SQLite connection string.");
+
+    var databasePath = new SqliteConnectionStringBuilder(connectionString).DataSource;
+    if (string.IsNullOrWhiteSpace(databasePath) ||
+        databasePath == ":memory:" ||
+        !Path.IsPathRooted(databasePath))
+    {
+        throw new InvalidOperationException(
+            "Catalogue seeding requires an absolute SQLite database path. Set ConnectionStrings__DefaultConnection explicitly to protect the repository database.");
+    }
+
+    await using var scope = app.Services.CreateAsyncScope();
+    var seeder = scope.ServiceProvider.GetRequiredService<SpotifyCatalogueSeeder>();
+    var result = await seeder.SeedAsync(seedQueries.Count == 0 ? null : seedQueries);
+    Console.WriteLine(
+        $"Spotify catalogue seed complete: {result.QueriesCompleted} queries, {result.TracksImported} unique tracks imported or refreshed.");
+    return;
+}
 
 await AdminRoleBootstrapper.EnsureConfiguredAdministratorsAsync(
     app.Services,

@@ -51,11 +51,6 @@ public class CatalogueIntegrationTests
             string query,
             CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<SpotifyTrackMatch>>([]);
-
-        public Task<int> ImportTrackAsync(
-            SpotifyTrackMatch match,
-            CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException("This test does not import Spotify tracks.");
     }
 
     [TestCase(" eChO ")]
@@ -121,7 +116,7 @@ public class CatalogueIntegrationTests
             var home = await renderer.RenderComponentAsync<Home>(ParameterView.Empty);
             var html = home.ToHtmlString();
             Assert.That(html, Does.Contain("Discover music")
-                .And.Contain("href=\"/catalogue/search\"")
+                .And.Contain("href=\"/search\"")
                 .And.Contain("href=\"/playlists\"")
                 .And.Contain("href=\"/feed\"")
                 .And.Contain("href=\"/rankings\""));
@@ -129,14 +124,20 @@ public class CatalogueIntegrationTests
     }
 
     [Test]
-    public async Task CatalogueSearchOffersSeparateSpotifyImportSearch()
+    public async Task SearchPageUsesNewRouteAndOmitsSpotifySearchControls()
     {
         await WithCatalogue(async renderer =>
         {
             var search = await renderer.RenderComponentAsync<CatalogueSearch>(ParameterView.Empty);
-            Assert.That(search.ToHtmlString(), Does.Contain("Find tracks on Spotify")
-                .And.Contain("Search Spotify")
-                .And.Contain("Add a track and its artist and album details"));
+            var html = search.ToHtmlString();
+            Assert.That(html, Does.Contain("<h1>Search</h1>")
+                .And.Contain("Search the catalogue")
+                .And.Not.Contain("Find tracks on Spotify")
+                .And.Not.Contain("Search Spotify")
+                .And.Not.Contain("Add to catalogue"));
+            Assert.That(typeof(CatalogueSearch).GetCustomAttributes<RouteAttribute>()
+                    .Select(route => route.Template),
+                Is.EquivalentTo(new[] { "/search", "/catalogue/search" }));
         });
     }
 

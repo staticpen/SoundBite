@@ -21,10 +21,10 @@
 ## 2. Current Status
 
 - **Overall status:** In progress
-- **Current development phase:** Building working catalogue and social product features
-- **Current focus:** Release-readiness checks (B); notification usability (A) is complete
+- **Current development phase:** Presentation and deployment readiness
+- **Current focus:** Present the local catalogue-search redesign and decide when to seed the deployed catalogue; notification usability (A) is complete
 - **Last verified:** 2026-10-18
-- **Current blocker:** Install the prepared LaunchDaemon (requires administrator authorization), then test it after reboot; Windows-viewer access is also unverified. The app is currently still running as a LaunchAgent. Production Spotify credentials are staged in a protected external config file, but the running app will not load them until the updated app and LaunchDaemon are installed.
+- **Current blocker:** No code-level blocker. The new Spotify seed command has not yet been run against a real target database or live API. LaunchDaemon, production Spotify configuration, and Windows-viewer access remain deployment checks.
 
 ## 3. Feature Implementation Tracker
 
@@ -32,8 +32,8 @@
 |---|---|---|
 | Authentication | Implemented — verified | Website registration, username/email login, logout, profile editing, cookie persistence and authorization checks pass using isolated migrated databases; see latest work. |
 | User profiles | Implemented — verified | `ApplicationUser` stores a display name and bio; the account page can edit them, and `/users/{username}` displays the public profile without exposing account email. The migration and persistence round-trip are tested. |
-| Music catalogue | In progress — discovery and import workflow verified | Local search links to track, artist, and album details. The catalogue search page also offers Spotify track search and imports selected tracks with their album and artists. |
-| Spotify integration | Partially implemented — service and persistence verified | Client-credentials authentication, token caching, external track search, and idempotent local import are implemented. Production credentials have been copied from local User Secrets to a mode-600 external JSON config; the updated app must be deployed before the Production service reads it. |
+| Music catalogue | In progress — local search verified; seed path implemented, live run outstanding | `/search` searches locally stored artists, albums, and tracks. A repeatable CLI seed command now imports Spotify track results and their album/artist IDs and names; the old catalogue-search route remains an alias. |
+| Spotify integration | Partially implemented — API client and seed path tested with mocks | Client-credentials authentication, token caching, Spotify search, and idempotent database import are implemented. The user-facing Spotify search/import panel was removed. The five default seed queries request up to 10 results each; real API/deployed-database seeding is not yet verified. Production credentials remain in protected external configuration. |
 | Track ratings and reviews | Implemented — verified | Reviews persist through EF Core; the service supports create/read/update, the database enforces one review per user per track and valid 1–5 ratings, and track details support public review reading plus authenticated submission/editing. |
 | Album-track many-to-many relationship | Implemented — unverified | `ApplicationDbContext` maps `ArtistAlbums` and `ArtistTracks` and `Track.AlbumId` with a nullable optional foreign key. This matches the intended design, but the schema has not been validated via a migration review beyond the code. |
 | Playlist management | Implemented — verified | Users can create, edit, and delete playlists; add/remove tracks; and browse public playlist listings/details. Owner checks are enforced in the service. |
@@ -45,7 +45,7 @@
 | Rankings and trends | Implemented — verified | `/rankings` shows top-rated tracks (minimum two reviews), most-reviewed tracks overall, and tracks with the most reviews in the last seven days. Metrics use SoundBite review data only, with stable tie-break ordering. |
 | Administrative user management | Implemented — verified | `/admin/users` supports user search/paging, account lock/unlock, and admin-role grants/revocation. Every service operation checks live role membership and lockout state server-side. Initial roles are bootstrapped from configured user IDs. |
 | Automated tests | Passed — verified | The latest full suite recorded for A3 was 263/263; the focused notification and route suite was rerun on 2026-10-17 and passed 53/53. |
-| Git and repository hygiene | Verified | Notification paging, category preferences, and their settings UI are merged in PRs #17–#19. Current deployment-script/config work is local and uncommitted; deployment scripts intentionally require a clean `main` worktree. |
+| Git and repository hygiene | In progress | Deployment changes are committed and synchronized to `main` at `938f573`; the Search redesign and seed-command changes in this working tree are not yet committed. Deployment scripts intentionally require a clean `main` worktree. |
 
 ## 4. Latest Completed Work
 
@@ -76,6 +76,20 @@
 - **Always-on service:** Added `scripts/install-self-hosted-macos-daemon.sh`. It produces a LaunchDaemon for the current account and requests administrator authorization locally; it retains the current user-agent plist for rollback. It must be run after the committed Program/config changes are deployed.
 - **How to use:** Commit/merge changes to `main`; run `./scripts/deploy-self-hosted-macos.sh`; then run `./scripts/install-self-hosted-macos-daemon.sh` from the repository and approve the local administrator prompt. Future app releases need only the deploy script; it detects the LaunchDaemon and requests administrator authorization to restart it.
 - **Validation:** Both shell scripts pass `bash -n`; Python helper passes AST parsing and ran successfully. Full test suite passed **263/263**. `git diff --check` passed after normalizing the `Program.cs` line endings that had been flagged. The deployment script's dirty-worktree guard was exercised; no publish/service swap has been run because code is still uncommitted. LaunchDaemon plist/service and reboot remain unverified until the installer is run.
+
+### 2026-10-18 — User-reported post-restart Safari check
+
+- **What:** The user restarted the Mac, opened the app in Safari, and reported that its functionality worked.
+- **Verification scope:** This is user-reported manual verification of the app after restart/login. It does not establish that the LaunchDaemon was installed, that the app starts before login, that the deployed instance uses the latest `main` commit, that Production Spotify credentials are active, or that a Windows viewer can connect.
+- **Git:** At review time, `main` and `origin/main` both point to `938f573` (`Added self-hosted deployment`); the worktree is clean.
+
+### 2026-10-18 — Search redesign and Spotify catalogue seeding
+
+- **What:** Renamed the catalogue-search UI to **Search**, made `/search` the primary route while retaining `/catalogue/search` as a compatibility alias, and removed the “Find tracks on Spotify” panel. Search now remains local-database-only.
+- **Seeding:** Added an explicit `--seed-catalogue` command that queries Spotify and upserts tracks plus their album/artist IDs, names, and relationships. Its repeatable default is five artist-name searches (The Beatles, Taylor Swift, Miles Davis, Daft Punk, and Beyonce), capped by the existing 10-result Spotify query limit (up to 50 unique tracks). Repeat `--seed-query "term"` to use custom searches. The command requires an absolute SQLite path and does not run migrations, preventing accidental changes to the repository's relative `soundbite.db`.
+- **Implementation:** Extracted database upsert behavior into `SpotifyTrackImporter`; the Spotify client now only handles API search. Updated navigation, home and detail links, and catalogue/Spotify tests.
+- **Verification:** Focused tests passed 9/9; full `dotnet test SoundBite.sln --configuration Release --nologo` passed **263/263**. The seed command was invoked without a database override and correctly refused the relative repository DB path before any import. No live Spotify calls or database writes were made.
+- **Files:** `SoundBite/Program.cs`, `SoundBite/Interfaces/ISpotifyCatalog.cs`, `SoundBite/Services/SpotifyCatalogService.cs`, new `SpotifyTrackImporter.cs` and `SpotifyCatalogueSeeder.cs`, Search/navigation/home/detail Razor components, `CatalogueIntegrationTests.cs`, `SpotifyCatalogServiceTests.cs`, and this progress file.
 
 ### 2026-10-17 — A3: notification settings page (implemented, verified, merged in PR #19)
 
@@ -387,14 +401,15 @@
 1. **Task B:** Verify and prepare a deployable app.
    - **Done locally:** Release build, full NUnit suite, publish to `~/Library/Application Support/SoundBite/app`, production-mode smoke test, and automatic reconnect recovery. Created the selected production DB, applied all 12 migrations, checked SQLite integrity, and made a verified pre-account baseline backup.
    - **Done:** Release build, all 263 NUnit tests, Production publish, fresh 12-migration deployment DB, verified integrity and backups, first account/Admin role, Tailscale HTTPS Serve, active LaunchAgent, and protected external Production Spotify config file.
-   - **Still required:** Commit and deploy the prepared changes; run the LaunchDaemon installer with local administrator authorization; verify Spotify through the deployed service and test after reboot; have Windows viewers install/authorize Tailscale and test access. Windows VS2022 and explicit Retry/Reload checks are waived/optional per user.
+   - **Still required:** Confirm whether `938f573` has been deployed; if the host must be available before login, run the LaunchDaemon installer with local administrator authorization and verify service startup. Verify Spotify through the deployed Production configuration and have a Windows viewer install/authorize Tailscale and test access. Windows VS2022 and explicit Retry/Reload checks are waived/optional per user.
    - **Safety:** Never use the tracked `SoundBite/soundbite.db` or `/tmp/soundbite-spotify-test.db` for deployment. Keep Spotify credentials and DB/backup files outside Git. Keep router forwarding disabled.
-2. **Task C (as needed):** Consider album/artist discovery, broader catalogue management, or shared notification delivery only if deploying multiple app instances; these are not blockers for the current single-instance application.
+2. **Seed and verify the presentation catalogue:** Back up the intended deployment DB, deploy the latest Search changes, then run `--seed-catalogue` with `ConnectionStrings__DefaultConnection` set to its absolute path and Spotify credentials supplied through User Secrets or the protected external config. The command does not migrate the database. Verify local `/search` finds imported tracks, albums, and artists. Live API use and database writes are deliberately outstanding.
+3. **Task C (as needed):** Consider album/artist discovery, broader catalogue management, or shared notification delivery only if deploying multiple app instances; these are not blockers for the current single-instance application.
 
 ## 11. Handover for the Next Chat Session
 
 - A is complete: paging, category opt-outs, and the settings page are implemented and merged in PRs #17–#19. Focused notification and route tests passed 53/53 on 2026-10-17; the A3 record reports the full suite passed 263/263.
-- B is operational at `https://mair.tailae22d2.ts.net/` while the user is logged in. The fresh DB has all 12 migrations and one verified Administrator; verified backups are under `~/Library/Application Support/SoundBite/backups/`. The current LaunchAgent still stops at logout. Deployment scripts are in `scripts/`; the local Spotify config file is protected but not active until the code is committed/deployed and the LaunchDaemon installer is run. Next: commit to `main`, deploy, run installer with admin authorization, test Spotify and reboot persistence, then have a Windows viewer test Tailscale access. User waived Windows VS2022 checks; explicit Retry/Reload is optional/unverified.
+- B is user-reported as working in Safari after a Mac restart. The fresh DB has all 12 migrations and one verified Administrator; verified backups are under `~/Library/Application Support/SoundBite/backups/`. `main` is synchronized at `938f573`; the newer Search/seeder changes are local and uncommitted. Back up the intended target before running `--seed-catalogue`; it requires an absolute `ConnectionStrings__DefaultConnection` path and does not apply migrations. The previously verified LaunchAgent starts at login; install the LaunchDaemon only if before-login availability remains required. Production Spotify configuration and Windows Tailscale access still need verification. User waived Windows VS2022 checks; explicit Retry/Reload is optional/unverified.
 - Notification event delivery is single-instance; shared infrastructure is only needed if deploying multiple instances.
 
 ## 12. Instructions for Updating This File

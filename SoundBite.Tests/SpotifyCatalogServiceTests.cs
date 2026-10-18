@@ -1,7 +1,5 @@
 using System.Net;
-using System.Security.Claims;
 using System.Text;
-using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
@@ -57,21 +55,8 @@ public class SpotifyCatalogServiceTests
             };
     }
 
-    private sealed class SignedInAuthenticationStateProvider : AuthenticationStateProvider
-    {
-        public override Task<AuthenticationState> GetAuthenticationStateAsync() =>
-            Task.FromResult(new AuthenticationState(new ClaimsPrincipal(
-                new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "test-user")], "test"))));
-    }
-
-    private sealed class AnonymousAuthenticationStateProvider : AuthenticationStateProvider
-    {
-        public override Task<AuthenticationState> GetAuthenticationStateAsync() =>
-            Task.FromResult(new AuthenticationState(new ClaimsPrincipal(new ClaimsIdentity())));
-    }
-
     [Test]
-    public async Task SpotifySearchUsesCachedClientCredentialsAndTrackImportIsIdempotent()
+    public async Task SpotifySeedImportsRelatedRecordsIdempotentlyUsingCachedCredentials()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync();
@@ -92,8 +77,7 @@ public class SpotifyCatalogServiceTests
             new TestHttpClientFactory(handler),
             new MemoryCache(new MemoryCacheOptions()),
             Options.Create(new SpotifyOptions { ClientId = "test-client", ClientSecret = "test-secret" }));
-        var service = new SpotifyCatalogService(
-            httpClient, tokenProvider, factory, new SignedInAuthenticationStateProvider());
+        var service = new SpotifyCatalogService(httpClient, tokenProvider);
 
         var results = await service.SearchTracksAsync("  A & B ");
         Assert.That(results, Has.Count.EqualTo(1));
@@ -111,14 +95,12 @@ public class SpotifyCatalogServiceTests
             .And.Contain("limit=10"));
         Assert.That(handler.LastApiBearerToken, Is.EqualTo("test-access-token"));
 
-        var anonymousService = new SpotifyCatalogService(
-            httpClient, tokenProvider, factory, new AnonymousAuthenticationStateProvider());
-        Assert.ThrowsAsync<UnauthorizedAccessException>(async () =>
-            await anonymousService.ImportTrackAsync(results[0]));
-
-        var firstId = await service.ImportTrackAsync(results[0]);
-        var secondId = await service.ImportTrackAsync(results[0]);
-        Assert.That(secondId, Is.EqualTo(firstId));
+        var importer = new SpotifyTrackImporter(factory);
+        var seeder = new SpotifyCatalogueSeeder(service, importer);
+        var firstSeed = await seeder.SeedAsync(["The Beatles", "The Beatles"]);
+        var secondSeed = await seeder.SeedAsync(["The Beatles"]);
+        Assert.That(firstSeed, Is.EqualTo(new SpotifyCatalogueSeedResult(2, 1)));
+        Assert.That(secondSeed, Is.EqualTo(new SpotifyCatalogueSeedResult(1, 1)));
         Assert.That(handler.TokenRequests, Is.EqualTo(1));
 
         await using var verify = await factory.CreateDbContextAsync();
