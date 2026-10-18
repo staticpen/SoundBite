@@ -2,6 +2,11 @@ html, body {
     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
 }
 
+html {
+    /* Keep anchored content clear of the sticky navbar */
+    scroll-padding-top: 4.5rem;
+}
+
 a, .btn-link {
     color: #006bb7;
 }

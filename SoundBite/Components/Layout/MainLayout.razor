@@ -1,22 +1,10 @@
-@using Microsoft.AspNetCore.Components.Authorization
 @inherits LayoutComponentBase
 
 <div class="page">
-    <div class="sidebar">
-        <NavMenu />
-    </div>
+    <NavMenu />
 
     <main>
-        <div class="top-row px-4">
-            <AuthorizeView>
-                <form method="post" action="/account/logout" class="d-inline">
-                    <AntiforgeryToken />
-                    <button type="submit" class="btn btn-outline-secondary">Log out</button>
-                </form>
-            </AuthorizeView>
-        </div>
-
-        <article class="content px-4">
+        <article class="content container-xxl px-3 px-md-4">
             @Body
         </article>
     </main>

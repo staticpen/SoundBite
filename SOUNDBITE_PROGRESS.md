@@ -22,7 +22,7 @@
 
 - **Overall status:** In progress
 - **Current development phase:** Feature updates and validation
-- **Current focus:** Make the Home activity feed global and show Favourites additions
+- **Current focus:** Integrate the login-first navbar and homepage with Favourites and the global Home feed
 - **Last verified:** 2026-10-18
 - **Current blocker:** No production database migration blocker remains: `ReplacePlaylistsWithFavourites` was applied and verified on 2026-10-18 after a private backup. The app does not run migrations at startup. Local UI and activity-feed follow-ups are uncommitted and require deployment to appear in production. The Spotify album-pagination fix is committed as `55f9a20`; its deployment status still needs confirmation.
 
@@ -42,12 +42,18 @@
 | Activity feed | Implemented — global signed-in feed shown on Home | Home renders globally ordered, paginated reviews, comments/replies, likes, and Favourites additions from all users to signed-in viewers, regardless of follow relationships. Favourite-list contents remain private. The standalone Activity Feed navigation item and route are removed. |
 | Notifications | Implemented — verified | In addition to recipient-scoped notifications, `/notifications` uses keyset paging to load older items without duplicates; unread counts and read-state behavior remain independent of the displayed page. Users can persist per-category opt-outs from `/notifications/settings`, affecting future notifications only. Paging, authorization, read state, preference persistence/isolation, and UI behavior are covered by tests. The single-instance event dispatcher updates active recipient circuits; navigation and reconnection reload persisted state. |
 | Rankings and trends | Implemented — verified in isolated SQLite tests | `/rankings` shows top-rated tracks (minimum two reviews), most-reviewed tracks overall, and tracks with the most reviews in the last seven days. Separately stored, labelled sample reviews can populate these lists without masquerading as community reviews. |
-| Navigation and home | Implemented — focused tests passed | Home, Search, Ratings and Trends, Favourites, Account. The former home cards are removed and activity appears below the personalized welcome. Account opens a dropdown with Edit Profile, Notifications, and role-gated Admin. |
+| Navigation and home | Implemented — tested after merge | Light navbar with the horizontal `soundbite-logo.png` wordmark linking to `/` (no separate Home item), a mobile toggle, and keyboard focus styles. Signed-out: Search, Create account, and a primary Log in button. Signed-in: Search, Ratings and Trends, Favourites, then the Account dropdown (Edit Profile, Notifications with unread badge, role-gated Admin, antiforgery-protected POST Log out). `/feed` and `/playlists` return 404; `/favourites` shows only a login prompt to anonymous visitors. The signed-out Home shows only the login-first hero (Log in primary, Create account secondary). The signed-in Home shows the personalized welcome (generic fallback when no name is available), a "Search the catalogue" button, and the embedded activity feed. The former home cards are removed. |
 | Administrative user management | Implemented — verified | `/admin/users` supports user search/paging, account lock/unlock, and admin-role grants/revocation. Every service operation checks live role membership and lockout state server-side. The front-end label is “Admin.” |
-| Automated tests | Passed — verified | Full NUnit suite passed **273/273** on 2026-10-18 after adding the global Home feed and Favourites activity. Earlier focused Favourites, migration, feed, navigation, and notification tests passed **40/40**. |
-| Git and repository hygiene | In progress | `main` is at `f0f2600` (`Removed Playlists, repurposed to Favourites`) and synchronized with `origin/main`; follow-up Home layout and migration diagnostics are uncommitted. |
+| Automated tests | Passed — verified | On the merged tree (2026-10-18), the full NUnit suite passed **280/280**; focused authentication UI, catalogue integration, Favourites, and feed tests passed **51/51**. |
+| Git and repository hygiene | In progress | Branch `integrate/login-first-favourites` is merging `feature/frontend-and-user-flow` (`694800c`) into `origin/main` (`8214e16`). The merge is resolved locally and uncommitted. |
 
 ## 4. Latest Completed Work
+
+### 2026-10-18 — Integrated the login-first navbar and homepage with Favourites
+
+- **Change:** Merged `feature/frontend-and-user-flow` (light responsive navbar, PNG wordmark, navbar logout, login-first hero) into `origin/main` (Favourites, global Home feed). The signed-in navbar now shows Search, Ratings and Trends, Favourites, and Account. Activity Feed and Playlists items are gone. Signed-out Home shows only the hero; the embedded activity feed renders only for signed-in users. The hero bullet "Create playlists" now reads "Save favourite tracks". Tests were updated for Favourites, and anonymous `/favourites` is checked to expose only the login prompt.
+- **Verification:** `dotnet build` passed with 0 errors. Focused tests passed **51/51**; the full NUnit suite passed **280/280**. `dotnet format --verify-no-changes` reports 27 whitespace diagnostics that are identical to `origin/main` (none introduced by the merge). No browser testing, deployment, or database migration was performed.
+- **Deployment:** Local, uncommitted merge only; not deployed.
 
 ### 2026-10-18 — Expanded Home activity feed to all users and Favourites additions
 
@@ -407,8 +413,8 @@
 - `Album`, `Artist`, and `Track` models initialize empty navigation collections and enforce basic validation requirements.
 - `Endpoints/AccountEndpoints.cs` exposes registration, login, logout, and current-user endpoints.
 - `Data/ApplicationUser.cs` includes `DisplayName` and optional `Bio`. The account page edits these fields; `/users/{username}` displays a public profile without exposing email.
-- Remaining model and service placeholders include `UserService`. Rankings combine community reviews with clearly labelled `DemoReviews`; Spotify access requires configured credentials. Likes support reviews, tracks, playlists, and comments; comments/feed entries remain review-scoped.
-- The NUnit test project is active; the full suite passed 269/269 for the current worktree.
+- Remaining model and service placeholders include `UserService`. Rankings combine community reviews with clearly labelled `DemoReviews`; Spotify access requires configured credentials. Likes support reviews, tracks, and comments (playlist likes were removed by `ReplacePlaylistsWithFavourites`); comments/feed entries remain review-scoped.
+- The NUnit test project is active; the full suite passed 280/280 for the merged tree on `integrate/login-first-favourites`.
 - `20261018035010_AddDemoReviews` adds the separate sample-review table and has been applied to the configured deployment database after an integrity-checked backup.
 
 ## 6. Important Decisions and Assumptions
@@ -432,7 +438,7 @@
 
 | Issue | Impact | Evidence | Next action | Status |
 |---|---|---|---|---|
-| Interactive logout cannot update the auth cookie after response start | The top-row logout handler previously ran inside an interactive Blazor circuit, causing the global unhandled-error banner | Logout now uses an antiforgery-validated native POST to `/account/logout`; 15 focused authentication tests and 269 full tests pass | Commit and deploy the fix; then verify browser logout clears the session without a Blazor error | Fixed locally; deployment pending |
+| Interactive logout cannot update the auth cookie after response start | The top-row logout handler previously ran inside an interactive Blazor circuit, causing the global unhandled-error banner | Logout now uses an antiforgery-validated native POST to `/account/logout`, submitted from the navbar Account dropdown; the merged tree passes the focused authentication, catalogue, Favourites, and feed tests (51/51) and the full suite (280/280) | Commit and deploy the fix; then verify browser logout clears the session without a Blazor error | Fixed locally; deployment pending |
 | Registration form cannot reach endpoint | Resolved | Replaced server-side loopback HTTP call with static SSR form processing | Verified in browser and HTTP tests | Closed |
 | Interactive login cannot set cookie | Resolved | Cookie operations now execute during HTTP form requests before rendering | Verified registration, login and logout | Closed |
 | Multi-instance notification delivery | Notifications are not backed by a distributed event bus | Live delivery uses an in-process dispatcher by design for the current single-instance app | Add a distributed backplane only if deploying multiple instances | Open |
@@ -444,8 +450,8 @@
 
 | Check | Result | Notes |
 |---|---|---|
-| Application build | Passed | Release build completed as part of the 2026-10-18 full test run; three pre-existing `CS1998` warnings remain in test files. |
-| Automated tests | Passed — verified | Full .NET 9 Release suite: 269 passed, 0 failed/skipped. Focused authentication UI suite passed 15/15; catalogue, Spotify, rankings, track detail, and route suite previously passed 46/46. |
+| Application build | Passed | `dotnet build SoundBite.sln` (default Debug configuration) on the merged tree, 2026-10-18: 0 errors, 2 pre-existing `CS1998` warnings in `AdminServiceTests.cs:136` and `ReviewServiceTests.cs:88`. A Release build was not run for this merge. |
+| Automated tests | Passed — verified | Merged tree, 2026-10-18, `dotnet test SoundBite.sln --no-build` (Debug): full suite 280 passed, 0 failed/skipped. Focused authentication UI, catalogue integration, Favourites, and feed tests passed 51/51. |
 | Application publish | Passed | `dotnet publish SoundBite/SoundBite.csproj --configuration Release --no-build --output /tmp/soundbite-b-readiness-publish` succeeded. |
 | Application startup and local smoke test | Passed | App ran against a disposable copy at `/tmp/soundbite-b-readiness.db`; `/` returned HTTP 200, catalogue search rendered and accepted a local-search interaction. No target database was used. |
 | Circuit reconnect | Partially verified | A running page survived a local server stop/restart: the rejoining dialog appeared and dismissed, and page interaction worked afterward. Manual Retry and Reload buttons were not reached. |
@@ -454,8 +460,8 @@
 
 ## 9. Git Status
 
-- **Branch:** `main` at `381562b` (`Updated MainLayout.razor`), synchronized state not yet rechecked. The logout fix in the layout, account endpoint, and authentication UI tests is uncommitted; this progress record is also modified.
-- **Database:** `AddDemoReviews` is applied to the deployment database after a mode-600 integrity-checked backup at `~/Library/Application Support/SoundBite/backups/soundbite-pre-demo-reviews-20261018-150136.db`.
+- **Branch:** `integrate/login-first-favourites`, based on `origin/main` at `8214e16`, with a resolved but uncommitted merge of `feature/frontend-and-user-flow` (`694800c`). The navbar logout fix from that branch is included in the merge.
+- **Database:** `AddDemoReviews` is applied to the deployment database after a mode-600 integrity-checked backup at `~/Library/Application Support/SoundBite/backups/soundbite-pre-demo-reviews-20261018-150136.db`. `ReplacePlaylistsWithFavourites` was later applied after the backup `soundbite-pre-favourites-20261018-184812.db` (see §4). This merge applies no migrations.
 - **PRs #17–#19:** Notification paging, category preferences, and settings UI are merged into `main`.
 
 ## 10. Next Recommended Tasks

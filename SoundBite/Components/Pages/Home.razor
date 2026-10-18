@@ -4,29 +4,54 @@
 
 <PageTitle>SoundBite — Discover music</PageTitle>
 
-<section class="p-4 p-md-5 mb-4 bg-body-tertiary rounded-3">
+<section id="home-hero" class="p-4 p-md-5 mb-4 bg-body-tertiary rounded-3" aria-labelledby="home-hero-title">
     <div class="container-fluid py-2">
-        <h1 class="display-5 fw-bold">@welcomeMessage</h1>
-        <p class="col-md-8 fs-5">
-            Find artists, albums, and tracks in the SoundBite catalogue, then read and share reviews with the community.
-        </p>
-        <a class="btn btn-primary btn-lg" href="/search">Search the catalogue</a>
+        @if (signedIn)
+        {
+            <h1 id="home-hero-title" class="display-5 fw-bold">@welcomeMessage</h1>
+            <p class="col-md-8 fs-5">
+                Find artists, albums, and tracks in the SoundBite catalogue, then read and share reviews with the community.
+            </p>
+            <a class="btn btn-primary btn-lg" href="/search">Search the catalogue</a>
+        }
+        else
+        {
+            <h1 id="home-hero-title" class="display-5 fw-bold">Discover music with SoundBite</h1>
+            <p class="col-md-8 fs-5">
+                Log in to join the SoundBite community and make the catalogue your own.
+            </p>
+            <ul class="col-md-8 fs-5 mb-4">
+                <li>Rate tracks</li>
+                <li>Write reviews</li>
+                <li>Follow other listeners</li>
+                <li>Save favourite tracks</li>
+            </ul>
+            <div class="d-flex flex-wrap gap-2">
+                <a class="btn btn-primary btn-lg" href="/login">Log in</a>
+                <a class="btn btn-outline-secondary btn-lg" href="/register">Create account</a>
+            </div>
+        }
     </div>
 </section>
 
-<div class="row">
-    <section class="col-12 col-lg-6">
-        <ActivityFeed />
-    </section>
-</div>
+@if (signedIn)
+{
+    <div class="row">
+        <section class="col-12 col-lg-6">
+            <ActivityFeed />
+        </section>
+    </div>
+}
 
 @code {
-    private string welcomeMessage = "Welcome to SoundBite. Discover music and share what you love.";
+    private bool signedIn;
+    private string welcomeMessage = "Welcome back to SoundBite. Discover music and share what you love.";
 
     protected override async Task OnInitializedAsync()
     {
         var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
-        if (user.Identity?.IsAuthenticated == true && !string.IsNullOrWhiteSpace(user.Identity.Name))
+        signedIn = user.Identity?.IsAuthenticated == true;
+        if (signedIn && !string.IsNullOrWhiteSpace(user.Identity?.Name))
             welcomeMessage = $"Welcome, {user.Identity.Name}. Discover music and share what you love.";
     }
 }

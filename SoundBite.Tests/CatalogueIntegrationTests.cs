@@ -264,7 +264,51 @@ public class CatalogueIntegrationTests
                 .And.Not.Contain("Discover playlists")
                 .And.Not.Contain("Join the community")
                 .And.Not.Contain("Ratings and trends"));
+        }, new SignedInAuthenticationStateProvider());
+    }
+
+    private static string HeroOf(string html)
+    {
+        var hero = Regex.Match(html, "<section id=\"home-hero\".*?</section>", RegexOptions.Singleline);
+        Assert.That(hero.Success, Is.True, "The homepage must render the #home-hero section.");
+        return hero.Value;
+    }
+
+    private static string[] PrimaryHeroActions(string hero) =>
+        Regex.Matches(hero, "<a class=\"btn btn-primary[^\"]*\" href=\"([^\"]+)\"[^>]*>([^<]+)</a>")
+            .Select(match => $"{match.Groups[1].Value}|{match.Groups[2].Value.Trim()}").ToArray();
+
+    [Test]
+    public async Task SignedOutHomePageHeroMakesLogInThePrimaryAction()
+    {
+        await WithCatalogue(async renderer =>
+        {
+            var home = await renderer.RenderComponentAsync<Home>(ParameterView.Empty);
+            var html = home.ToHtmlString();
+            var hero = HeroOf(html);
+            Assert.That(PrimaryHeroActions(hero), Is.EqualTo(new[] { "/login|Log in" }));
+            Assert.That(hero, Does.Contain("href=\"/register\">Create account</a>")
+                .And.Contain("Rate tracks").And.Contain("Write reviews")
+                .And.Contain("Follow other listeners").And.Contain("Save favourite tracks")
+                .And.Not.Contain("playlist").And.Not.Contain("Playlist")
+                .And.Not.Contain("href=\"/search\"").And.Not.Contain("Welcome,"));
+            Assert.That(html, Does.Not.Contain("activity-feed-heading")
+                .And.Not.Contain("to see recent community activity"));
         });
+    }
+
+    [Test]
+    public async Task HomePageFallsBackToGenericWelcomeWhenTheUserHasNoName()
+    {
+        await WithCatalogue(async renderer =>
+        {
+            var home = await renderer.RenderComponentAsync<Home>(ParameterView.Empty);
+            var html = home.ToHtmlString();
+            var hero = HeroOf(html);
+            Assert.That(hero, Does.Contain("Welcome back to SoundBite.").And.Not.Contain("Welcome,"));
+            Assert.That(PrimaryHeroActions(hero), Is.EqualTo(new[] { "/search|Search the catalogue" }));
+            Assert.That(html, Does.Contain("activity-feed-heading"));
+        }, new UnnamedSignedInAuthenticationStateProvider());
     }
 
     [Test]
@@ -273,7 +317,10 @@ public class CatalogueIntegrationTests
         await WithCatalogue(async renderer =>
         {
             var home = await renderer.RenderComponentAsync<Home>(ParameterView.Empty);
-            Assert.That(home.ToHtmlString(), Does.Contain("Welcome, Listener."));
+            var hero = HeroOf(home.ToHtmlString());
+            Assert.That(hero, Does.Contain("Welcome, Listener.")
+                .And.Not.Contain("href=\"/login\"").And.Not.Contain("href=\"/register\""));
+            Assert.That(PrimaryHeroActions(hero), Is.EqualTo(new[] { "/search|Search the catalogue" }));
         }, new SignedInAuthenticationStateProvider());
     }
 
@@ -343,6 +390,14 @@ public class CatalogueIntegrationTests
                 new Claim(ClaimTypes.Name, "Listener")
             ],
             "test"))));
+    }
+
+    private sealed class UnnamedSignedInAuthenticationStateProvider : AuthenticationStateProvider
+    {
+        public override Task<AuthenticationState> GetAuthenticationStateAsync() =>
+            Task.FromResult(new AuthenticationState(new ClaimsPrincipal(new ClaimsIdentity(
+                [new Claim(ClaimTypes.NameIdentifier, "listener")],
+                "test"))));
     }
 
     private static async Task WithCatalogue(
