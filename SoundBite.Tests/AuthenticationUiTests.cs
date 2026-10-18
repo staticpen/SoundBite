@@ -208,23 +208,25 @@ public class AuthenticationUiTests
             .And.Contain("<strong>Ready to get started?</strong>")
             .And.Not.Contain("href=\"/login\"").And.Not.Contain("Get Started"));
         Assert.That(PrimaryActions(signedInHero), Is.EqualTo(new[] { "/search|Search the catalogue" }));
-        Assert.That(signedInHome.IndexOf("activity-feed-heading", StringComparison.Ordinal),
-            Is.GreaterThan(signedInHome.IndexOf("id=\"home-rankings\"", StringComparison.Ordinal)),
-            "The activity feed sits below ratings and trends.");
+        Assert.That(signedInHome, Does.Contain("activity-feed-heading")
+            .And.Not.Contain("id=\"home-rankings\""),
+            "The signed-in homepage keeps the activity feed but leaves rankings on their separate page.");
     }
 
     [Test]
-    public async Task AnonymousHomepageShowsRatingsAndTrendsBelowTheHero()
+    public async Task AnonymousHomepageLeavesRatingsAndTrendsOnTheirSeparatePage()
     {
-        var home = WebUtility.HtmlDecode(await client.GetStringAsync("/"));
-        var heroEnd = home.IndexOf(HeroOf(home), StringComparison.Ordinal) + HeroOf(home).Length;
-        var rankings = home.IndexOf("id=\"home-rankings\"", StringComparison.Ordinal);
-        Assert.That(rankings, Is.GreaterThan(heroEnd - 1), "Ratings and trends must follow the hero.");
-        Assert.That(home[rankings..], Does.Contain("Ratings and trends</h2>")
-            .And.Contain("Top rated</h3>").And.Contain("Most reviewed</h3>").And.Contain("Trending this week</h3>")
-            .And.Contain("There aren't enough reviews to rank tracks yet.")
-            .And.Contain("No tracks have reviews yet.")
-            .And.Contain("No tracks have been reviewed in the last week."));
+        var home = await client.GetStringAsync("/");
+        Assert.That(home, Does.Not.Contain("id=\"home-rankings\"")
+            .And.Not.Contain("top-rated-heading")
+            .And.Not.Contain("most-reviewed-heading")
+            .And.Not.Contain("trending-heading"));
+
+        var rankings = await client.GetStringAsync("/rankings");
+        Assert.That(rankings, Does.Contain("<h1>Ratings and trends</h1>")
+            .And.Contain("top-rated-heading")
+            .And.Contain("most-reviewed-heading")
+            .And.Contain("trending-heading"));
     }
 
     [TestCase("/search")]
@@ -296,7 +298,7 @@ public class AuthenticationUiTests
         Assert.That(WebUtility.HtmlDecode(HeroOf(home)), Does.Contain("Welcome back, Updated name! Your music journey starts here."),
             "The welcome uses the saved display name in preference to the username.");
         Assert.That(home, Does.Contain("Activity Feed")
-            .And.Contain("Ratings and trends</h2>")
+            .And.Not.Contain("id=\"home-rankings\"")
             .And.Not.Contain("href=\"feed\"")
             .And.Not.Contain("href=\"playlists\"")
             .And.Not.Contain("Browse music")

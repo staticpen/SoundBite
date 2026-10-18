@@ -15,7 +15,6 @@ using SoundBite.Data;
 using SoundBite.Interfaces;
 using SoundBite.Models;
 using SoundBite.Services;
-using SoundBite.Strategies;
 
 namespace SoundBite.Tests;
 
@@ -340,7 +339,7 @@ public class CatalogueIntegrationTests
             var html = await RenderHomeAsync(renderer);
             Assert.That(WebUtility.HtmlDecode(HeroOf(html)), Does.Contain("Welcome back, Listener! Your music journey starts here."));
             Assert.That(html, Does.Not.Contain("Simulated name lookup failure")
-                .And.Contain("id=\"home-rankings\"")
+                .And.Not.Contain("id=\"home-rankings\"")
                 .And.Contain("activity-feed-heading"));
         }, new SignedInAuthenticationStateProvider(), services =>
             services.AddScoped(_ => new UserService(new FailingContextFactory())));
@@ -348,32 +347,20 @@ public class CatalogueIntegrationTests
 
     [TestCase(false)]
     [TestCase(true)]
-    public async Task HomePageShowsLiveRatingsAndTrendsDirectlyBelowTheHero(bool signedIn)
+    public async Task HomePageLeavesRatingsAndTrendsOnTheirSeparatePage(bool signedIn)
     {
         await WithCatalogue(async renderer =>
         {
-            var html = WebUtility.HtmlDecode(await RenderHomeAsync(renderer));
-            var heroEnd = html.IndexOf("</section>", html.IndexOf("id=\"home-hero\"", StringComparison.Ordinal), StringComparison.Ordinal);
-            var rankingsStart = html.IndexOf("<section id=\"home-rankings\"", StringComparison.Ordinal);
-            Assert.That(rankingsStart, Is.GreaterThan(heroEnd), "Ratings and trends must follow the hero.");
-            Assert.That(html[heroEnd..rankingsStart].Replace("</section>", "").Trim(), Is.Empty,
-                "Nothing may sit between the hero and the ratings and trends section.");
-
-            var rankings = html[rankingsStart..];
-            Assert.That(rankings, Does.Contain("<h2 id=\"home-rankings-title\">Ratings and trends</h2>")
-                .And.Contain("<h3 id=\"top-rated-heading\">Top rated</h3>")
-                .And.Contain("<h3 id=\"most-reviewed-heading\">Most reviewed</h3>")
-                .And.Contain("<h3 id=\"trending-heading\">Trending this week</h3>")
-                .And.Contain("tracks need at least 2 reviews")
-                .And.Contain("There aren't enough reviews to rank tracks yet.")
-                .And.Contain("href=\"/tracks/42\"").And.Contain("href=\"/tracks/907\"")
-                .And.Contain("1 reviews · 4.0 / 5 average")
-                .And.Contain("1 recent reviews · 2.0 / 5 average")
-                .And.Not.Contain("<h2 id=\"top-rated-heading\""));
+            var html = await RenderHomeAsync(renderer);
+            Assert.That(html, Does.Not.Contain("id=\"home-rankings\"")
+                .And.Not.Contain("top-rated-heading")
+                .And.Not.Contain("most-reviewed-heading")
+                .And.Not.Contain("trending-heading"));
 
             var feed = html.IndexOf("activity-feed-heading", StringComparison.Ordinal);
             if (signedIn)
-                Assert.That(feed, Is.GreaterThan(rankingsStart), "The activity feed belongs below ratings and trends.");
+                Assert.That(feed, Is.GreaterThan(html.IndexOf("id=\"home-hero\"", StringComparison.Ordinal)),
+                    "The activity feed belongs below the signed-in hero.");
             else
                 Assert.That(feed, Is.EqualTo(-1));
         }, signedIn ? new SignedInAuthenticationStateProvider() : null);
@@ -488,10 +475,6 @@ public class CatalogueIntegrationTests
             .AddScoped<FeedService>()
             .AddSingleton<NotificationEventDispatcher>()
             .AddScoped<SocialInteractionService>()
-            .AddScoped<IRankingStrategy, RatingRankingStrategy>()
-            .AddScoped<IRankingStrategy, PopularityRankingStrategy>()
-            .AddScoped<RankingService>()
-            .AddScoped<TrendService>()
             .AddScoped<UserService>()
             .AddSingleton<AuthenticationStateProvider>(
                 authenticationStateProvider ?? new AnonymousAuthenticationStateProvider());

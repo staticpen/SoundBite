@@ -6,10 +6,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using SoundBite.Components.Pages;
 using SoundBite.Data;
-using SoundBite.Interfaces;
 using SoundBite.Models;
 using SoundBite.Services;
-using SoundBite.Strategies;
 
 namespace SoundBite.Tests;
 
@@ -92,10 +90,6 @@ public class ActivityFeedUiTests
             .AddLogging()
             .AddSingleton<IDbContextFactory<ApplicationDbContext>>(factory)
             .AddScoped<FeedService>()
-            .AddScoped<IRankingStrategy, RatingRankingStrategy>()
-            .AddScoped<IRankingStrategy, PopularityRankingStrategy>()
-            .AddScoped<RankingService>()
-            .AddScoped<TrendService>()
             .AddScoped<UserService>()
             .AddSingleton<AuthenticationStateProvider>(
                 new TestAuthentication(new ClaimsPrincipal(identity)))
