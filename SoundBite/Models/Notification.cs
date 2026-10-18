@@ -8,8 +8,7 @@ public enum NotificationType
     ReviewComment,
     CommentReply,
     ReviewLike,
-    CommentLike,
-    PlaylistLike
+    CommentLike
 }
 
 public class Notification
@@ -24,8 +23,6 @@ public class Notification
     public Review? Review { get; set; }
     public int? CommentId { get; set; }
     public Comment? Comment { get; set; }
-    public int? PlaylistId { get; set; }
-    public Playlist? Playlist { get; set; }
     public int? LikeId { get; set; }
     public Like? Like { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
@@ -41,8 +38,6 @@ public sealed record NotificationItem(
     DateTime? ReadAt,
     int? TrackId,
     int? ReviewId,
-    int? PlaylistId,
-    string? PlaylistName,
     string? Content)
 {
     public string ActorName => string.IsNullOrWhiteSpace(ActorDisplayName) ? ActorUserName : ActorDisplayName;

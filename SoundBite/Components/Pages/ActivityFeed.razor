@@ -1,4 +1,3 @@
-@page "/feed"
 @using System.Security.Claims
 @using Microsoft.AspNetCore.Components.Authorization
 @using SoundBite.Models
@@ -7,9 +6,8 @@
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject ILogger<ActivityFeed> Logger
 
-<PageTitle>Activity Feed - SoundBite</PageTitle>
-
-<h1>Activity feed</h1>
+<section class="mt-4" aria-labelledby="activity-feed-heading">
+<h2 id="activity-feed-heading">Activity Feed</h2>
 
 @if (loading)
 {
@@ -56,13 +54,6 @@ else
                     {
                         <span> liked the track </span>
                     }
-                    else if (item.TargetType == LikeTargetType.Playlist)
-                    {
-                        <span> liked a public playlist by </span>
-                        <a href="@($"/users/{Uri.EscapeDataString(item.TargetUserName ?? string.Empty)}")">@item.TargetActorName</a>
-                        <span>: </span>
-                        <a href="@($"/playlists/{item.PlaylistId}")">@item.PlaylistName</a>
-                    }
                     else
                     {
                         <span> liked a @(item.TargetType == LikeTargetType.Review ? "review" : "comment") by </span>
@@ -103,6 +94,7 @@ else
         }
     }
 }
+</section>
 
 @code {
     private readonly List<ActivityItem> items = [];

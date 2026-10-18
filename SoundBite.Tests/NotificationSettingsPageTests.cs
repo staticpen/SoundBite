@@ -62,7 +62,7 @@ public class NotificationSettingsPageTests
             var switches = page.Switches();
             Assert.That(switches.Keys, Is.EquivalentTo(Enum.GetValues<NotificationType>()));
             Assert.That(switches.Values, Has.All.True);
-            Assert.That(page.Html, Does.Contain("Someone follows you").And.Contain("Someone likes your playlist"));
+            Assert.That(page.Html, Does.Contain("Someone follows you").And.Contain("Someone likes your comment"));
             return Task.CompletedTask;
         });
     }
@@ -91,7 +91,7 @@ public class NotificationSettingsPageTests
     {
         await using (var db = factory.CreateDbContext())
         {
-            db.NotificationOptOuts.Add(new NotificationOptOut { UserId = "bob", Type = NotificationType.PlaylistLike });
+            db.NotificationOptOuts.Add(new NotificationOptOut { UserId = "bob", Type = NotificationType.CommentLike });
             await db.SaveChangesAsync();
         }
 
@@ -104,7 +104,7 @@ public class NotificationSettingsPageTests
             Assert.That(page.SwitchesDisabled(), Is.False);
         });
         Assert.That(await OptOutsAsync("alice"), Is.EqualTo(new[] { NotificationType.CommentReply }));
-        Assert.That(await OptOutsAsync("bob"), Is.EqualTo(new[] { NotificationType.PlaylistLike }));
+        Assert.That(await OptOutsAsync("bob"), Is.EqualTo(new[] { NotificationType.CommentLike }));
 
         // A new page (new scope, as after a refresh or sign-in) shows the saved setting.
         await WithPageAsync(async page =>
@@ -119,14 +119,14 @@ public class NotificationSettingsPageTests
             return Task.CompletedTask;
         });
         Assert.That(await OptOutsAsync("alice"), Is.Empty);
-        Assert.That(await OptOutsAsync("bob"), Is.EqualTo(new[] { NotificationType.PlaylistLike }));
+        Assert.That(await OptOutsAsync("bob"), Is.EqualTo(new[] { NotificationType.CommentLike }));
 
         // Bob sees only his own setting.
         authentication.UserId = "bob";
         await WithPageAsync(page =>
         {
             Assert.That(page.Switches().Where(entry => !entry.Value).Select(entry => entry.Key),
-                Is.EqualTo(new[] { NotificationType.PlaylistLike }));
+                Is.EqualTo(new[] { NotificationType.CommentLike }));
             return Task.CompletedTask;
         });
     }

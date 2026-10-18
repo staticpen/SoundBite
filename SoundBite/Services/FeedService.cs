@@ -53,9 +53,7 @@ public sealed class FeedService(
                 TargetDisplayName = null,
                 ParentCommentId = null,
                 ParentUserName = null,
-                ParentDisplayName = null,
-                PlaylistId = null,
-                PlaylistName = null
+                ParentDisplayName = null
             });
 
         rows = rows.Concat(db.Comments.AsNoTracking()
@@ -77,9 +75,7 @@ public sealed class FeedService(
                 ParentDisplayName = comment.ParentComment == null ? null : comment.ParentComment.User!.DisplayName,
                 TargetType = null,
                 TargetUserName = null,
-                TargetDisplayName = null,
-                PlaylistId = null,
-                PlaylistName = null
+                TargetDisplayName = null
             }));
 
         rows = rows.Concat(db.Likes.AsNoTracking()
@@ -101,9 +97,7 @@ public sealed class FeedService(
                 TargetDisplayName = like.Review.User.DisplayName,
                 ParentCommentId = null,
                 ParentUserName = null,
-                ParentDisplayName = null,
-                PlaylistId = null,
-                PlaylistName = null
+                ParentDisplayName = null
             }));
 
         rows = rows.Concat(db.Likes.AsNoTracking()
@@ -126,8 +120,6 @@ public sealed class FeedService(
                 ParentCommentId = like.Comment.ParentCommentId,
                 ParentUserName = like.Comment.ParentComment == null ? null : like.Comment.ParentComment.User!.UserName,
                 ParentDisplayName = like.Comment.ParentComment == null ? null : like.Comment.ParentComment.User!.DisplayName,
-                PlaylistId = null,
-                PlaylistName = null
             }));
 
         rows = rows.Concat(db.Likes.AsNoTracking()
@@ -150,32 +142,6 @@ public sealed class FeedService(
                 ParentCommentId = null,
                 ParentUserName = null,
                 ParentDisplayName = null,
-                PlaylistId = null,
-                PlaylistName = null
-            }));
-
-        rows = rows.Concat(db.Likes.AsNoTracking()
-            .Where(like => userIds.Contains(like.UserId) && like.Playlist != null && like.Playlist.IsPublic)
-            .Select(like => new ActivityRow
-            {
-                Type = (int)ActivityType.Like,
-                Id = like.Id,
-                UserName = like.User!.UserName!,
-                DisplayName = like.User.DisplayName,
-                ReviewId = null,
-                TrackId = null,
-                TrackTitle = null,
-                Rating = null,
-                Content = string.Empty,
-                CreatedAt = like.CreatedAt,
-                TargetType = (int)LikeTargetType.Playlist,
-                PlaylistId = like.Playlist!.Id,
-                PlaylistName = like.Playlist.Name,
-                TargetUserName = like.Playlist.Owner!.UserName,
-                TargetDisplayName = like.Playlist.Owner.DisplayName,
-                ParentCommentId = null,
-                ParentUserName = null,
-                ParentDisplayName = null
             }));
 
         var results = await rows
@@ -206,8 +172,6 @@ public sealed class FeedService(
         public int? ParentCommentId { get; init; }
         public string? ParentUserName { get; init; }
         public string? ParentDisplayName { get; init; }
-        public int? PlaylistId { get; init; }
-        public string? PlaylistName { get; init; }
 
         public ActivityItem ToActivityItem() => new(
             (ActivityType)Type,
@@ -225,8 +189,6 @@ public sealed class FeedService(
             TargetDisplayName,
             ParentCommentId,
             ParentUserName,
-            ParentDisplayName,
-            PlaylistId,
-            PlaylistName);
+            ParentDisplayName);
     }
 }

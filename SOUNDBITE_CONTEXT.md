@@ -2,7 +2,7 @@
 
 ## 1. Project Overview
 
-SoundBite is a web-based social music platform inspired by Letterboxd. Users can discover music, rate and review tracks, create playlists, follow other users, and interact with music-related activity.
+SoundBite is a web-based social music platform inspired by Letterboxd. Users can discover music, optionally save tracks to one private Favourites list, rate and review tracks, follow other users, and interact with music-related activity.
 
 The project serves two purposes:
 
@@ -192,21 +192,18 @@ Requirements:
 - Editing an existing review updates that record rather than creating a duplicate.
 - Validation must be applied in the UI and enforced appropriately in the application and database layers.
 
-### 6.4 Playlists
+### 6.4 Favourites
 
-Users should be able to:
+Each user has one private favourites list. Users should be able to:
 
-- Create playlists.
-- Edit playlist details.
-- Add and remove tracks.
-- Discover playlists.
-- Save or follow playlists, if supported by the chosen design.
-- Share playlists.
-- View playlist details.
+- Add tracks from catalogue search or track details without submitting a rating or review.
+- Search the catalogue and add tracks from the Favourites page.
+- Remove tracks from the list.
+- Keep favourites private to the owning user.
 
-A track must not appear more than once in the same playlist.
+A track must not appear more than once in a user's favourites list.
 
-Use appropriate database constraints and service-level validation to enforce this rule.
+Use appropriate database constraints and service-level validation to enforce this rule. When upgrading from playlists, combine all tracks owned by a user into that user's single Favourites list.
 
 ### 6.5 Social activity and interactions
 
@@ -214,10 +211,10 @@ The social layer should support:
 
 - A feed of relevant user activity.
 - Recent reviews, ratings, and other supported music-related actions.
-- Likes on reviews, comments, tracks, and playlists.
+- Likes on reviews, comments, and tracks.
 - Comments on reviews.
 - Replies to comments, where supported by the final data model.
-- Viewing other users' activity.
+- Viewing relevant recent activity on Home.
 - Following and unfollowing users.
 
 Prevent duplicate likes and invalid relationships. Apply suitable authorization checks before users modify or delete content.

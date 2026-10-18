@@ -18,8 +18,6 @@ public class SocialInteractionTests
     private SocialInteractionService service = null!;
     private int reviewId;
     private int trackId;
-    private int publicPlaylistId;
-    private int privatePlaylistId;
     private int commentId;
 
     [SetUp]
@@ -41,14 +39,9 @@ public class SocialInteractionTests
             new ApplicationUser { Id = "alice", UserName = "alice", DisplayName = "Alice" },
             new ApplicationUser { Id = "bob", UserName = "bob", DisplayName = "Bob" });
         db.Tracks.Add(new Track { Title = "Test track" });
-        db.Playlists.AddRange(
-            new Playlist { OwnerId = "bob", Name = "Public playlist", IsPublic = true },
-            new Playlist { OwnerId = "bob", Name = "Private playlist", IsPublic = false });
         await db.SaveChangesAsync();
         var track = await db.Tracks.SingleAsync();
         trackId = track.Id;
-        publicPlaylistId = await db.Playlists.Where(playlist => playlist.IsPublic).Select(playlist => playlist.Id).SingleAsync();
-        privatePlaylistId = await db.Playlists.Where(playlist => !playlist.IsPublic).Select(playlist => playlist.Id).SingleAsync();
         db.Reviews.Add(new Review { UserId = "bob", TrackId = track.Id, Rating = 4, Comment = "Nice track" });
         await db.SaveChangesAsync();
         reviewId = await db.Reviews.Select(review => review.Id).SingleAsync();
@@ -95,40 +88,28 @@ public class SocialInteractionTests
     }
 
     [Test]
-    public async Task LikesCanTargetTracksPlaylistsAndCommentsWithoutCrossTargetDuplicates()
+    public async Task LikesCanTargetTracksAndCommentsWithoutCrossTargetDuplicates()
     {
         await service.LikeTrackAsync(trackId);
         await service.LikeTrackAsync(trackId);
-        await service.LikePlaylistAsync(publicPlaylistId);
         await service.LikeCommentAsync(commentId);
 
         Assert.That(await service.GetLikeSummaryAsync(LikeTargetType.Track, trackId), Is.EqualTo(new LikeSummary(1, true)));
-        Assert.That(await service.GetLikeSummaryAsync(LikeTargetType.Playlist, publicPlaylistId), Is.EqualTo(new LikeSummary(1, true)));
         Assert.That(await service.GetLikeSummaryAsync(LikeTargetType.Comment, commentId), Is.EqualTo(new LikeSummary(1, true)));
         var commentInteractions = (await service.GetReviewInteractionsAsync(reviewId)).Comments.Single();
         Assert.That(commentInteractions.LikeCount, Is.EqualTo(1));
         Assert.That(commentInteractions.IsLiked, Is.True);
 
         await service.UnlikeTrackAsync(trackId);
-        await service.UnlikePlaylistAsync(publicPlaylistId);
         await service.UnlikeCommentAsync(commentId);
         Assert.That((await service.GetLikeSummaryAsync(LikeTargetType.Track, trackId)).Count, Is.Zero);
-        Assert.That((await service.GetLikeSummaryAsync(LikeTargetType.Playlist, publicPlaylistId)).Count, Is.Zero);
         Assert.That((await service.GetLikeSummaryAsync(LikeTargetType.Comment, commentId)).Count, Is.Zero);
     }
 
     [Test]
-    public async Task PrivatePlaylistLikesAreOwnerOnlyAndTargetsMustExist()
+    public void LikeTargetsMustExist()
     {
-        Assert.ThrowsAsync<InvalidOperationException>(() => service.LikePlaylistAsync(privatePlaylistId));
-        Assert.ThrowsAsync<InvalidOperationException>(() =>
-            service.GetLikeSummaryAsync(LikeTargetType.Playlist, privatePlaylistId));
         Assert.ThrowsAsync<InvalidOperationException>(() => service.LikeTrackAsync(int.MaxValue));
-
-        authentication.Set("bob");
-        await service.LikePlaylistAsync(privatePlaylistId);
-        Assert.That(await service.GetLikeSummaryAsync(LikeTargetType.Playlist, privatePlaylistId),
-            Is.EqualTo(new LikeSummary(1, true)));
     }
 
     [Test]
@@ -136,11 +117,10 @@ public class SocialInteractionTests
     {
         await service.LikeReviewAsync(reviewId);
         await service.LikeTrackAsync(trackId);
-        await service.LikePlaylistAsync(publicPlaylistId);
         await service.LikeCommentAsync(commentId);
 
         await using var db = factory.CreateDbContext();
-        Assert.That(await db.Likes.CountAsync(like => like.UserId == "alice"), Is.EqualTo(4));
+        Assert.That(await db.Likes.CountAsync(like => like.UserId == "alice"), Is.EqualTo(3));
         db.Likes.Add(new Like { UserId = "alice" });
         var missingTarget = Assert.ThrowsAsync<DbUpdateException>(async () => await db.SaveChangesAsync());
         Assert.That(((SqliteException)missingTarget!.InnerException!).SqliteExtendedErrorCode, Is.EqualTo(275));
@@ -241,37 +221,30 @@ public class SocialInteractionTests
     }
 
     [Test]
-    public async Task DeletingTrackPlaylistOrCommentCascadesOnlyLikesForThatTarget()
+    public async Task DeletingTrackOrCommentCascadesOnlyLikesForThatTarget()
     {
         int extraTrackId;
-        int extraPlaylistId;
         await using (var db = factory.CreateDbContext())
         {
             db.Tracks.Add(new Track { Title = "Separately liked track" });
-            db.Playlists.Add(new Playlist { OwnerId = "bob", Name = "Separately liked playlist" });
             await db.SaveChangesAsync();
             extraTrackId = await db.Tracks.Where(track => track.Title == "Separately liked track")
                 .Select(track => track.Id).SingleAsync();
-            extraPlaylistId = await db.Playlists.Where(playlist => playlist.Name == "Separately liked playlist")
-                .Select(playlist => playlist.Id).SingleAsync();
         }
 
         await service.LikeReviewAsync(reviewId);
         await service.LikeTrackAsync(extraTrackId);
-        await service.LikePlaylistAsync(extraPlaylistId);
         await service.LikeCommentAsync(commentId);
 
         await using (var db = factory.CreateDbContext())
         {
             await db.Tracks.Where(track => track.Id == extraTrackId).ExecuteDeleteAsync();
-            await db.Playlists.Where(playlist => playlist.Id == extraPlaylistId).ExecuteDeleteAsync();
             await db.Comments.Where(comment => comment.Id == commentId).ExecuteDeleteAsync();
         }
 
         await using var verify = factory.CreateDbContext();
         Assert.That(await verify.Likes.CountAsync(like => like.ReviewId == reviewId), Is.EqualTo(1));
         Assert.That(await verify.Likes.CountAsync(like => like.TrackId == extraTrackId), Is.Zero);
-        Assert.That(await verify.Likes.CountAsync(like => like.PlaylistId == extraPlaylistId), Is.Zero);
         Assert.That(await verify.Likes.CountAsync(like => like.CommentId == commentId), Is.Zero);
     }
 

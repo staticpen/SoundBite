@@ -63,8 +63,6 @@ public sealed class NotificationService(
                 notification.ReadAt,
                 notification.Review == null ? null : notification.Review.TrackId,
                 notification.ReviewId,
-                notification.PlaylistId,
-                notification.Playlist == null ? null : notification.Playlist.Name,
                 notification.Comment == null ? null : notification.Comment.Content))
             .ToListAsync(cancellationToken);
 

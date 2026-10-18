@@ -229,6 +229,7 @@ public class TrackDetailsTests
             .AddSingleton<IDbContextFactory<ApplicationDbContext>>(factory)
             .AddScoped<ReviewService>()
             .AddScoped<DemoReviewService>()
+            .AddScoped<FavouriteService>()
             .AddSingleton<NotificationEventDispatcher>()
             .AddScoped<SocialInteractionService>()
             .AddSingleton<AuthenticationStateProvider>(

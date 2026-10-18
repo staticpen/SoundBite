@@ -1,0 +1,254 @@
+@page "/favourites"
+@rendermode InteractiveServer
+
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using SoundBite.Interfaces
+@using SoundBite.Models
+@using SoundBite.Services
+@inject FavouriteService FavouriteManager
+@inject IMusicCatalog Catalog
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ILogger<Favourites> Logger
+
+<PageTitle>Favourites - SoundBite</PageTitle>
+
+<h1>Favourites</h1>
+
+@if (loading)
+{
+    <p role="status">Loading your favourites...</p>
+}
+else if (!signedIn)
+{
+    <p><a href="/login">Log in</a> to view and manage your favourites.</p>
+}
+else if (loadFailed)
+{
+    <div class="alert alert-danger" role="alert">Your favourites couldn't be loaded. Please try again later.</div>
+}
+else if (items.Count == 0)
+{
+    <p class="text-muted">You haven't added any tracks to your favourites yet.</p>
+}
+else
+{
+    <ul class="list-group mb-3">
+        @foreach (var item in items)
+        {
+            <li class="list-group-item d-flex justify-content-between align-items-center gap-3" @key="item.TrackId">
+                <div>
+                    <a href="@($"/tracks/{item.TrackId}")">@item.Track?.Title</a>
+                    @if (item.Track?.Artists.Count > 0)
+                    {
+                        <span class="text-muted"> · @string.Join(", ", item.Track.Artists.Select(artist => artist.Name))</span>
+                    }
+                </div>
+                <button type="button" class="btn btn-sm btn-outline-secondary flex-shrink-0"
+                        @onclick="() => RemoveAsync(item.TrackId)" disabled="@busy">
+                    Remove
+                </button>
+            </li>
+        }
+    </ul>
+}
+
+@if (signedIn && !loadFailed)
+{
+    <section aria-labelledby="add-tracks-heading">
+        <button type="button" class="btn btn-primary" @onclick="ToggleAddTracks">
+            @(showAddTracks ? "Close Add Tracks" : "Add Tracks")
+        </button>
+        @if (showAddTracks)
+        {
+            <div class="card mt-3">
+                <div class="card-body">
+                    <h2 id="add-tracks-heading" class="h4">Add Tracks</h2>
+                    <form @onsubmit="SearchTracksAsync" @onsubmit:preventDefault>
+                        <label for="favourite-search" class="form-label">Search tracks</label>
+                        <div class="input-group">
+                            <input id="favourite-search" type="search" class="form-control"
+                                   @bind="query" @bind:event="oninput" placeholder="Enter a song title" />
+                            <button class="btn btn-outline-primary" type="submit" disabled="@searching">Search</button>
+                        </div>
+                    </form>
+                    @if (searchFailed)
+                    {
+                        <p class="alert alert-danger mt-3" role="alert">Tracks couldn't be searched. Please try again.</p>
+                    }
+                    else if (searchResults is not null)
+                    {
+                        @if (searchResults.Count == 0)
+                        {
+                            <p class="text-muted mt-3">No tracks found. Try adding the artist from Search first.</p>
+                        }
+                        else
+                        {
+                            <ul class="list-group mt-3">
+                                @foreach (var track in searchResults)
+                                {
+                                    <li class="list-group-item d-flex justify-content-between align-items-center gap-3" @key="track.Id">
+                                        <a href="@($"/tracks/{track.Id}")">@track.Title</a>
+                                        @if (items.Any(item => item.TrackId == track.Id))
+                                        {
+                                            <span class="badge text-bg-secondary">Added</span>
+                                        }
+                                        else
+                                        {
+                                            <button type="button" class="btn btn-sm btn-outline-primary"
+                                                    @onclick="() => AddAsync(track)" disabled="@busy">
+                                                @(addingTrackId == track.Id ? "Adding..." : "Add to Favourites")
+                                            </button>
+                                        }
+                                    </li>
+                                }
+                            </ul>
+                        }
+                    }
+                </div>
+            </div>
+        }
+    </section>
+}
+
+@if (!string.IsNullOrWhiteSpace(message))
+{
+    <p class="mt-3" role="status">@message</p>
+}
+
+@code {
+    private readonly List<FavouriteTrack> items = [];
+    private IReadOnlyList<Track>? searchResults;
+    private string? userId;
+    private string query = string.Empty;
+    private bool signedIn;
+    private bool loading = true;
+    private bool loadFailed;
+    private bool showAddTracks;
+    private bool searching;
+    private bool searchFailed;
+    private bool busy;
+    private int? addingTrackId;
+    private string? message;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var principal = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+        userId = principal.FindFirstValue(ClaimTypes.NameIdentifier);
+        signedIn = principal.Identity?.IsAuthenticated == true && !string.IsNullOrWhiteSpace(userId);
+        if (!signedIn)
+        {
+            loading = false;
+            return;
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        loading = true;
+        loadFailed = false;
+        try
+        {
+            items.Clear();
+            items.AddRange(await FavouriteManager.GetMineAsync());
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Unable to load favourites for user {UserId}", userId);
+            loadFailed = true;
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task SearchTracksAsync()
+    {
+        var cleanedQuery = query.Trim();
+        searchResults = null;
+        searchFailed = false;
+        if (cleanedQuery.Length == 0)
+            return;
+
+        searching = true;
+        try
+        {
+            var results = await Catalog.SearchAsync(cleanedQuery);
+            searchResults = results.Tracks;
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Unable to search tracks to add to favourites");
+            searchFailed = true;
+        }
+        finally
+        {
+            searching = false;
+        }
+    }
+
+    private async Task AddAsync(Track track)
+    {
+        if (busy)
+            return;
+
+        busy = true;
+        addingTrackId = track.Id;
+        message = null;
+        try
+        {
+            await FavouriteManager.AddAsync(track.Id);
+            items.Add(new FavouriteTrack { UserId = userId!, TrackId = track.Id, Track = track });
+            message = $"Added {track.Title} to Favourites.";
+        }
+        catch (InvalidOperationException exception)
+        {
+            message = exception.Message;
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Unable to add track {TrackId} to favourites", track.Id);
+            message = "The track couldn't be added. Please try again.";
+        }
+        finally
+        {
+            addingTrackId = null;
+            busy = false;
+        }
+    }
+
+    private async Task RemoveAsync(int trackId)
+    {
+        if (busy)
+            return;
+
+        busy = true;
+        message = null;
+        try
+        {
+            await FavouriteManager.RemoveAsync(trackId);
+            items.RemoveAll(item => item.TrackId == trackId);
+            message = "Removed track from Favourites.";
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Unable to remove track {TrackId} from favourites", trackId);
+            message = "The track couldn't be removed. Please try again.";
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private void ToggleAddTracks()
+    {
+        showAddTracks = !showAddTracks;
+        searchResults = null;
+        searchFailed = false;
+        message = null;
+    }
+}

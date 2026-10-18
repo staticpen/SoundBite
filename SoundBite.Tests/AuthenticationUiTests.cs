@@ -71,6 +71,8 @@ public class AuthenticationUiTests
 
     [TestCase("/missing-net9-page")]
     [TestCase("/missing/deep/link")]
+    [TestCase("/feed")]
+    [TestCase("/playlists")]
     public async Task UnknownRouteReturns404AndApplicationNotFoundContent(string path)
     {
         var response = await client.GetAsync(path);
@@ -95,14 +97,23 @@ public class AuthenticationUiTests
         Assert.That(await saved.Content.ReadAsStringAsync(), Does.Contain("Profile saved."));
         Assert.That(await client.GetStringAsync("/account"), Does.Contain("Updated name").And.Contain("My music biography"));
         Assert.That(await client.GetStringAsync("/users/authuser"), Does.Contain("Updated name").And.Not.Contain("authuser@example.com"));
-        Assert.That(await client.GetStringAsync("/playlists"), Does.Contain("Create a playlist"));
+        Assert.That(await client.GetStringAsync("/favourites"), Does.Contain("Favourites").And.Contain("Add Tracks"));
+        var home = await client.GetStringAsync("/");
+        Assert.That(home, Does.Contain("Activity Feed")
+            .And.Contain("href=\"favourites\"")
+            .And.Not.Contain("href=\"feed\"")
+            .And.Not.Contain("href=\"playlists\"")
+            .And.Not.Contain("Browse music")
+            .And.Not.Contain("Discover playlists")
+            .And.Not.Contain("Join the community")
+            .And.Not.Contain("Ratings and trends"));
         Assert.That(await client.GetStringAsync("/tracks/1"), Does.Contain("Write a review"));
         var logout = await Logout();
         Assert.That(logout.StatusCode, Is.EqualTo(HttpStatusCode.Redirect));
         Assert.That((await client.GetAsync("/api/account/me")).StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized));
         Assert.That(await client.GetStringAsync("/notifications"), Does.Contain("Log in")
             .And.Not.Contain("You don't have any notifications yet."));
-        Assert.That(await client.GetStringAsync("/playlists"), Does.Contain("to create your own playlists").And.Not.Contain("Create a playlist"));
+        Assert.That(await client.GetStringAsync("/favourites"), Does.Contain("Log in").And.Not.Contain("Remove"));
         Assert.That(await client.GetStringAsync("/tracks/1"), Does.Contain("to rate and review this track").And.Not.Contain("Submit review"));
         foreach (var identifier in new[] { "authuser", "authuser@example.com" })
         {

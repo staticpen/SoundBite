@@ -104,7 +104,8 @@ public class CatalogueIntegrationTests
             var links = Regex.Matches(html, "href=\"([^\"]+)\"").Select(m => m.Groups[1].Value).ToArray();
             Assert.That(links, Is.EqualTo(new[]
             {
-                "/artists/11", "/albums/23", "/tracks/42", "/tracks/907", "/artists/11"
+                "/artists/11", "/albums/23", "/tracks/42", "/login",
+                "/tracks/907", "/login", "/artists/11"
             }));
             Assert.That(typeof(ArtistDetails).GetCustomAttributes<RouteAttribute>().Select(r => r.Template),
                 Does.Contain("/artists/{Id:int}"));
@@ -131,6 +132,18 @@ public class CatalogueIntegrationTests
     }
 
     [Test]
+    public async Task SearchResultsOfferAddingTracksToFavouritesWithoutAReview()
+    {
+        await WithCatalogue(async renderer =>
+        {
+            var search = await renderer.RenderComponentAsync<SearchPage>(ParameterView.FromDictionary(
+                new Dictionary<string, object?> { [nameof(SearchPage.Query)] = "echo" }));
+            Assert.That(search.ToHtmlString(), Does.Contain("Add to Favourites")
+                .And.Contain("href=\"/tracks/42\""));
+        }, new SignedInAuthenticationStateProvider());
+    }
+
+    [Test]
     public async Task ArtistAndAlbumDetailsLinkThroughTheirRelatedCatalogueRecords()
     {
         await WithCatalogue(async renderer =>
@@ -150,7 +163,7 @@ public class CatalogueIntegrationTests
     }
 
     [Test]
-    public async Task HomePageProvidesCatalogueAndCommunityEntryPoints()
+    public async Task HomePageShowsCatalogueSearchAndActivityFeed()
     {
         await WithCatalogue(async renderer =>
         {
@@ -158,9 +171,11 @@ public class CatalogueIntegrationTests
             var html = home.ToHtmlString();
             Assert.That(html, Does.Contain("Discover music")
                 .And.Contain("href=\"/search\"")
-                .And.Contain("href=\"/playlists\"")
-                .And.Contain("href=\"/feed\"")
-                .And.Contain("href=\"/rankings\""));
+                .And.Contain("Activity Feed")
+                .And.Not.Contain("Browse music")
+                .And.Not.Contain("Discover playlists")
+                .And.Not.Contain("Join the community")
+                .And.Not.Contain("Ratings and trends"));
         });
     }
 
@@ -256,6 +271,8 @@ public class CatalogueIntegrationTests
             .AddScoped<SpotifyArtistCatalogService>()
             .AddScoped<ReviewService>()
             .AddScoped<DemoReviewService>()
+            .AddScoped<FavouriteService>()
+            .AddScoped<FeedService>()
             .AddSingleton<NotificationEventDispatcher>()
             .AddScoped<SocialInteractionService>()
             .AddSingleton<AuthenticationStateProvider>(

@@ -21,10 +21,10 @@
 ## 2. Current Status
 
 - **Overall status:** In progress
-- **Current development phase:** Presentation and deployment readiness
-- **Current focus:** Deploy and verify the top-row logout fix
+- **Current development phase:** Feature updates and validation
+- **Current focus:** Replace playlists with Favourites and move the activity feed onto Home
 - **Last verified:** 2026-10-18
-- **Current blocker:** Top-row logout now uses an antiforgery-validated HTTP POST rather than attempting to change the auth cookie from an interactive Blazor response. The change passes the full test suite but is not yet committed/deployed. Deployment also requires interactive macOS administrator authorization. The Spotify album-pagination fix is committed as `55f9a20`; its deployment status still needs confirmation.
+- **Current blocker:** No implementation or test blocker remains. The Favourites and Home changes are verified locally but not committed or deployed. The Spotify album-pagination fix is committed as `55f9a20`; its deployment status still needs confirmation.
 
 ## 3. Feature Implementation Tracker
 
@@ -36,19 +36,25 @@
 | Spotify integration | Production seed verified; interactive import fix awaits deployment | The deployed credentials completed five default searches, refreshing 50 unique tracks and creating 26 sample reviews across 12 tracks. A live API probe showed artist-album requests accept limit 10 and reject 20 and 50. |
 | Track ratings and reviews | Implemented — verified | Reviews persist through EF Core; the service supports create/read/update, the database enforces one review per user per track and valid 1–5 ratings, and track details support public review reading plus authenticated submission/editing. |
 | Album-track many-to-many relationship | Implemented — unverified | `ApplicationDbContext` maps `ArtistAlbums` and `ArtistTracks` and `Track.AlbumId` with a nullable optional foreign key. This matches the intended design, but the schema has not been validated via a migration review beyond the code. |
-| Playlist management | Implemented — verified | Users can create, edit, and delete playlists; add/remove tracks; and browse public playlist listings/details. Owner checks are enforced in the service. |
-| Playlist duplicate prevention | Implemented — verified | Service validation and a unique database index on playlist and track prevent duplicates. Playlist item positions preserve order. |
+| Favourites | Implemented — focused tests passed | Each user has one private list. Tracks can be added from search, track details, or the Favourites page; the page supports catalogue search and removal. Ratings and reviews are not required to save a track. Migration combines existing playlist tracks into each owner's favourites. |
 | Following and followers | Implemented — verified | Authenticated idempotent follow/unfollow, public counts and expandable 10-user pages; database constraints, concurrent requests, account deletion and browser flows verified. Merged into `main` at `ac92cbe`. |
-| Likes and comments | Implemented — verified | Signed-in users can idempotently like reviews, tracks, public playlists, and comments; private playlist likes are owner-only. Users can add/edit/delete their own review comments and reply one level deep to top-level comments. Replies are grouped under parents, cannot be nested further, and are preserved as top-level comments if their parent is deleted. |
-| Activity feed | Implemented — verified | `/feed` globally orders and paginates reviews, comments/replies, and likes by followed users and the signed-in user. Reply entries identify the parent author. Like activity covers reviews, comments, tracks, and public playlists; private-playlist likes are excluded. |
+| Likes and comments | Implemented — verified | Signed-in users can idempotently like reviews, tracks, and comments. Users can add/edit/delete their own review comments and reply one level deep to top-level comments. Replies are grouped under parents, cannot be nested further, and are preserved as top-level comments if their parent is deleted. |
+| Activity feed | Implemented — shown on Home | Home renders a globally ordered and paginated feed of reviews, comments/replies, and likes by followed users and the signed-in user. The standalone Activity Feed navigation item and route are removed. |
 | Notifications | Implemented — verified | In addition to recipient-scoped notifications, `/notifications` uses keyset paging to load older items without duplicates; unread counts and read-state behavior remain independent of the displayed page. Users can persist per-category opt-outs from `/notifications/settings`, affecting future notifications only. Paging, authorization, read state, preference persistence/isolation, and UI behavior are covered by tests. The single-instance event dispatcher updates active recipient circuits; navigation and reconnection reload persisted state. |
 | Rankings and trends | Implemented — verified in isolated SQLite tests | `/rankings` shows top-rated tracks (minimum two reviews), most-reviewed tracks overall, and tracks with the most reviews in the last seven days. Separately stored, labelled sample reviews can populate these lists without masquerading as community reviews. |
-| Navigation and home | Implemented — tested | Navigation order is Home, Search, Activity Feed, Ratings and Trends, Playlists, Account. Account opens a dropdown with Edit Profile, Notifications, and role-gated Admin. Home shows a personalized welcome to signed-in users. |
+| Navigation and home | Implemented — focused tests passed | Home, Search, Ratings and Trends, Favourites, Account. The former home cards are removed and activity appears below the personalized welcome. Account opens a dropdown with Edit Profile, Notifications, and role-gated Admin. |
 | Administrative user management | Implemented — verified | `/admin/users` supports user search/paging, account lock/unlock, and admin-role grants/revocation. Every service operation checks live role membership and lockout state server-side. The front-end label is “Admin.” |
-| Automated tests | Passed — verified | Full NUnit suite passed **269/269** on 2026-10-18; focused authentication UI tests passed **15/15**. |
-| Git and repository hygiene | In progress | `main` is at the user's `381562b` layout commit. The logout fix in `MainLayout.razor`, `AccountEndpoints.cs`, and `AuthenticationUiTests.cs` is uncommitted. |
+| Automated tests | Passed — verified | Full NUnit suite passed **269/269** on 2026-10-18. Focused Favourites, migration, feed, navigation, and notification tests passed **118/118**. |
+| Git and repository hygiene | In progress | `main` is at `182edc6` (`Fixed log out`) and synchronized with `origin/main`; Favourites/Home code, migration, tests, and docs are uncommitted. |
 
 ## 4. Latest Completed Work
+
+### 2026-10-18 — Replaced playlists with Favourites and moved activity feed to Home
+
+- **Favourites:** Added one private, per-user track list with database-enforced uniqueness. Users can add/remove tracks from the Favourites page, add a track directly from catalogue search or track details, and search the catalogue under the page's Add Tracks control. Saving favourites does not require a rating or review.
+- **Playlist removal:** Removed playlist pages, navigation, service, entities, social likes, and playlist notifications. Added an EF migration that merges every existing user's playlist tracks into one Favourites list (deduplicating tracks), then removes legacy playlist storage and obsolete notification preferences.
+- **Home/navigation:** Removed the four home cards and the Activity Feed navigation item/route. Embedded the activity feed on Home.
+- **Verification:** Focused Favourites, migration, feed, navigation, and notification tests passed **118/118**; full NUnit suite passed **269/269**. `dotnet ef migrations has-pending-model-changes` reports no pending changes, and `git diff --check` is clean. No deployment or browser testing was performed.
 
 ### 2026-10-17 — B: local release-readiness checks (partial; environment-dependent checks outstanding)
 

@@ -18,9 +18,9 @@ public class ActivityFeedUiTests
     {
         await RenderAsync("alice", async renderer =>
         {
-            var root = await renderer.RenderComponentAsync<ActivityFeed>();
+            var root = await renderer.RenderComponentAsync<Home>();
             var html = root.ToHtmlString();
-            Assert.That(html, Does.Contain("Activity feed")
+            Assert.That(html, Does.Contain("Activity Feed")
                 .And.Contain("Bob")
                 .And.Contain("reviewed")
                 .And.Contain("Test track")
@@ -36,8 +36,8 @@ public class ActivityFeedUiTests
     {
         await RenderAsync(null, async renderer =>
         {
-            var root = await renderer.RenderComponentAsync<ActivityFeed>();
-            Assert.That(root.ToHtmlString(), Does.Contain("Log in").And.Contain("Activity feed"));
+            var root = await renderer.RenderComponentAsync<Home>();
+            Assert.That(root.ToHtmlString(), Does.Contain("Log in").And.Contain("Activity Feed"));
         });
     }
 

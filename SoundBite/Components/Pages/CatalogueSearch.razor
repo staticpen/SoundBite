@@ -8,6 +8,7 @@
 @inject IMusicCatalog Catalog
 @inject ISpotifyCatalog SpotifyCatalog
 @inject SpotifyArtistCatalogService ArtistCatalog
+@inject FavouriteService FavouriteManager
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject ILogger<CatalogueSearch> Logger
 
@@ -145,6 +146,18 @@
                     {
                         <li class="list-group-item text-break" @key="track.Id">
                             <a href="@($"/tracks/{track.Id}")">@track.Title</a>
+                            <div class="mt-2">
+                                @if (signedIn && favouriteTrackIds is null)
+                                {
+                                    <span class="text-danger small" role="alert">Favourites are unavailable.</span>
+                                }
+                                else
+                                {
+                                    <FavouriteButton TrackId="@track.Id"
+                                                     IsFavouriteOnLoad="@(signedIn ? favouriteTrackIds?.Contains(track.Id) : null)"
+                                                     StatusVersion="@favouriteStatusVersion" />
+                                }
+                            </div>
                         </li>
                     }
                 </ul>
@@ -181,6 +194,7 @@
     private string searchedQuery = string.Empty;
     private CatalogueSearchResults? results;
     private IReadOnlyList<Artist> catalogueArtists = [];
+    private HashSet<int>? favouriteTrackIds = [];
     private IReadOnlyList<SpotifyArtistMatch>? spotifyArtists;
     private bool isLoading;
     private bool artistSearchLoading;
@@ -194,6 +208,7 @@
     private string? artistImportMessage;
     private string? addingArtistId;
     private string? accountPromptArtist;
+    private int favouriteStatusVersion;
 
     protected override async Task OnInitializedAsync()
     {
@@ -224,6 +239,8 @@
         artistImportMessage = null;
         accountPromptArtist = null;
         spotifyArtists = null;
+        favouriteTrackIds = [];
+        favouriteStatusVersion++;
         if (searchedQuery.Length == 0)
             return;
 
@@ -231,6 +248,18 @@
         try
         {
             results = await Catalog.SearchAsync(searchedQuery);
+            if (signedIn && results.Tracks.Count > 0)
+            {
+                try
+                {
+                    favouriteTrackIds = (await FavouriteManager.GetMineTrackIdsAsync()).ToHashSet();
+                }
+                catch (Exception exception)
+                {
+                    Logger.LogError(exception, "Unable to load the user's favourite track IDs");
+                    favouriteTrackIds = null;
+                }
+            }
             if (results.TotalCount == 0)
             {
                 artistSearchLoading = true;

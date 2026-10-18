@@ -1,0 +1,121 @@
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using SoundBite.Services
+@inject FavouriteService Favourites
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ILogger<FavouriteButton> Logger
+
+@if (!signedIn)
+{
+    <a class="btn btn-sm btn-outline-primary" href="/login">Log in to add to Favourites</a>
+}
+else if (loadFailed)
+{
+    <span class="text-danger small" role="alert">Favourites unavailable.</span>
+}
+else
+{
+    <button type="button" class="btn btn-sm @(isFavourite ? "btn-outline-secondary" : "btn-outline-primary")"
+            @onclick="ToggleAsync" disabled="@(loading || saving)">
+        @(saving ? "Saving..." : loading ? "Loading..." : isFavourite ? "Remove from Favourites" : "Add to Favourites")
+    </button>
+    @if (!string.IsNullOrWhiteSpace(message))
+    {
+        <span class="small ms-2" role="status">@message</span>
+    }
+}
+
+@code {
+    [Parameter, EditorRequired] public int TrackId { get; set; }
+    [Parameter] public bool? IsFavouriteOnLoad { get; set; }
+    [Parameter] public int StatusVersion { get; set; }
+
+    private bool signedIn;
+    private bool isFavourite;
+    private bool loading = true;
+    private bool saving;
+    private bool loadFailed;
+    private string? message;
+    private int lastTrackId = -1;
+    private int lastStatusVersion = -1;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var principal = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+        signedIn = principal.Identity?.IsAuthenticated == true &&
+            !string.IsNullOrWhiteSpace(principal.FindFirstValue(ClaimTypes.NameIdentifier));
+        loadFailed = false;
+        message = null;
+        if (!signedIn)
+        {
+            loading = false;
+            return;
+        }
+
+        if (TrackId == lastTrackId && StatusVersion == lastStatusVersion)
+            return;
+        lastTrackId = TrackId;
+        lastStatusVersion = StatusVersion;
+
+        if (IsFavouriteOnLoad is bool currentStatus)
+        {
+            isFavourite = currentStatus;
+            loading = false;
+            return;
+        }
+
+        loading = true;
+        try
+        {
+            isFavourite = await Favourites.ContainsAsync(TrackId);
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Unable to check favourite status for track {TrackId}", TrackId);
+            loadFailed = true;
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task ToggleAsync()
+    {
+        if (!signedIn || saving)
+            return;
+
+        saving = true;
+        message = null;
+        try
+        {
+            if (isFavourite)
+            {
+                await Favourites.RemoveAsync(TrackId);
+                isFavourite = false;
+            }
+            else
+            {
+                await Favourites.AddAsync(TrackId);
+                isFavourite = true;
+            }
+        }
+        catch (UnauthorizedAccessException)
+        {
+            signedIn = false;
+        }
+        catch (InvalidOperationException exception)
+        {
+            message = exception.Message;
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Unable to update favourite status for track {TrackId}", TrackId);
+            message = "Could not update favourites. Please try again.";
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+}

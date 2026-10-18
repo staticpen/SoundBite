@@ -74,7 +74,7 @@ public class FeedServiceTests
     }
 
     [Test]
-    public async Task FeedIncludesReplyContextAndVisibleLikeTargetsButHidesPrivatePlaylistLikes()
+    public async Task FeedIncludesReplyContextAndVisibleLikeTargets()
     {
         await using (var db = factory.CreateDbContext())
         {
@@ -91,20 +91,12 @@ public class FeedServiceTests
                 CreatedAt = now.AddSeconds(1)
             };
             db.Comments.Add(reply);
-            var playlists = new[]
-            {
-                new Playlist { OwnerId = "carol", Name = "Public playlist", IsPublic = true },
-                new Playlist { OwnerId = "carol", Name = "Private playlist", IsPublic = false }
-            };
-            db.Playlists.AddRange(playlists);
             await db.SaveChangesAsync();
 
             db.Likes.AddRange(
                 new Like { UserId = "bob", ReviewId = await db.Reviews.Where(review => review.UserId == "alice").Select(review => review.Id).SingleAsync(), CreatedAt = now.AddSeconds(5) },
                 new Like { UserId = "bob", CommentId = reply.Id, CreatedAt = now.AddSeconds(4) },
-                new Like { UserId = "bob", TrackId = aliceTrack.Id, CreatedAt = now.AddSeconds(3) },
-                new Like { UserId = "bob", PlaylistId = playlists[0].Id, CreatedAt = now.AddSeconds(2) },
-                new Like { UserId = "bob", PlaylistId = playlists[1].Id, CreatedAt = now.AddSeconds(6) });
+                new Like { UserId = "bob", TrackId = aliceTrack.Id, CreatedAt = now.AddSeconds(3) });
             await db.SaveChangesAsync();
         }
 
@@ -118,13 +110,10 @@ public class FeedServiceTests
             {
                 LikeTargetType.Review,
                 LikeTargetType.Comment,
-                LikeTargetType.Track,
-                LikeTargetType.Playlist
+                LikeTargetType.Track
             }));
         Assert.That(likes[0].TargetUserName, Is.EqualTo("alice"));
         Assert.That(likes[1].ParentUserName, Is.EqualTo("bob"));
-        Assert.That(likes[3].PlaylistName, Is.EqualTo("Public playlist"));
-        Assert.That(likes.Any(item => item.PlaylistName == "Private playlist"), Is.False);
     }
 
     [Test]
