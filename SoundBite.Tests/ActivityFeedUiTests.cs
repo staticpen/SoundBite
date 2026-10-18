@@ -38,7 +38,7 @@ public class ActivityFeedUiTests
     {
         await RenderAsync(null, async renderer =>
         {
-            var root = await renderer.RenderComponentAsync<Home>();
+            var root = await renderer.RenderComponentAsync<ActivityFeed>();
             Assert.That(root.ToHtmlString(), Does.Contain("Log in").And.Contain("Activity Feed"));
         });
     }

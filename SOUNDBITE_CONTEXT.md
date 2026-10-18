@@ -203,7 +203,9 @@ Each user has one private favourites list. Users should be able to:
 
 A track must not appear more than once in a user's favourites list.
 
-Use appropriate database constraints and service-level validation to enforce this rule. When upgrading from playlists, combine all tracks owned by a user into that user's single Favourites list.
+Use appropriate database constraints and service-level validation to enforce this rule.
+
+Playlists are not a current feature. The former Playlists feature was replaced by the `20261018072907_ReplacePlaylistsWithFavourites` migration. It combined all tracks a user owned across playlists into that user's single Favourites list, deduplicating tracks. It then dropped playlist storage, playlist likes, playlist notifications, and playlist notification opt-outs. Playlist names, descriptions, privacy, ordering, and grouping were not preserved. The `/playlists` route is removed and should return 404. Do not reintroduce playlists without explicit direction.
 
 ### 6.5 Social activity and interactions
 
@@ -253,8 +255,7 @@ Expected entities include:
 - `Album`
 - `Artist`, if required by the catalogue design
 - `Review` or an equivalent track-rating entity
-- `Playlist`
-- A playlist-track join entity, if needed
+- `FavouriteTrack` (one row per user-track pair in the user's private Favourites list)
 - Follow relationships
 - Likes
 - Comments and comment replies
@@ -281,12 +282,14 @@ Do not assume that a track belongs to exactly one album.
 - Enforce uniqueness for the user-track combination.
 - Validate input on the server and use database constraints where appropriate.
 
-### Playlist rules
+### Favourites rules
 
-- A playlist has an owner.
-- A playlist can contain multiple tracks.
-- A track cannot be duplicated within the same playlist.
-- Track ordering should be supported if the product design requires it.
+- Each user has exactly one implicit Favourites list; there is no separate list entity, name, description, or visibility setting.
+- A `FavouriteTrack` references a valid user and a valid track and records when it was added (`AddedAt`). Favourites are listed in the order they were added, oldest first.
+- The composite key on user and track prevents the same track appearing twice in a user's Favourites. The service also reports a duplicate add as a validation failure.
+- Favourites are private. Only the owning user can list, add, or remove their own entries; anonymous users cannot use Favourites.
+- Removing a favourite does not delete the track. Deleting a user or track removes the corresponding favourites.
+- Adding a favourite does not require a rating or review. The global activity feed may show that a user added a track, but never exposes the full list.
 
 ### Social relationship rules
 
@@ -322,7 +325,7 @@ Introduce services where they provide a useful separation of responsibilities. P
 - Account or profile services.
 - Music catalogue services.
 - Review and rating services.
-- Playlist services.
+- Favourites services.
 - Social interaction services.
 - Feed services.
 - Ranking and trend services.
@@ -421,7 +424,8 @@ Test relevant behaviour such as:
 - Valid and invalid ratings.
 - Required ratings and optional review text.
 - Duplicate reviews for the same user and track.
-- Playlist duplicate prevention.
+- Favourites duplicate prevention, privacy between users, and rejection of anonymous or missing-track requests.
+- Upgrade from the historical Playlists schema, preserving each user's playlist tracks as Favourites.
 - Valid and invalid follow relationships.
 - Duplicate likes.
 - Authorization and access control.

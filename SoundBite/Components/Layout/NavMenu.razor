@@ -9,73 +9,74 @@
 @inject NavigationManager Navigation
 @inject ILogger<NavMenu> Logger
 
-<div class="top-row ps-3 navbar navbar-dark">
-    <div class="container-fluid">
-        <a class="navbar-brand" href="">SoundBite</a>
-    </div>
-</div>
+<header class="site-header">
+    <nav class="site-nav container-xxl" aria-label="Main">
+        <a class="brand" href="/" aria-label="SoundBite home">
+            <img class="brand-logo" src="@Assets["images/soundbite-logo.png"]" alt="" width="160" height="40" />
+        </a>
 
-<input type="checkbox" title="Navigation menu" class="navbar-toggler" />
+        <button type="button" class="nav-toggle" data-site-nav-toggle
+                aria-controls="site-nav-menu" aria-expanded="false" aria-label="Toggle navigation menu">
+            <span class="nav-toggle-icon" aria-hidden="true"></span>
+        </button>
 
-<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
-    <nav class="nav flex-column">
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
-                <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
-            </NavLink>
-        </div>
+        <div id="site-nav-menu" class="nav-menu">
+            <ul class="nav-links">
+                <li>
+                    <NavLink class="nav-link" href="search">Search</NavLink>
+                </li>
+                @if (signedIn)
+                {
+                    <li>
+                        <NavLink class="nav-link" href="rankings">Ratings and Trends</NavLink>
+                    </li>
+                    <li>
+                        <NavLink class="nav-link" href="favourites">Favourites</NavLink>
+                    </li>
+                }
+            </ul>
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="search">
-                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Search
-            </NavLink>
-        </div>
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="rankings">
-                <span class="bi bi-bar-chart-fill" aria-hidden="true"></span> Ratings and Trends
-            </NavLink>
-        </div>
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="favourites">
-                <span class="bi bi-heart-fill" aria-hidden="true"></span> Favourites
-            </NavLink>
-        </div>
-        <div class="nav-item px-3">
-            @if (!signedIn)
-            {
-                <NavLink class="nav-link" href="register">Create account</NavLink>
-                <NavLink class="nav-link" href="login">Log in</NavLink>
-            }
-            else
-            {
-                <details class="account-menu">
-                <summary class="nav-link" @onclick:stopPropagation="true">
-                    <span class="bi bi-person-circle-nav-menu" aria-hidden="true"></span> Account
-                </summary>
-                <div class="account-menu-links">
-                    <NavLink class="nav-link" href="account">Edit Profile</NavLink>
-                    <NavLink class="nav-link" href="notifications">
-                        Notifications
-                        @if (signedIn && notificationCount is int unread && unread > 0)
-                        {
-                            <span class="badge text-bg-primary ms-1" aria-label="@($"{unread} unread notifications")">@unread</span>
-                        }
-                        else if (signedIn && notificationCountFailed)
-                        {
-                            <span class="badge text-bg-warning ms-1" title="Unread notification count unavailable">!</span>
-                        }
-                    </NavLink>
-                    <AuthorizeView Roles="Administrator">
-                        <Authorized>
-                            <NavLink class="nav-link" href="admin/users">Admin</NavLink>
-                        </Authorized>
-                    </AuthorizeView>
-                </div>
-            </details>
-            }
+            <div class="nav-account">
+                @if (!signedIn)
+                {
+                    <NavLink class="nav-link" href="register">Create account</NavLink>
+                    <NavLink class="btn btn-primary nav-cta" href="login">Log in</NavLink>
+                }
+                else
+                {
+                    <details class="account-menu" data-account-menu>
+                        <summary class="nav-link">Account</summary>
+                        <div class="account-menu-links">
+                            <NavLink class="nav-link" href="account">Edit Profile</NavLink>
+                            <NavLink class="nav-link" href="notifications">
+                                Notifications
+                                @if (signedIn && notificationCount is int unread && unread > 0)
+                                {
+                                    <span class="badge text-bg-primary ms-1" aria-label="@($"{unread} unread notifications")">@unread</span>
+                                }
+                                else if (signedIn && notificationCountFailed)
+                                {
+                                    <span class="badge text-bg-warning ms-1" title="Unread notification count unavailable">!</span>
+                                }
+                            </NavLink>
+                            <AuthorizeView Roles="Administrator">
+                                <Authorized>
+                                    <NavLink class="nav-link" href="admin/users">Admin</NavLink>
+                                </Authorized>
+                            </AuthorizeView>
+                            <AuthorizeView>
+                                <form method="post" action="/account/logout" class="account-logout">
+                                    <AntiforgeryToken />
+                                    <button type="submit" class="btn btn-outline-secondary btn-sm">Log out</button>
+                                </form>
+                            </AuthorizeView>
+                        </div>
+                    </details>
+                }
+            </div>
         </div>
     </nav>
-</div>
+</header>
 
 @code {
     private bool signedIn;
