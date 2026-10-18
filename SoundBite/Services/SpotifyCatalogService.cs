@@ -43,7 +43,7 @@ public sealed class SpotifyCatalogService(
             throw new ArgumentException("The Spotify artist metadata is incomplete.", nameof(artist));
 
         var albums = await GetAllPagesAsync<SpotifyAlbumItem>(
-            $"artists/{Uri.EscapeDataString(artist.SpotifyId)}/albums?include_groups=album&limit=50",
+            $"artists/{Uri.EscapeDataString(artist.SpotifyId)}/albums?include_groups=album&limit=10",
             cancellationToken);
         var catalogueAlbums = new List<SpotifyAlbumCatalogue>(albums.Count);
 

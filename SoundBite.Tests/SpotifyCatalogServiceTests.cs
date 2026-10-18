@@ -71,14 +71,14 @@ public class SpotifyCatalogServiceTests
 
             if (LastSearchPathAndQuery?.StartsWith("/v1/artists/artist-1/albums", StringComparison.Ordinal) == true)
             {
-                if (LastSearchPathAndQuery.Contains("offset=50", StringComparison.Ordinal))
+                if (LastSearchPathAndQuery.Contains("offset=10", StringComparison.Ordinal))
                 {
                     return Task.FromResult(JsonResponse(
                         """{"items":[{"id":"album-2","name":"Second album","artists":[{"id":"artist-1","name":"Artist one"}]}],"next":null}"""));
                 }
 
                 return Task.FromResult(JsonResponse(
-                    """{"items":[{"id":"album-1","name":"First album","artists":[{"id":"artist-1","name":"Artist one"}]}],"next":"https://api.spotify.com/v1/artists/artist-1/albums?include_groups=album&limit=50&offset=50"}"""));
+                    """{"items":[{"id":"album-1","name":"First album","artists":[{"id":"artist-1","name":"Artist one"}]}],"next":"https://api.spotify.com/v1/artists/artist-1/albums?include_groups=album&limit=10&offset=10"}"""));
             }
 
             if (LastSearchPathAndQuery?.StartsWith("/v1/albums/album-1/tracks", StringComparison.Ordinal) == true)
@@ -222,6 +222,10 @@ public class SpotifyCatalogServiceTests
         Assert.That(storedArtist.Tracks, Has.Count.EqualTo(2));
         Assert.That(handler.ApiRequests.Count(path => path.Contains("/albums?include_groups=album", StringComparison.Ordinal)),
             Is.EqualTo(2));
+        Assert.That(handler.ApiRequests
+                .Where(path => path.Contains("/albums?include_groups=album", StringComparison.Ordinal))
+                .All(path => path.Contains("limit=10", StringComparison.Ordinal)),
+            Is.True);
     }
 
     [Test]
