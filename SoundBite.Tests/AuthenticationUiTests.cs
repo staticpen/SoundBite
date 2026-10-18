@@ -71,20 +71,42 @@ public class AuthenticationUiTests
             }));
     }
 
+    // Scope navbar assertions to the header so homepage content (hero, feature cards) cannot satisfy them.
+    private static string NavbarOf(string html)
+    {
+        var navbar = Regex.Match(html, "<header class=\"site-header\"[^>]*>.*?</header>", RegexOptions.Singleline);
+        Assert.That(navbar.Success, Is.True, "The page must render the site header navbar.");
+        return navbar.Value;
+    }
+
+    private static string HeroOf(string html)
+    {
+        var hero = Regex.Match(html, "<section id=\"home-hero\".*?</section>", RegexOptions.Singleline);
+        Assert.That(hero.Success, Is.True, "The homepage must render the #home-hero section.");
+        return hero.Value;
+    }
+
     [Test]
     public async Task NavbarShowsDestinationsForSignedOutSignedInAndAdministratorStates()
     {
         var signedOut = await client.GetStringAsync("/");
-        Assert.That(signedOut, Does.Contain("href=\"search\"").And.Contain("href=\"feed\"")
-            .And.Contain("href=\"rankings\"").And.Contain("href=\"playlists\"")
-            .And.Contain("href=\"register\"").And.Contain("href=\"login\"")
+        var signedOutNavbar = NavbarOf(signedOut);
+        Assert.That(signedOutNavbar, Does.Contain("<a href=\"search\" class=\"nav-link\">Search</a>")
+            .And.Contain("<a href=\"register\" class=\"nav-link\">Create account</a>")
+            .And.Contain("<a href=\"login\" class=\"btn btn-primary nav-cta\">Log in</a>")
+            .And.Contain("<a class=\"brand\" href=\"/\" aria-label=\"SoundBite home\"")
             .And.Contain("aria-controls=\"site-nav-menu\"").And.Contain("aria-expanded=\"false\"")
+            .And.Not.Contain(">Home<").And.Not.Contain("href=\"feed\"")
+            .And.Not.Contain("href=\"rankings\"").And.Not.Contain("href=\"playlists\"")
             .And.Not.Contain("/account/logout").And.Not.Contain("admin/users")
-            .And.Not.Contain("href=\"notifications\""));
+            .And.Not.Contain("href=\"notifications\"").And.Not.Contain("soundbite-logo.svg"));
+        Assert.That(Regex.Matches(signedOutNavbar, "class=\"nav-link\"").Count, Is.EqualTo(2),
+            "Only Search and Create account are secondary links; Log in is the primary button.");
+        Assert.That(signedOut, Does.Not.Contain("/account/logout"));
 
         foreach (var (pattern, description) in new[]
         {
-            ("src=\"([^\"]*soundbite-logo[^\"]*\\.svg)\"", "logo"),
+            ("src=\"([^\"]*soundbite-logo[^\"]*\\.png)\"", "logo"),
             ("src=\"([^\"]*site-nav[^\"]*\\.js)\"", "navbar script")
         })
         {
@@ -95,11 +117,18 @@ public class AuthenticationUiTests
         }
 
         await Register();
-        var signedIn = await client.GetStringAsync("/");
-        Assert.That(signedIn, Does.Contain("href=\"account\"").And.Contain("href=\"notifications\"")
+        var signedInHome = await client.GetStringAsync("/");
+        var signedIn = NavbarOf(signedInHome);
+        Assert.That(signedIn, Does.Contain("href=\"search\" class=\"nav-link\">Search</a>")
+            .And.Contain("href=\"feed\" class=\"nav-link\">Activity Feed</a>")
+            .And.Contain("href=\"rankings\" class=\"nav-link\">Ratings and Trends</a>")
+            .And.Contain("href=\"playlists\" class=\"nav-link\">Playlists</a>")
+            .And.Contain(">Account</summary>")
+            .And.Contain("href=\"account\" class=\"nav-link\">Edit Profile</a>").And.Contain("href=\"notifications\"")
             .And.Contain("action=\"/account/logout\"").And.Contain(">Log out</button>")
-            .And.Not.Contain("href=\"register\"").And.Not.Contain("href=\"login\"")
-            .And.Not.Contain("admin/users"));
+            .And.Contain("btn-outline-secondary").And.Not.Contain("btn-outline-light")
+            .And.Not.Contain(">Home<").And.Not.Contain("href=\"register\"")
+            .And.Not.Contain("href=\"login\"").And.Not.Contain("admin/users"));
 
         using (var scope = app.Services.CreateScope())
         {
@@ -116,8 +145,32 @@ public class AuthenticationUiTests
         await Logout();
         var login = await PostForm("/login", "login", ("loginModel.UserNameOrEmail", "authuser"), ("loginModel.Password", "TestPass123!"));
         Assert.That(login.StatusCode, Is.EqualTo(HttpStatusCode.Redirect));
-        Assert.That(await client.GetStringAsync("/"), Does.Contain("href=\"admin/users\"")
+        Assert.That(NavbarOf(await client.GetStringAsync("/")), Does.Contain("href=\"admin/users\"")
             .And.Contain("action=\"/account/logout\""));
+    }
+
+    [Test]
+    public async Task HomepageHeroPromotesLogInWhenSignedOutAndCatalogueSearchWhenSignedIn()
+    {
+        var signedOutHero = HeroOf(await client.GetStringAsync("/"));
+        Assert.That(signedOutHero, Does.Contain("<a class=\"btn btn-primary btn-lg\" href=\"/login\">Log in</a>")
+            .And.Contain("href=\"/register\">Create account</a>")
+            .And.Not.Contain("Search the catalogue"));
+
+        await Register();
+        var signedInHero = HeroOf(await client.GetStringAsync("/"));
+        Assert.That(signedInHero, Does.Contain("Welcome, authuser.")
+            .And.Contain("<a class=\"btn btn-primary btn-lg\" href=\"/search\">Search the catalogue</a>")
+            .And.Not.Contain("href=\"/login\""));
+    }
+
+    [TestCase("/search")]
+    [TestCase("/rankings")]
+    [TestCase("/playlists")]
+    public async Task DestinationsHiddenFromTheSignedOutNavbarRemainPublic(string path)
+    {
+        var response = await client.GetAsync(path);
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
     }
 
     [TestCase("/missing-net9-page")]

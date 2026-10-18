@@ -11,9 +11,8 @@
 
 <header class="site-header">
     <nav class="site-nav container-xxl" aria-label="Main">
-        <a class="brand" href="">
-            <img class="brand-logo" src="@Assets["images/soundbite-logo.svg"]" alt="" width="32" height="32" />
-            <span class="brand-name">SoundBite</span>
+        <a class="brand" href="/" aria-label="SoundBite home">
+            <img class="brand-logo" src="@Assets["images/soundbite-logo.png"]" alt="" width="160" height="40" />
         </a>
 
         <button type="button" class="nav-toggle" data-site-nav-toggle
@@ -24,27 +23,27 @@
         <div id="site-nav-menu" class="nav-menu">
             <ul class="nav-links">
                 <li>
-                    <NavLink class="nav-link" href="" Match="NavLinkMatch.All">Home</NavLink>
-                </li>
-                <li>
                     <NavLink class="nav-link" href="search">Search</NavLink>
                 </li>
-                <li>
-                    <NavLink class="nav-link" href="feed">Activity Feed</NavLink>
-                </li>
-                <li>
-                    <NavLink class="nav-link" href="rankings">Ratings and Trends</NavLink>
-                </li>
-                <li>
-                    <NavLink class="nav-link" href="playlists">Playlists</NavLink>
-                </li>
+                @if (signedIn)
+                {
+                    <li>
+                        <NavLink class="nav-link" href="feed">Activity Feed</NavLink>
+                    </li>
+                    <li>
+                        <NavLink class="nav-link" href="rankings">Ratings and Trends</NavLink>
+                    </li>
+                    <li>
+                        <NavLink class="nav-link" href="playlists">Playlists</NavLink>
+                    </li>
+                }
             </ul>
 
             <div class="nav-account">
                 @if (!signedIn)
                 {
                     <NavLink class="nav-link" href="register">Create account</NavLink>
-                    <NavLink class="nav-link" href="login">Log in</NavLink>
+                    <NavLink class="btn btn-primary nav-cta" href="login">Log in</NavLink>
                 }
                 else
                 {
@@ -71,7 +70,7 @@
                             <AuthorizeView>
                                 <form method="post" action="/account/logout" class="account-logout">
                                     <AntiforgeryToken />
-                                    <button type="submit" class="btn btn-outline-light btn-sm">Log out</button>
+                                    <button type="submit" class="btn btn-outline-secondary btn-sm">Log out</button>
                                 </form>
                             </AuthorizeView>
                         </div>
