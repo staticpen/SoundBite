@@ -291,10 +291,11 @@ public class TrackDetailsTests
             Assert.That(html.IndexOf("Open track on Spotify", StringComparison.Ordinal),
                 Is.LessThan(html.IndexOf("Open album on Spotify", StringComparison.Ordinal)));
             Assert.That(html, Does.Contain("aria-label=\"Track social actions\"")
+                .And.Contain("aria-label=\"Review form\"")
                 .And.Contain("class=\"col-12 col-lg-6\"")
-                .And.Contain("id=\"reviews-heading\""));
-            Assert.That(html.IndexOf("id=\"review-form-heading\"", StringComparison.Ordinal),
-                Is.LessThan(html.IndexOf("id=\"reviews-heading\"", StringComparison.Ordinal)));
+                .And.Contain("id=\"reviews-heading\"")
+                .And.Not.Contain("<h1>Track details</h1>")
+                .And.Not.Contain("Your review"));
             Assert.That(catalog.RequestedIds, Is.EqualTo(new[] { 42 }));
         });
     }

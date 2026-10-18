@@ -14,8 +14,6 @@
 
 <PageTitle>@(track?.Title ?? "Track details") - SoundBite</PageTitle>
 
-<h1>Track details</h1>
-
 @if (loading)
 {
     <p role="status">Loading track...</p>
@@ -81,8 +79,7 @@ else
         </div>
 
         <div class="col-12 col-lg-6">
-            <section aria-labelledby="review-form-heading">
-                <h2 id="review-form-heading" class="h4 mb-3">Your review</h2>
+            <section aria-label="Review form">
                 @if (reviewLoadFailed)
                 {
                     <div class="alert alert-danger" role="alert">Reviews couldn't be loaded. Please try again later.</div>
