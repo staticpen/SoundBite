@@ -15,7 +15,7 @@
 }
 else if (!signedIn)
 {
-    <p><a href="/login">Log in</a> or <a href="/register">sign up</a> to see recent reviews and comments from people you follow.</p>
+    <p><a href="/login">Log in</a> or <a href="/register">sign up</a> to see recent community activity.</p>
 }
 else if (loadFailed)
 {
@@ -23,14 +23,14 @@ else if (loadFailed)
 }
 else if (items.Count == 0)
 {
-    <p class="text-muted">No recent activity yet. Follow people and explore their reviews.</p>
+    <p class="text-muted">No recent community activity yet.</p>
 }
 else
 {
     <div class="list-group">
         @foreach (var item in items)
         {
-            <article class="list-group-item" @key="(item.Type, item.Id)">
+            <article class="list-group-item" @key="(item.Type, item.Id, item.UserName)">
                 <p class="mb-1">
                     <a href="@($"/users/{Uri.EscapeDataString(item.UserName)}")">@item.ActorName</a>
                     @if (item.Type == ActivityType.Review)
@@ -50,6 +50,10 @@ else
                             <span> commented on a review of </span>
                         }
                     }
+                    else if (item.Type == ActivityType.Favourite)
+                    {
+                        <span> added </span>
+                    }
                     else if (item.TargetType == LikeTargetType.Track)
                     {
                         <span> liked the track </span>
@@ -63,6 +67,10 @@ else
                     @if (item.TrackId is int trackId && item.TrackTitle is not null)
                     {
                         <a href="@($"/tracks/{trackId}{(item.ReviewId is int reviewId ? $"#review-{reviewId}" : string.Empty)}")">@item.TrackTitle</a>
+                        @if (item.Type == ActivityType.Favourite)
+                        {
+                            <span> to Favourites</span>
+                        }
                     }
                     @if (item.Rating is int rating)
                     {

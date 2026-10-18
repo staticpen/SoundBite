@@ -28,14 +28,7 @@ public sealed class FeedService(
         if (!await db.Users.AnyAsync(user => user.Id == actorId, cancellationToken))
             throw new UnauthorizedAccessException("Your account is no longer available.");
 
-        var userIds = await db.Follows
-            .Where(follow => follow.FollowerId == actorId)
-            .Select(follow => follow.FollowingId)
-            .ToListAsync(cancellationToken);
-        userIds.Add(actorId);
-
         IQueryable<ActivityRow> rows = db.Reviews.AsNoTracking()
-            .Where(review => userIds.Contains(review.UserId))
             .Select(review => new ActivityRow
             {
                 Type = (int)ActivityType.Review,
@@ -57,7 +50,6 @@ public sealed class FeedService(
             });
 
         rows = rows.Concat(db.Comments.AsNoTracking()
-            .Where(comment => userIds.Contains(comment.UserId))
             .Select(comment => new ActivityRow
             {
                 Type = (int)ActivityType.Comment,
@@ -79,7 +71,7 @@ public sealed class FeedService(
             }));
 
         rows = rows.Concat(db.Likes.AsNoTracking()
-            .Where(like => userIds.Contains(like.UserId) && like.ReviewId != null)
+            .Where(like => like.ReviewId != null)
             .Select(like => new ActivityRow
             {
                 Type = (int)ActivityType.Like,
@@ -101,7 +93,7 @@ public sealed class FeedService(
             }));
 
         rows = rows.Concat(db.Likes.AsNoTracking()
-            .Where(like => userIds.Contains(like.UserId) && like.CommentId != null)
+            .Where(like => like.CommentId != null)
             .Select(like => new ActivityRow
             {
                 Type = (int)ActivityType.Like,
@@ -123,7 +115,7 @@ public sealed class FeedService(
             }));
 
         rows = rows.Concat(db.Likes.AsNoTracking()
-            .Where(like => userIds.Contains(like.UserId) && like.TrackId != null)
+            .Where(like => like.TrackId != null)
             .Select(like => new ActivityRow
             {
                 Type = (int)ActivityType.Like,
@@ -144,8 +136,32 @@ public sealed class FeedService(
                 ParentDisplayName = null,
             }));
 
+        rows = rows.Concat(db.FavouriteTracks.AsNoTracking()
+            .Select(favourite => new ActivityRow
+            {
+                Type = (int)ActivityType.Favourite,
+                Id = favourite.TrackId,
+                ReviewId = null,
+                UserName = favourite.User!.UserName!,
+                DisplayName = favourite.User.DisplayName,
+                TrackId = favourite.Track!.Id,
+                TrackTitle = favourite.Track.Title,
+                Rating = null,
+                Content = string.Empty,
+                CreatedAt = favourite.AddedAt,
+                TargetType = null,
+                TargetUserName = null,
+                TargetDisplayName = null,
+                ParentCommentId = null,
+                ParentUserName = null,
+                ParentDisplayName = null
+            }));
+
         var results = await rows
-            .OrderByDescending(item => item.CreatedAt).ThenByDescending(item => item.Type).ThenByDescending(item => item.Id)
+            .OrderByDescending(item => item.CreatedAt)
+            .ThenByDescending(item => item.Type)
+            .ThenByDescending(item => item.Id)
+            .ThenBy(item => item.UserName)
             .Skip(page * PageSize)
             .Take(PageSize + 1)
             .ToListAsync(cancellationToken);

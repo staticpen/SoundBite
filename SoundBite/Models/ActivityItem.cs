@@ -4,7 +4,8 @@ public enum ActivityType
 {
     Review,
     Comment,
-    Like
+    Like,
+    Favourite
 }
 
 public sealed record ActivityItem(

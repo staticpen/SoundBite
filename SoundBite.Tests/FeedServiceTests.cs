@@ -58,19 +58,63 @@ public class FeedServiceTests
     public async Task TearDown() => await connection.DisposeAsync();
 
     [Test]
-    public async Task FeedContainsOwnAndFollowedReviewsAndCommentsInNewestFirstOrder()
+    public async Task FeedContainsReviewsAndCommentsFromAllUsersInNewestFirstOrder()
     {
         var result = await service.GetPageAsync();
         Assert.That(result.HasNext, Is.False);
         Assert.That(result.Items.Select(item => item.Type),
-            Is.EqualTo(new[] { ActivityType.Comment, ActivityType.Review, ActivityType.Review }));
+            Is.EqualTo(new[] { ActivityType.Comment, ActivityType.Review, ActivityType.Review, ActivityType.Review }));
         Assert.That(result.Items.Select(item => item.UserName),
-            Is.EqualTo(new[] { "bob", "bob", "alice" }));
+            Is.EqualTo(new[] { "bob", "carol", "bob", "alice" }));
         Assert.That(result.Items.Select(item => item.TrackTitle),
-            Is.EqualTo(new[] { "Bob's track", "Bob's track", "Alice's track" }));
+            Is.EqualTo(new[] { "Bob's track", "Carol's track", "Bob's track", "Alice's track" }));
         Assert.That(result.Items[0].Content, Is.EqualTo("Bob commented"));
-        Assert.That(result.Items[0].ReviewId, Is.EqualTo(result.Items[1].ReviewId));
-        Assert.That(result.Items.Any(item => item.UserName == "carol"), Is.False);
+        Assert.That(result.Items[0].ReviewId, Is.EqualTo(result.Items[2].ReviewId));
+        Assert.That(result.Items.Any(item => item.UserName == "carol"), Is.True);
+    }
+
+    [Test]
+    public async Task FeedIncludesLikesAndFavouriteAddsFromUsersNotFollowed()
+    {
+        await using (var db = factory.CreateDbContext())
+        {
+            var bobTrackId = await db.Tracks.Where(track => track.Title == "Bob's track")
+                .Select(track => track.Id).SingleAsync();
+            var carolTrackId = await db.Tracks.Where(track => track.Title == "Carol's track")
+                .Select(track => track.Id).SingleAsync();
+            db.Likes.Add(new Like
+            {
+                UserId = "carol",
+                TrackId = bobTrackId,
+                CreatedAt = DateTime.UtcNow.AddSeconds(2)
+            });
+            db.FavouriteTracks.Add(new FavouriteTrack
+            {
+                UserId = "carol",
+                TrackId = carolTrackId,
+                AddedAt = DateTime.UtcNow.AddSeconds(1)
+            });
+            db.FavouriteTracks.Add(new FavouriteTrack
+            {
+                UserId = "bob",
+                TrackId = carolTrackId,
+                AddedAt = DateTime.UtcNow.AddSeconds(1)
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var result = await service.GetPageAsync();
+        Assert.That(result.Items[0].Type, Is.EqualTo(ActivityType.Like));
+        Assert.That(result.Items[0].UserName, Is.EqualTo("carol"));
+        Assert.That(result.Items[0].TargetType, Is.EqualTo(LikeTargetType.Track));
+
+        var favourite = result.Items.Single(item =>
+            item.Type == ActivityType.Favourite && item.UserName == "carol");
+        Assert.That(favourite.UserName, Is.EqualTo("carol"));
+        Assert.That(favourite.TrackTitle, Is.EqualTo("Carol's track"));
+        Assert.That(favourite.Content, Is.Empty);
+        Assert.That(result.Items.Where(item => item.Type == ActivityType.Favourite)
+            .Select(item => (item.Id, item.UserName)).Distinct().Count(), Is.EqualTo(2));
     }
 
     [Test]
@@ -152,11 +196,11 @@ public class FeedServiceTests
         var second = await service.GetPageAsync(1);
         Assert.That(first.Items, Has.Count.EqualTo(FeedService.PageSize));
         Assert.That(first.HasNext, Is.True);
-        Assert.That(second.Items, Has.Count.EqualTo(7));
+        Assert.That(second.Items, Has.Count.EqualTo(8));
         Assert.That(second.HasNext, Is.False);
         var allItems = first.Items.Concat(second.Items).ToArray();
-        Assert.That(allItems, Has.Length.EqualTo(FeedService.PageSize + 7));
-        Assert.That(allItems.Select(item => (item.Type, item.Id)).Distinct().Count(), Is.EqualTo(allItems.Length));
+        Assert.That(allItems, Has.Length.EqualTo(FeedService.PageSize + 8));
+        Assert.That(allItems.Select(item => (item.Type, item.Id, item.UserName)).Distinct().Count(), Is.EqualTo(allItems.Length));
         Assert.That(allItems.Count(item => item.Type == ActivityType.Like), Is.EqualTo(3));
     }
 

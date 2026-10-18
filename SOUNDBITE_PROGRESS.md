@@ -22,9 +22,9 @@
 
 - **Overall status:** In progress
 - **Current development phase:** Feature updates and validation
-- **Current focus:** Verify the production Favourites migration and finalize local UI follow-ups
+- **Current focus:** Make the Home activity feed global and show Favourites additions
 - **Last verified:** 2026-10-18
-- **Current blocker:** No production database migration blocker remains: `ReplacePlaylistsWithFavourites` was applied and verified on 2026-10-18 after a private backup. The app does not run migrations at startup. Follow-up Favourites diagnostics and Home layout changes remain uncommitted and require deployment to appear in production. The Spotify album-pagination fix is committed as `55f9a20`; its deployment status still needs confirmation.
+- **Current blocker:** No production database migration blocker remains: `ReplacePlaylistsWithFavourites` was applied and verified on 2026-10-18 after a private backup. The app does not run migrations at startup. Local UI and activity-feed follow-ups are uncommitted and require deployment to appear in production. The Spotify album-pagination fix is committed as `55f9a20`; its deployment status still needs confirmation.
 
 ## 3. Feature Implementation Tracker
 
@@ -39,15 +39,21 @@
 | Favourites | Implemented — production migration and Spotify fallback verified | Each user has one private list. Tracks can be added from search, track details, or the Favourites page; the page supports local catalogue search and, on a track miss, Spotify artist search/import before offering imported tracks to add. Ratings and reviews are not required to save a track. The production migration preserved the existing playlist track in `FavouriteTracks` and removed the playlist tables. |
 | Following and followers | Implemented — verified | Authenticated idempotent follow/unfollow, public counts and expandable 10-user pages; database constraints, concurrent requests, account deletion and browser flows verified. Merged into `main` at `ac92cbe`. |
 | Likes and comments | Implemented — verified | Signed-in users can idempotently like reviews, tracks, and comments. Users can add/edit/delete their own review comments and reply one level deep to top-level comments. Replies are grouped under parents, cannot be nested further, and are preserved as top-level comments if their parent is deleted. |
-| Activity feed | Implemented — shown on Home | Home renders a globally ordered and paginated feed of reviews, comments/replies, and likes by followed users and the signed-in user. The standalone Activity Feed navigation item and route are removed. |
+| Activity feed | Implemented — global signed-in feed shown on Home | Home renders globally ordered, paginated reviews, comments/replies, likes, and Favourites additions from all users to signed-in viewers, regardless of follow relationships. Favourite-list contents remain private. The standalone Activity Feed navigation item and route are removed. |
 | Notifications | Implemented — verified | In addition to recipient-scoped notifications, `/notifications` uses keyset paging to load older items without duplicates; unread counts and read-state behavior remain independent of the displayed page. Users can persist per-category opt-outs from `/notifications/settings`, affecting future notifications only. Paging, authorization, read state, preference persistence/isolation, and UI behavior are covered by tests. The single-instance event dispatcher updates active recipient circuits; navigation and reconnection reload persisted state. |
 | Rankings and trends | Implemented — verified in isolated SQLite tests | `/rankings` shows top-rated tracks (minimum two reviews), most-reviewed tracks overall, and tracks with the most reviews in the last seven days. Separately stored, labelled sample reviews can populate these lists without masquerading as community reviews. |
 | Navigation and home | Implemented — focused tests passed | Home, Search, Ratings and Trends, Favourites, Account. The former home cards are removed and activity appears below the personalized welcome. Account opens a dropdown with Edit Profile, Notifications, and role-gated Admin. |
 | Administrative user management | Implemented — verified | `/admin/users` supports user search/paging, account lock/unlock, and admin-role grants/revocation. Every service operation checks live role membership and lockout state server-side. The front-end label is “Admin.” |
-| Automated tests | Passed — verified | Full NUnit suite passed **270/270** on 2026-10-18. Focused Favourites, migration, feed, navigation, and notification tests passed **40/40** in the latest diagnostic pass. |
+| Automated tests | Passed — verified | Full NUnit suite passed **273/273** on 2026-10-18 after adding the global Home feed and Favourites activity. Earlier focused Favourites, migration, feed, navigation, and notification tests passed **40/40**. |
 | Git and repository hygiene | In progress | `main` is at `f0f2600` (`Removed Playlists, repurposed to Favourites`) and synchronized with `origin/main`; follow-up Home layout and migration diagnostics are uncommitted. |
 
 ## 4. Latest Completed Work
+
+### 2026-10-18 — Expanded Home activity feed to all users and Favourites additions
+
+- **Change:** The signed-in Home feed now includes recent reviews, comments/replies, and likes from every user, not only followed accounts. Adding a track to Favourites creates a visible activity entry without exposing the user's full private list. Feed paging uses deterministic tie-breaking and UI keys include the actor so two users favouriting the same track render as distinct entries.
+- **Verification:** `FeedServiceTests` and `ActivityFeedUiTests` passed **7/7**, including activity by users not followed and multiple users adding the same track to Favourites. The full NUnit suite passed **273/273**; `git diff --check` passed.
+- **Deployment:** Local source change only; not deployed.
 
 ### 2026-10-18 — Added Spotify artist fallback to Favourites track search
 

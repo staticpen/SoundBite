@@ -209,8 +209,9 @@ Use appropriate database constraints and service-level validation to enforce thi
 
 The social layer should support:
 
-- A feed of relevant user activity.
+- A signed-in user's global feed of recent activity from all users, regardless of follow relationships.
 - Recent reviews, ratings, and other supported music-related actions.
+- Activity entries when users like music or add a track to Favourites; the Favourites list itself remains private.
 - Likes on reviews, comments, and tracks.
 - Comments on reviews.
 - Replies to comments, where supported by the final data model.
