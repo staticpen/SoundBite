@@ -149,7 +149,7 @@
                             <div class="mt-2">
                                 @if (signedIn && favouriteTrackIds is null)
                                 {
-                                    <span class="text-danger small" role="alert">Favourites are unavailable.</span>
+                                    <span class="text-danger small" role="alert">@favouritesError</span>
                                 }
                                 else
                                 {
@@ -209,6 +209,7 @@
     private string? addingArtistId;
     private string? accountPromptArtist;
     private int favouriteStatusVersion;
+    private string favouritesError = "Favourites are unavailable.";
 
     protected override async Task OnInitializedAsync()
     {
@@ -240,6 +241,7 @@
         accountPromptArtist = null;
         spotifyArtists = null;
         favouriteTrackIds = [];
+        favouritesError = "Favourites are unavailable.";
         favouriteStatusVersion++;
         if (searchedQuery.Length == 0)
             return;
@@ -258,6 +260,8 @@
                 {
                     Logger.LogError(exception, "Unable to load the user's favourite track IDs");
                     favouriteTrackIds = null;
+                    if (FavouriteService.IsStorageNotMigrated(exception))
+                        favouritesError = "Favourites database update required. Ask the administrator to apply the latest migration.";
                 }
             }
             if (results.TotalCount == 0)

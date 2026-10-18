@@ -11,7 +11,7 @@
 }
 else if (loadFailed)
 {
-    <span class="text-danger small" role="alert">Favourites unavailable.</span>
+    <span class="text-danger small" role="alert">@loadErrorMessage</span>
 }
 else
 {
@@ -35,6 +35,7 @@ else
     private bool loading = true;
     private bool saving;
     private bool loadFailed;
+    private string loadErrorMessage = "Favourites are unavailable.";
     private string? message;
     private int lastTrackId = -1;
     private int lastStatusVersion = -1;
@@ -45,6 +46,7 @@ else
         signedIn = principal.Identity?.IsAuthenticated == true &&
             !string.IsNullOrWhiteSpace(principal.FindFirstValue(ClaimTypes.NameIdentifier));
         loadFailed = false;
+        loadErrorMessage = "Favourites are unavailable.";
         message = null;
         if (!signedIn)
         {
@@ -73,6 +75,8 @@ else
         {
             Logger.LogError(exception, "Unable to check favourite status for track {TrackId}", TrackId);
             loadFailed = true;
+            if (FavouriteService.IsStorageNotMigrated(exception))
+                loadErrorMessage = "Favourites database update required. Ask the administrator to apply the latest migration.";
         }
         finally
         {

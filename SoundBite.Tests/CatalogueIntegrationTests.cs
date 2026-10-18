@@ -172,6 +172,7 @@ public class CatalogueIntegrationTests
             Assert.That(html, Does.Contain("Discover music")
                 .And.Contain("href=\"/search\"")
                 .And.Contain("Activity Feed")
+                .And.Contain("col-lg-6")
                 .And.Not.Contain("Browse music")
                 .And.Not.Contain("Discover playlists")
                 .And.Not.Contain("Join the community")

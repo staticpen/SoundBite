@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using SoundBite.Data;
 using SoundBite.Models;
@@ -10,6 +11,18 @@ public sealed class FavouriteService(
     IDbContextFactory<ApplicationDbContext> contextFactory,
     AuthenticationStateProvider authenticationStateProvider)
 {
+    public static bool IsStorageNotMigrated(Exception exception)
+    {
+        for (Exception? current = exception; current is not null; current = current.InnerException)
+        {
+            if (current is SqliteException { SqliteErrorCode: 1 } sqliteException &&
+                sqliteException.Message.Contains("no such table: FavouriteTracks", StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return false;
+    }
+
     public async Task<IReadOnlyList<FavouriteTrack>> GetMineAsync(
         CancellationToken cancellationToken = default)
     {

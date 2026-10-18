@@ -104,6 +104,22 @@ public class FavouriteServiceTests
         Assert.That(((SqliteException)exception!.InnerException!).SqliteExtendedErrorCode, Is.EqualTo(1555));
     }
 
+    [Test]
+    public async Task MissingFavouritesTableIsIdentifiedAsAnUnappliedMigration()
+    {
+        await using var uninitializedConnection = new SqliteConnection("DataSource=:memory:");
+        await uninitializedConnection.OpenAsync();
+        SqliteException exception;
+        await using (var command = uninitializedConnection.CreateCommand())
+        {
+            command.CommandText = "SELECT * FROM FavouriteTracks";
+            exception = Assert.ThrowsAsync<SqliteException>(async () => await command.ExecuteReaderAsync())!;
+        }
+
+        Assert.That(FavouriteService.IsStorageNotMigrated(exception), Is.True);
+        Assert.That(FavouriteService.IsStorageNotMigrated(new InvalidOperationException("Other failure")), Is.False);
+    }
+
     private sealed class Factory(DbContextOptions<ApplicationDbContext> options)
         : IDbContextFactory<ApplicationDbContext>
     {

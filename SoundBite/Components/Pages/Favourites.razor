@@ -25,7 +25,7 @@ else if (!signedIn)
 }
 else if (loadFailed)
 {
-    <div class="alert alert-danger" role="alert">Your favourites couldn't be loaded. Please try again later.</div>
+    <div class="alert alert-danger" role="alert">@loadErrorMessage</div>
 }
 else if (items.Count == 0)
 {
@@ -130,6 +130,7 @@ else
     private bool busy;
     private int? addingTrackId;
     private string? message;
+    private string loadErrorMessage = "Your favourites couldn't be loaded. Please try again later.";
 
     protected override async Task OnInitializedAsync()
     {
@@ -149,6 +150,7 @@ else
     {
         loading = true;
         loadFailed = false;
+        loadErrorMessage = "Your favourites couldn't be loaded. Please try again later.";
         try
         {
             items.Clear();
@@ -158,6 +160,8 @@ else
         {
             Logger.LogError(exception, "Unable to load favourites for user {UserId}", userId);
             loadFailed = true;
+            if (FavouriteService.IsStorageNotMigrated(exception))
+                loadErrorMessage = "The Favourites database update hasn't been applied yet. Ask the administrator to apply the latest migration.";
         }
         finally
         {
