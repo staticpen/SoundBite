@@ -6,4 +6,5 @@ public sealed class TrackRankingEntry
     public string Title { get; init; } = string.Empty;
     public int ReviewCount { get; init; }
     public double AverageRating { get; init; }
+    public int DemoReviewCount { get; init; }
 }

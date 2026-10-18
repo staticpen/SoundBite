@@ -26,14 +26,18 @@
         </div>
 
         <div class="nav-item px-3">
-            <NavLink class="nav-link" href="account">
-                <span class="bi bi-person-circle-nav-menu" aria-hidden="true"></span> Account
-            </NavLink>
-        </div>
-
-        <div class="nav-item px-3">
             <NavLink class="nav-link" href="search">
                 <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Search
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="feed">
+                <span class="bi bi-activity" aria-hidden="true"></span> Activity Feed
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="rankings">
+                <span class="bi bi-bar-chart-fill" aria-hidden="true"></span> Ratings and Trends
             </NavLink>
         </div>
         <div class="nav-item px-3">
@@ -42,40 +46,36 @@
             </NavLink>
         </div>
         <div class="nav-item px-3">
-            <NavLink class="nav-link" href="feed">
-                <span class="bi bi-activity" aria-hidden="true"></span> Activity feed
-            </NavLink>
-        </div>
-        @if (signedIn)
-        {
-            <div class="nav-item px-3">
-                <NavLink class="nav-link" href="notifications">
-                    <span class="bi bi-bell" aria-hidden="true"></span> Notifications
-                    @if (notificationCount is int unread && unread > 0)
-                    {
-                        <span class="badge text-bg-primary ms-1" aria-label="@($"{unread} unread notifications")">@unread</span>
-                    }
-                    else if (notificationCountFailed)
-                    {
-                        <span class="badge text-bg-warning ms-1" title="Unread notification count unavailable">!</span>
-                    }
-                </NavLink>
-            </div>
-        }
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="rankings">
-                <span class="bi bi-bar-chart-fill" aria-hidden="true"></span> Ratings & trends
-            </NavLink>
-        </div>
-        <AuthorizeView Roles="Administrator">
-            <Authorized>
-                <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="admin/users">
-                        <span class="bi bi-shield-lock" aria-hidden="true"></span> Admin users
+            <details class="account-menu">
+                <summary class="nav-link" @onclick:stopPropagation="true">
+                    <span class="bi bi-person-circle-nav-menu" aria-hidden="true"></span> Account
+                </summary>
+                <div class="account-menu-links">
+                    <NavLink class="nav-link" href="account">Edit Profile</NavLink>
+                    <NavLink class="nav-link" href="notifications">
+                        Notifications
+                        @if (signedIn && notificationCount is int unread && unread > 0)
+                        {
+                            <span class="badge text-bg-primary ms-1" aria-label="@($"{unread} unread notifications")">@unread</span>
+                        }
+                        else if (signedIn && notificationCountFailed)
+                        {
+                            <span class="badge text-bg-warning ms-1" title="Unread notification count unavailable">!</span>
+                        }
                     </NavLink>
+                    @if (!signedIn)
+                    {
+                        <NavLink class="nav-link" href="register">Create account</NavLink>
+                        <NavLink class="nav-link" href="login">Log in</NavLink>
+                    }
+                    <AuthorizeView Roles="Administrator">
+                        <Authorized>
+                            <NavLink class="nav-link" href="admin/users">Admin</NavLink>
+                        </Authorized>
+                    </AuthorizeView>
                 </div>
-            </Authorized>
-        </AuthorizeView>
+            </details>
+        </div>
     </nav>
 </div>
 

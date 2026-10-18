@@ -73,10 +73,10 @@ public sealed class RankingAndTrendServiceTests
             .ToArray();
         var tracks = new[]
         {
-            new Track { Id = 1, Title = "Widely reviewed" },
-            new Track { Id = 2, Title = "Highest rated" },
-            new Track { Id = 3, Title = "Single review" },
-            new Track { Id = 4, Title = "Old favourite" }
+            new Track { Id = 1, Title = "Widely reviewed", SpotifyId = "spotify-1" },
+            new Track { Id = 2, Title = "Highest rated", SpotifyId = "spotify-2" },
+            new Track { Id = 3, Title = "Single review", SpotifyId = "spotify-3" },
+            new Track { Id = 4, Title = "Old favourite", SpotifyId = "spotify-4" }
         };
         db.Users.AddRange(users);
         db.Tracks.AddRange(tracks);
@@ -133,6 +133,24 @@ public sealed class RankingAndTrendServiceTests
             Is.EqualTo(new[] { "Widely reviewed", "Highest rated", "Single review" }));
         Assert.That(result.Select(entry => entry.RecentReviewCount), Is.EqualTo(new[] { 3, 2, 1 }));
         Assert.That(result[0].RecentAverageRating, Is.EqualTo(11d / 3).Within(0.001));
+    }
+
+    [Test]
+    public async Task DemoReviewSeedingIsRepeatableAndIncludedInRankings()
+    {
+        var seeder = new DemoReviewSeeder(contextFactory);
+        var initialResult = await seeder.SeedAsync();
+        var repeatResult = await seeder.SeedAsync();
+
+        await using var db = await contextFactory.CreateDbContextAsync();
+        Assert.That(initialResult, Is.EqualTo(new DemoReviewSeedResult(4, 10)));
+        Assert.That(repeatResult, Is.EqualTo(initialResult));
+        Assert.That(await db.DemoReviews.CountAsync(), Is.EqualTo(10));
+
+        var rankedTracks = await rankings.GetTopRatedTracksAsync();
+        var widelyReviewed = rankedTracks.Single(entry => entry.TrackId == 1);
+        Assert.That(widelyReviewed.ReviewCount, Is.EqualTo(7));
+        Assert.That(widelyReviewed.DemoReviewCount, Is.EqualTo(3));
     }
 
     [Test]

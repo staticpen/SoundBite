@@ -45,13 +45,29 @@ public sealed class RankingService(
 
     private static IQueryable<TrackRankingEntry> BuildTrackRankings(ApplicationDbContext db) =>
         db.Reviews.AsNoTracking()
-            .GroupBy(review => new { review.TrackId, Title = review.Track!.Title })
+            .Select(review => new
+            {
+                review.TrackId,
+                Title = review.Track!.Title,
+                review.Rating,
+                IsDemo = false
+            })
+            .Concat(db.DemoReviews.AsNoTracking()
+                .Select(review => new
+                {
+                    review.TrackId,
+                    Title = review.Track!.Title,
+                    review.Rating,
+                    IsDemo = true
+                }))
+            .GroupBy(review => new { review.TrackId, review.Title })
             .Select(group => new TrackRankingEntry
             {
                 TrackId = group.Key.TrackId,
                 Title = group.Key.Title,
                 ReviewCount = group.Count(),
-                AverageRating = group.Average(review => review.Rating)
+                AverageRating = group.Average(review => review.Rating),
+                DemoReviewCount = group.Count(review => review.IsDemo)
             });
 
     private static void ValidateLimit(int limit)

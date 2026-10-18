@@ -8,6 +8,7 @@
 @using SoundBite.Services
 @inject IMusicCatalog Catalog
 @inject ReviewService Reviews
+@inject DemoReviewService DemoReviews
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject ILogger<TrackDetails> Logger
 
@@ -162,6 +163,26 @@ else
                 }
             </div>
         }
+
+        @if (demoReviews.Count > 0)
+        {
+            <section class="mt-4" aria-labelledby="demo-reviews-heading">
+                <h3 id="demo-reviews-heading">Sample reviews (demo data)</h3>
+                <p class="text-muted">These examples are for demonstration and are not real user submissions.</p>
+                <div class="list-group">
+                    @foreach (var review in demoReviews)
+                    {
+                        <article class="list-group-item" @key="review.Id">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <h4 class="h6 mb-1">@review.ReviewerLabel <span class="badge text-bg-info">Sample</span></h4>
+                                <span class="badge text-bg-warning">@review.Rating / 5 stars</span>
+                            </div>
+                            <p class="mb-0 mt-2">@review.Comment</p>
+                        </article>
+                    }
+                </div>
+            </section>
+        }
     </section>
 }
 
@@ -173,6 +194,7 @@ else
     private bool failed;
     private int loadVersion;
     private IReadOnlyList<Review> reviews = [];
+    private IReadOnlyList<DemoReview> demoReviews = [];
     private Review? currentUserReview;
     private string? currentUserId;
     private bool reviewLoadFailed;
@@ -186,6 +208,7 @@ else
         track = null;
         failed = false;
         reviews = [];
+        demoReviews = [];
         currentUserReview = null;
         currentUserId = null;
         reviewLoadFailed = false;
@@ -208,6 +231,7 @@ else
                 var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
                 var userId = authState.User.FindFirstValue(ClaimTypes.NameIdentifier);
                 var trackReviews = await Reviews.GetReviewsForTrackAsync(requestedId);
+                var trackDemoReviews = await DemoReviews.GetForTrackAsync(requestedId);
                 var userReview = string.IsNullOrWhiteSpace(userId)
                     ? null
                     : await Reviews.GetUserReviewForTrackAsync(userId, requestedId);
@@ -215,6 +239,7 @@ else
                 if (version != loadVersion) return;
                 currentUserId = userId;
                 reviews = trackReviews;
+                demoReviews = trackDemoReviews;
                 currentUserReview = userReview;
                 if (userReview is not null)
                 {

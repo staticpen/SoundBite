@@ -65,6 +65,9 @@ builder.Services.AddHttpClient<ISpotifyCatalog, SpotifyCatalogService>(client =>
     client.BaseAddress = new Uri("https://api.spotify.com/v1/"));
 builder.Services.AddScoped<SpotifyTrackImporter>();
 builder.Services.AddScoped<SpotifyCatalogueSeeder>();
+builder.Services.AddScoped<DemoReviewSeeder>();
+builder.Services.AddScoped<DemoReviewService>();
+builder.Services.AddScoped<SpotifyArtistCatalogService>();
 builder.Services.AddScoped<ReviewService>();
 builder.Services.AddScoped<PlaylistService>();
 builder.Services.AddScoped<FollowService>();
@@ -140,6 +143,11 @@ if (seedCatalogue)
     var result = await seeder.SeedAsync(seedQueries.Count == 0 ? null : seedQueries);
     Console.WriteLine(
         $"Spotify catalogue seed complete: {result.QueriesCompleted} queries, {result.TracksImported} unique tracks imported or refreshed.");
+    var demoReviewResult = await scope.ServiceProvider
+        .GetRequiredService<DemoReviewSeeder>()
+        .SeedAsync();
+    Console.WriteLine(
+        $"Demonstration rankings seeded: {demoReviewResult.TracksSeeded} tracks, {demoReviewResult.ReviewsSeeded} sample reviews.");
     return;
 }
 

@@ -17,6 +17,7 @@ namespace SoundBite.Data
         public DbSet<Album> Albums => Set<Album>();
         public DbSet<Track> Tracks => Set<Track>();
         public DbSet<Review> Reviews => Set<Review>();
+        public DbSet<DemoReview> DemoReviews => Set<DemoReview>();
         public DbSet<Playlist> Playlists => Set<Playlist>();
         public DbSet<PlaylistItem> PlaylistItems => Set<PlaylistItem>();
 
@@ -64,6 +65,18 @@ namespace SoundBite.Data
 
                 entity.ToTable(table => table.HasCheckConstraint(
                     "CK_Reviews_Rating",
+                    "\"Rating\" >= 1 AND \"Rating\" <= 5"));
+            });
+
+            builder.Entity<DemoReview>(entity =>
+            {
+                entity.HasOne(review => review.Track)
+                    .WithMany()
+                    .HasForeignKey(review => review.TrackId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasIndex(review => review.SeedKey).IsUnique();
+                entity.ToTable(table => table.HasCheckConstraint(
+                    "CK_DemoReviews_Rating",
                     "\"Rating\" >= 1 AND \"Rating\" <= 5"));
             });
 

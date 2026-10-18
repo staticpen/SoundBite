@@ -81,6 +81,23 @@
     color: white;
 }
 
+.account-menu > summary {
+    list-style: none;
+    cursor: pointer;
+}
+
+.account-menu > summary::-webkit-details-marker {
+    display: none;
+}
+
+.account-menu-links {
+    padding-left: 1rem;
+}
+
+.account-menu-links ::deep .nav-link {
+    padding-left: 2.25rem;
+}
+
 .nav-scrollable {
     display: none;
 }

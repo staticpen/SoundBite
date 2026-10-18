@@ -9,6 +9,13 @@
 
 <h1>Ratings and trends</h1>
 <p>Discover tracks ranked by SoundBite community reviews and ratings.</p>
+@if (hasDemoData)
+{
+    <p class="alert alert-info" role="note">
+        Rankings include clearly labelled demonstration reviews as well as community reviews.
+        Sample reviews are not real user submissions.
+    </p>
+}
 
 @if (isLoading)
 {
@@ -36,6 +43,10 @@ else
                         <li class="list-group-item" @key="track.TrackId">
                             <a href="@($"/tracks/{track.TrackId}")">@track.Title</a>
                             <div class="small text-muted">@track.AverageRating.ToString("0.0") / 5 · @track.ReviewCount reviews</div>
+                            @if (track.DemoReviewCount > 0)
+                            {
+                                <span class="badge text-bg-info">Includes @track.DemoReviewCount sample reviews</span>
+                            }
                         </li>
                     }
                 </ol>
@@ -57,6 +68,10 @@ else
                         <li class="list-group-item" @key="track.TrackId">
                             <a href="@($"/tracks/{track.TrackId}")">@track.Title</a>
                             <div class="small text-muted">@track.ReviewCount reviews · @track.AverageRating.ToString("0.0") / 5 average</div>
+                            @if (track.DemoReviewCount > 0)
+                            {
+                                <span class="badge text-bg-info">Includes @track.DemoReviewCount sample reviews</span>
+                            }
                         </li>
                     }
                 </ol>
@@ -78,6 +93,10 @@ else
                         <li class="list-group-item" @key="track.TrackId">
                             <a href="@($"/tracks/{track.TrackId}")">@track.Title</a>
                             <div class="small text-muted">@track.RecentReviewCount recent reviews · @track.RecentAverageRating.ToString("0.0") / 5 average</div>
+                            @if (track.DemoReviewCount > 0)
+                            {
+                                <span class="badge text-bg-info">Includes @track.DemoReviewCount sample reviews</span>
+                            }
                         </li>
                     }
                 </ol>
@@ -92,6 +111,7 @@ else
     private IReadOnlyList<TrendingTrackEntry> trending = [];
     private bool isLoading = true;
     private bool loadFailed;
+    private bool hasDemoData;
 
     protected override async Task OnInitializedAsync()
     {
@@ -100,6 +120,9 @@ else
             topRated = await RankingService.GetTopRatedTracksAsync();
             mostReviewed = await RankingService.GetMostReviewedTracksAsync();
             trending = await Trends.GetTrendingTracksAsync();
+            hasDemoData = topRated.Any(track => track.DemoReviewCount > 0) ||
+                mostReviewed.Any(track => track.DemoReviewCount > 0) ||
+                trending.Any(track => track.DemoReviewCount > 0);
         }
         catch (Exception exception)
         {

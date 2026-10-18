@@ -30,14 +30,32 @@ public sealed class TrendService(IDbContextFactory<ApplicationDbContext> context
         var cutoff = DateTime.UtcNow.AddDays(-windowDays);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         return await db.Reviews.AsNoTracking()
+            .Select(review => new
+            {
+                review.TrackId,
+                Title = review.Track!.Title,
+                review.Rating,
+                review.CreatedAt,
+                IsDemo = false
+            })
+            .Concat(db.DemoReviews.AsNoTracking()
+                .Select(review => new
+                {
+                    review.TrackId,
+                    Title = review.Track!.Title,
+                    review.Rating,
+                    review.CreatedAt,
+                    IsDemo = true
+                }))
             .Where(review => review.CreatedAt >= cutoff)
-            .GroupBy(review => new { review.TrackId, Title = review.Track!.Title })
+            .GroupBy(review => new { review.TrackId, review.Title })
             .Select(group => new TrendingTrackEntry
             {
                 TrackId = group.Key.TrackId,
                 Title = group.Key.Title,
                 RecentReviewCount = group.Count(),
-                RecentAverageRating = group.Average(review => review.Rating)
+                RecentAverageRating = group.Average(review => review.Rating),
+                DemoReviewCount = group.Count(review => review.IsDemo)
             })
             .OrderByDescending(entry => entry.RecentReviewCount)
             .ThenByDescending(entry => entry.RecentAverageRating)

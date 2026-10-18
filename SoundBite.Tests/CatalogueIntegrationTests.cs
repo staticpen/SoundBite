@@ -4,6 +4,7 @@ using System.Reflection;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
+using Microsoft.AspNetCore.Components.RenderTree;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -22,6 +23,8 @@ public class CatalogueIntegrationTests
     private sealed class TestRenderer(IServiceProvider services, ILoggerFactory loggerFactory)
         : Microsoft.AspNetCore.Components.HtmlRendering.Infrastructure.StaticHtmlRenderer(services, loggerFactory)
     {
+        private const int PageComponentId = 0;
+
         protected override IComponent ResolveComponentForRenderMode(Type componentType, int? parentComponentId,
             IComponentActivator componentActivator, IComponentRenderMode renderMode) => componentActivator.CreateInstance(componentType);
 
@@ -31,6 +34,30 @@ public class CatalogueIntegrationTests
             await root.QuiescenceTask;
             return root;
         }
+
+        #pragma warning disable BL0006
+        public Task RaiseFirstButtonClickAsync() =>
+            Dispatcher.InvokeAsync(() =>
+            {
+                var frames = GetCurrentRenderTreeFrames(PageComponentId);
+                for (var index = 0; index < frames.Count; index++)
+                {
+                    var element = frames.Array[index];
+                    if (element.FrameType != RenderTreeFrameType.Element || element.ElementName != "button")
+                        continue;
+
+                    for (var next = index + 1; next < frames.Count &&
+                         frames.Array[next].FrameType == RenderTreeFrameType.Attribute; next++)
+                    {
+                        var attribute = frames.Array[next];
+                        if (attribute.AttributeName == "onclick" && attribute.AttributeEventHandlerId != 0)
+                            return DispatchEventAsync(attribute.AttributeEventHandlerId, null, new MouseEventArgs());
+                    }
+                }
+
+                throw new InvalidOperationException("The page has no button with an onclick handler.");
+            });
+        #pragma warning restore BL0006
     }
 
     public sealed class SearchPage : CatalogueSearch
@@ -38,6 +65,7 @@ public class CatalogueIntegrationTests
         [Parameter] public string Query { get; set; } = "";
         protected override async Task OnInitializedAsync()
         {
+            await base.OnInitializedAsync();
             typeof(CatalogueSearch).GetField("query", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .SetValue(this, Query);
             await (Task)typeof(CatalogueSearch).GetMethod("SearchAsync", BindingFlags.Instance | BindingFlags.NonPublic)!
@@ -47,6 +75,16 @@ public class CatalogueIntegrationTests
 
     private sealed class UnusedSpotifyCatalog : ISpotifyCatalog
     {
+        public Task<IReadOnlyList<SpotifyArtistMatch>> SearchArtistsAsync(
+            string query,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<SpotifyArtistMatch>>([new("spotify-artist", "Spotify Artist")]);
+
+        public Task<SpotifyArtistDiscography> GetArtistDiscographyAsync(
+            SpotifyArtistMatch artist,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("This test does not import Spotify artists.");
+
         public Task<IReadOnlyList<SpotifyTrackMatch>> SearchTracksAsync(
             string query,
             CancellationToken cancellationToken = default) =>
@@ -64,7 +102,10 @@ public class CatalogueIntegrationTests
             var html = search.ToHtmlString();
             Assert.That(html, Does.Contain("Echo artist").And.Contain("Echo album"));
             var links = Regex.Matches(html, "href=\"([^\"]+)\"").Select(m => m.Groups[1].Value).ToArray();
-            Assert.That(links, Is.EqualTo(new[] { "/artists/11", "/albums/23", "/tracks/42", "/tracks/907" }));
+            Assert.That(links, Is.EqualTo(new[]
+            {
+                "/artists/11", "/albums/23", "/tracks/42", "/tracks/907", "/artists/11"
+            }));
             Assert.That(typeof(ArtistDetails).GetCustomAttributes<RouteAttribute>().Select(r => r.Template),
                 Does.Contain("/artists/{Id:int}"));
             Assert.That(typeof(AlbumDetails).GetCustomAttributes<RouteAttribute>().Select(r => r.Template),
@@ -124,6 +165,16 @@ public class CatalogueIntegrationTests
     }
 
     [Test]
+    public async Task HomePageWelcomesTheSignedInUserByName()
+    {
+        await WithCatalogue(async renderer =>
+        {
+            var home = await renderer.RenderComponentAsync<Home>(ParameterView.Empty);
+            Assert.That(home.ToHtmlString(), Does.Contain("Welcome, Listener."));
+        }, new SignedInAuthenticationStateProvider());
+    }
+
+    [Test]
     public async Task SearchPageUsesNewRouteAndOmitsSpotifySearchControls()
     {
         await WithCatalogue(async renderer =>
@@ -142,14 +193,35 @@ public class CatalogueIntegrationTests
     }
 
     [TestCase("", "Enter a name or title to search.")]
-    [TestCase("missing", "No results found")]
-    public async Task EmptyAndUnmatchedSearchesDoNotRenderLinks(string query, string message)
+    [TestCase("missing", "No local results found")]
+    public async Task EmptyAndUnmatchedSearchesDoNotRenderMusicDetailLinks(string query, string message)
     {
         await WithCatalogue(async renderer =>
         {
             var search = await renderer.RenderComponentAsync<SearchPage>(ParameterView.FromDictionary(
                 new Dictionary<string, object?> { [nameof(SearchPage.Query)] = query }));
-            Assert.That(search.ToHtmlString(), Does.Contain(message).And.Not.Contain("href="));
+            Assert.That(search.ToHtmlString(), Does.Contain(message)
+                .And.Not.Contain("href=\"/tracks/")
+                .And.Not.Contain("href=\"/albums/"));
+        });
+    }
+
+    [Test]
+    public async Task UnmatchedSearchOffersSpotifyArtistAndPromptsAnonymousUserToCreateAccount()
+    {
+        await WithCatalogue(async renderer =>
+        {
+            var search = await renderer.RenderComponentAsync<SearchPage>(ParameterView.FromDictionary(
+                new Dictionary<string, object?> { [nameof(SearchPage.Query)] = "unmatched artist" }));
+            Assert.That(search.ToHtmlString(), Does.Contain("Artists available to add")
+                .And.Contain("Spotify Artist")
+                .And.Contain("Add artist"));
+
+            await renderer.RaiseFirstButtonClickAsync();
+
+            Assert.That(search.ToHtmlString(), Does.Contain("Create an account or log in")
+                .And.Contain("href=\"/register\"")
+                .And.Contain("href=\"/login\""));
         });
     }
 
@@ -159,7 +231,20 @@ public class CatalogueIntegrationTests
             Task.FromResult(new AuthenticationState(new ClaimsPrincipal(new ClaimsIdentity())));
     }
 
-    private static async Task WithCatalogue(Func<TestRenderer, Task> assertion)
+    private sealed class SignedInAuthenticationStateProvider : AuthenticationStateProvider
+    {
+        public override Task<AuthenticationState> GetAuthenticationStateAsync() =>
+            Task.FromResult(new AuthenticationState(new ClaimsPrincipal(new ClaimsIdentity(
+            [
+                new Claim(ClaimTypes.NameIdentifier, "listener"),
+                new Claim(ClaimTypes.Name, "Listener")
+            ],
+            "test"))));
+    }
+
+    private static async Task WithCatalogue(
+        Func<TestRenderer, Task> assertion,
+        AuthenticationStateProvider? authenticationStateProvider = null)
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync();
@@ -167,10 +252,14 @@ public class CatalogueIntegrationTests
             .AddDbContextFactory<ApplicationDbContext>(options => options.UseSqlite(connection))
             .AddScoped<IMusicCatalog, CatalogueService>()
             .AddSingleton<ISpotifyCatalog, UnusedSpotifyCatalog>()
+            .AddScoped<SpotifyTrackImporter>()
+            .AddScoped<SpotifyArtistCatalogService>()
             .AddScoped<ReviewService>()
+            .AddScoped<DemoReviewService>()
             .AddSingleton<NotificationEventDispatcher>()
             .AddScoped<SocialInteractionService>()
-            .AddSingleton<AuthenticationStateProvider>(new AnonymousAuthenticationStateProvider())
+            .AddSingleton<AuthenticationStateProvider>(
+                authenticationStateProvider ?? new AnonymousAuthenticationStateProvider())
             .BuildServiceProvider();
         await using var scope = services.CreateAsyncScope();
         await using (var db = await services.GetRequiredService<IDbContextFactory<ApplicationDbContext>>().CreateDbContextAsync())

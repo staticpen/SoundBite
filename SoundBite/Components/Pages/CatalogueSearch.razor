@@ -1,8 +1,14 @@
 @page "/catalogue/search"
 @page "/search"
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
 @using SoundBite.Interfaces
 @using SoundBite.Models
+@using SoundBite.Services
 @inject IMusicCatalog Catalog
+@inject ISpotifyCatalog SpotifyCatalog
+@inject SpotifyArtistCatalogService ArtistCatalog
+@inject AuthenticationStateProvider AuthenticationStateProvider
 @inject ILogger<CatalogueSearch> Logger
 
 <PageTitle>Search</PageTitle>
@@ -20,6 +26,13 @@
     </div>
 </form>
 
+@if (artistImportMessage is not null)
+{
+    <p class="alert @(artistImportFailed ? "alert-danger" : artistRefreshFailed ? "alert-warning" : "alert-success") mt-3" role="status">
+        @artistImportMessage
+    </p>
+}
+
 <div aria-live="polite" aria-busy="@isLoading">
     @if (isLoading)
     {
@@ -35,11 +48,61 @@
     }
     else if (results.TotalCount == 0)
     {
-        <p role="status">No results found for “@searchedQuery”. Try another name or title.</p>
+        <p role="status">No local results found for “@searchedQuery”.</p>
+        @if (artistSearchLoading)
+        {
+            <p role="status">Searching Spotify for artists...</p>
+        }
+        else if (artistSearchError is not null)
+        {
+            <p class="alert alert-danger" role="alert">@artistSearchError</p>
+        }
+        else if (spotifyArtists is { Count: 0 })
+        {
+            <p role="status">No Spotify artists found for “@searchedQuery”.</p>
+        }
+        else if (spotifyArtists is { Count: > 0 })
+        {
+            <section aria-labelledby="spotify-artist-results">
+                <h2 id="spotify-artist-results" class="h4">Artists available to add</h2>
+                <p class="text-muted">Choose an artist to add their albums and tracks to the catalogue.</p>
+                <ul class="list-group">
+                    @foreach (var artist in spotifyArtists)
+                    {
+                        <li class="list-group-item d-flex justify-content-between align-items-center gap-3"
+                            @key="artist.SpotifyId">
+                            <span class="text-break">@artist.Name</span>
+                            @if (signedIn)
+                            {
+                                <button type="button" class="btn btn-sm btn-outline-primary flex-shrink-0"
+                                        disabled="@isAddingArtist"
+                                        @onclick="() => AddArtistAsync(artist)">
+                                    @(addingArtistId == artist.SpotifyId ? "Adding albums and tracks..." : "Add artist")
+                                </button>
+                            }
+                            else
+                            {
+                                <button type="button" class="btn btn-sm btn-outline-primary flex-shrink-0"
+                                        @onclick="() => PromptAccountCreation(artist.Name)">
+                                    Add artist
+                                </button>
+                            }
+                        </li>
+                    }
+                </ul>
+                @if (accountPromptArtist is not null)
+                {
+                    <p class="alert alert-info mt-3" role="status">
+                        Create an account or log in to add @accountPromptArtist and their catalogue.
+                        <a href="/register">Create account</a> · <a href="/login">Log in</a>
+                    </p>
+                }
+            </section>
+        }
     }
     else
     {
-        <p role="status">@results.TotalCount results for “@searchedQuery”.</p>
+        <p role="status">@results.TotalCount local results for “@searchedQuery”.</p>
         <div class="row g-3">
             <section class="col-md-4" aria-labelledby="artist-results">
                 <h2 id="artist-results" class="h4">Artists (@results.Artists.Count)</h2>
@@ -90,12 +153,64 @@
     }
 </div>
 
+<section class="mt-5" aria-labelledby="catalogue-artists">
+    <h2 id="catalogue-artists">Artists</h2>
+    @if (artistsError is not null)
+    {
+        <p class="alert alert-danger" role="alert">@artistsError</p>
+    }
+    else if (catalogueArtists.Count == 0)
+    {
+        <p class="text-muted">No artists have been added to the catalogue yet.</p>
+    }
+    else
+    {
+        <ul class="list-group">
+            @foreach (var artist in catalogueArtists)
+            {
+                <li class="list-group-item" @key="artist.Id">
+                    <a href="@($"/artists/{artist.Id}")">@artist.Name</a>
+                </li>
+            }
+        </ul>
+    }
+</section>
+
 @code {
     private string query = string.Empty;
     private string searchedQuery = string.Empty;
     private CatalogueSearchResults? results;
+    private IReadOnlyList<Artist> catalogueArtists = [];
+    private IReadOnlyList<SpotifyArtistMatch>? spotifyArtists;
     private bool isLoading;
+    private bool artistSearchLoading;
+    private bool isAddingArtist;
+    private bool signedIn;
+    private bool artistImportFailed;
+    private bool artistRefreshFailed;
     private string? error;
+    private string? artistsError;
+    private string? artistSearchError;
+    private string? artistImportMessage;
+    private string? addingArtistId;
+    private string? accountPromptArtist;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var principal = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+        signedIn = principal.Identity?.IsAuthenticated == true &&
+            !string.IsNullOrWhiteSpace(principal.FindFirstValue(ClaimTypes.NameIdentifier));
+
+        try
+        {
+            catalogueArtists = await Catalog.GetArtistsAsync();
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Unable to load catalogue artists");
+            artistsError = "The catalogue artists could not be loaded. Please try again.";
+        }
+    }
 
     private async Task SearchAsync()
     {
@@ -105,6 +220,10 @@
         searchedQuery = query.Trim();
         results = null;
         error = null;
+        artistSearchError = null;
+        artistImportMessage = null;
+        accountPromptArtist = null;
+        spotifyArtists = null;
         if (searchedQuery.Length == 0)
             return;
 
@@ -112,15 +231,74 @@
         try
         {
             results = await Catalog.SearchAsync(searchedQuery);
+            if (results.TotalCount == 0)
+            {
+                artistSearchLoading = true;
+                spotifyArtists = await SpotifyCatalog.SearchArtistsAsync(searchedQuery);
+            }
         }
         catch (Exception exception)
         {
-            Logger.LogError(exception, "Catalogue search failed");
-            error = "The catalogue could not be searched. Please try again.";
+            Logger.LogError(exception, "Catalogue or Spotify artist search failed");
+            if (results is { TotalCount: 0 })
+                artistSearchError = "Spotify artist search failed. Please try again later.";
+            else
+                error = "The catalogue could not be searched. Please try again.";
         }
         finally
         {
+            artistSearchLoading = false;
             isLoading = false;
+        }
+    }
+
+    private void PromptAccountCreation(string artistName) =>
+        accountPromptArtist = artistName;
+
+    private async Task AddArtistAsync(SpotifyArtistMatch artist)
+    {
+        if (!signedIn || isAddingArtist)
+            return;
+
+        isAddingArtist = true;
+        addingArtistId = artist.SpotifyId;
+        artistImportMessage = null;
+        artistImportFailed = false;
+        artistRefreshFailed = false;
+        accountPromptArtist = null;
+        SpotifyArtistImportResult result;
+        try
+        {
+            result = await ArtistCatalog.AddArtistAsync(artist);
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Unable to add Spotify artist {SpotifyArtistId}", artist.SpotifyId);
+            artistImportFailed = true;
+            artistImportMessage = "The artist catalogue could not be added. Please try again.";
+            addingArtistId = null;
+            isAddingArtist = false;
+            return;
+        }
+
+        artistImportMessage =
+            $"Added {artist.Name}: {result.AlbumsImported} albums and {result.TracksImported} tracks.";
+        try
+        {
+            catalogueArtists = await Catalog.GetArtistsAsync();
+            results = await Catalog.SearchAsync(searchedQuery);
+            spotifyArtists = null;
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Artist {SpotifyArtistId} was added but the catalogue view could not be refreshed", artist.SpotifyId);
+            artistRefreshFailed = true;
+            artistImportMessage += " The catalogue view could not refresh; reload the page to see the changes.";
+        }
+        finally
+        {
+            addingArtistId = null;
+            isAddingArtist = false;
         }
     }
 }

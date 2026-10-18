@@ -335,6 +335,49 @@ namespace SoundBite.Migrations
                         });
                 });
 
+            modelBuilder.Entity("SoundBite.Models.DemoReview", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Comment")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Rating")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ReviewerLabel")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SeedKey")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("TrackId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SeedKey")
+                        .IsUnique();
+
+                    b.HasIndex("TrackId");
+
+                    b.ToTable("DemoReviews", t =>
+                        {
+                            t.HasCheckConstraint("CK_DemoReviews_Rating", "\"Rating\" >= 1 AND \"Rating\" <= 5");
+                        });
+                });
+
             modelBuilder.Entity("SoundBite.Models.Follow", b =>
                 {
                     b.Property<string>("FollowerId")
@@ -713,6 +756,17 @@ namespace SoundBite.Migrations
                     b.Navigation("Review");
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("SoundBite.Models.DemoReview", b =>
+                {
+                    b.HasOne("SoundBite.Models.Track", "Track")
+                        .WithMany()
+                        .HasForeignKey("TrackId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Track");
                 });
 
             modelBuilder.Entity("SoundBite.Models.Follow", b =>
