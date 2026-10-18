@@ -22,9 +22,9 @@
 
 - **Overall status:** In progress
 - **Current development phase:** Presentation and deployment readiness
-- **Current focus:** Deploy and verify the Spotify artist-album pagination fix, then retry artist import
+- **Current focus:** Complete deployment of the committed Spotify artist-album pagination fix, then retry artist import
 - **Last verified:** 2026-10-18
-- **Current blocker:** Production artist imports fail because Spotify rejects `limit=50` on the artist-albums endpoint. Logs and a read-only API probe confirmed `400 Invalid limit`; local code now requests 10 per page and needs deployment before retry. Failed attempts did not change catalogue counts.
+- **Current blocker:** Production artist imports still fail on the currently deployed code because Spotify rejects `limit=50` on the artist-albums endpoint. The correction is committed as `55f9a20`, but deployment stopped before tests/publish because this non-interactive terminal cannot provide the LaunchDaemon's sudo password. Run the deployment script in a local interactive terminal, then retry. Failed attempts did not change catalogue counts.
 
 ## 3. Feature Implementation Tracker
 
@@ -32,8 +32,8 @@
 |---|---|---|
 | Authentication | Implemented — verified | Website registration, username/email login, logout, profile editing, cookie persistence and authorization checks pass using isolated migrated databases; see latest work. |
 | User profiles | Implemented — verified | `ApplicationUser` stores a display name and bio; the account page can edit them, and `/users/{username}` displays the public profile without exposing account email. The migration and persistence round-trip are tested. |
-| Music catalogue | Seeded in production; artist import fix prepared locally | `/search` searches local artists, albums, and tracks, then searches Spotify artists on a local miss. Production artist imports fail at Spotify's artist-albums request; the code now requests the live-verified page size of 10. Failed attempts left the 17 artists, 38 albums, and 50 tracks unchanged. |
-| Spotify integration | Production seed verified; interactive import awaits deployment fix | The deployed credentials completed five default searches, refreshing 50 unique tracks and creating 26 sample reviews across 12 tracks. A read-only API probe showed artist-album requests accept limit 10 and reject 20 and 50. |
+| Music catalogue | Seeded in production; artist import correction committed, deployment pending | `/search` searches local artists, albums, and tracks, then searches Spotify artists on a local miss. The deployed code fails at Spotify's artist-albums request; committed fix uses live-verified page size 10. Failed attempts left 17 artists, 38 albums, and 50 tracks unchanged. |
+| Spotify integration | Production seed verified; interactive import fix awaits deployment | The deployed credentials completed five default searches, refreshing 50 unique tracks and creating 26 sample reviews across 12 tracks. A live API probe showed artist-album requests accept limit 10 and reject 20 and 50. |
 | Track ratings and reviews | Implemented — verified | Reviews persist through EF Core; the service supports create/read/update, the database enforces one review per user per track and valid 1–5 ratings, and track details support public review reading plus authenticated submission/editing. |
 | Album-track many-to-many relationship | Implemented — unverified | `ApplicationDbContext` maps `ArtistAlbums` and `ArtistTracks` and `Track.AlbumId` with a nullable optional foreign key. This matches the intended design, but the schema has not been validated via a migration review beyond the code. |
 | Playlist management | Implemented — verified | Users can create, edit, and delete playlists; add/remove tracks; and browse public playlist listings/details. Owner checks are enforced in the service. |
@@ -46,7 +46,7 @@
 | Navigation and home | Implemented — tested | Navigation order is Home, Search, Activity Feed, Ratings and Trends, Playlists, Account. Account opens a dropdown with Edit Profile, Notifications, and role-gated Admin. Home shows a personalized welcome to signed-in users. |
 | Administrative user management | Implemented — verified | `/admin/users` supports user search/paging, account lock/unlock, and admin-role grants/revocation. Every service operation checks live role membership and lockout state server-side. The front-end label is “Admin.” |
 | Automated tests | Passed — verified | Full NUnit suite passed **268/268** on 2026-10-18; the focused catalogue, Spotify, rankings, track-detail, and route suite passed **46/46**. EF reports no pending model changes. |
-| Git and repository hygiene | In progress | Deployed feature commit `41f90ca` is in history; `main` is currently at `0374455` and synchronized with `origin/main`. The Spotify pagination fix, regression test, and this progress update are uncommitted. |
+| Git and repository hygiene | In progress | Fix commit `55f9a20` is synchronized with `origin/main`; this deployment-status update is the only uncommitted change. The new code commit is not yet deployed. |
 
 ## 4. Latest Completed Work
 
@@ -358,7 +358,7 @@
 - **Reported symptom:** User was signed in as administrator but saw “The artist catalogue could not be added. Please try again.”
 - **Diagnosis:** Production logs show artist search returned HTTP 200, then `GET /v1/artists/{id}/albums?include_groups=album&limit=50` returned HTTP 400. A read-only API probe using the protected production credentials returned `Invalid limit` for limits 50 and 20, and HTTP 200 for limit 10. Authentication and local persistence were not reached; failed attempts left catalogue counts unchanged at 17 artists / 38 albums / 50 tracks.
 - **Fix prepared:** `SpotifyCatalogService` now requests 10 albums per page. The mock test follows Spotify's `offset=10` continuation and asserts each artist-album page uses `limit=10`.
-- **Verification:** A read-only live API request fetched all 11 album releases for the failing artist across two pages (10 + 1). Focused Spotify tests passed 4/4 and the full suite passed 268/268. The fix is uncommitted and not deployed yet; deploy before retrying the import. No production DB migration or data changes were required.
+- **Verification:** A read-only live API request fetched all 11 album releases for the failing artist across two pages (10 + 1). Focused Spotify tests passed 4/4 and the full suite passed 268/268. The fix was committed as `55f9a20`; deployment was attempted but the script could not obtain interactive sudo authorization in the agent terminal. It must be run in a local interactive terminal before the user retries. No production DB migration or data changes were required.
 
 ## 5. Current Implementation Details
 
@@ -397,7 +397,7 @@
 | Registration form cannot reach endpoint | Resolved | Replaced server-side loopback HTTP call with static SSR form processing | Verified in browser and HTTP tests | Closed |
 | Interactive login cannot set cookie | Resolved | Cookie operations now execute during HTTP form requests before rendering | Verified registration, login and logout | Closed |
 | Multi-instance notification delivery | Notifications are not backed by a distributed event bus | Live delivery uses an in-process dispatcher by design for the current single-instance app | Add a distributed backplane only if deploying multiple instances | Open |
-| Production Spotify artist import currently fails | Artist albums API rejects `limit=50` with HTTP 400 `Invalid limit` | Production log stack traces and read-only API probe; limit 10 succeeds. Local code fix passes all 268 tests but is not deployed | Commit/deploy pagination fix, then retry artist import and verify artist, albums, and tracks | In progress |
+| Production Spotify artist import currently fails | Artist albums API rejects `limit=50` with HTTP 400 `Invalid limit` | Production log stack traces and live API probe; limit 10 succeeds. Fix commit `55f9a20` passes all 268 tests; deployment script requires interactive sudo | Run `./scripts/deploy-self-hosted-macos.sh` in the VS Code terminal, enter local macOS password, then retry artist import | In progress |
 | Windows viewer access not recently confirmed | Tailnet pages work from the host but not yet verified on the viewer | Prior deployment records require Windows Tailscale authorization | Have the Windows viewer join the tailnet and smoke-test the deployed link | Open |
 | Initial administrator needs deployment configuration | The first admin must exist before the app can assign its admin role | Startup reads indexed `Admin:UserIds` settings and fails explicitly if an ID is unknown | Register the first user, configure the ID, apply migrations, then restart; keep settings in trusted environment configuration | Open |
 
@@ -415,7 +415,7 @@
 
 ## 9. Git Status
 
-- **Branch:** `main` at `0374455` (`Update SOUNDBITE_PROGRESS.md`), synchronized with `origin/main`. The Spotify page-size fix, its test, and these progress updates are uncommitted.
+- **Branch:** `main` at `55f9a20` (`Fix Spotify artist album pagination limit`), synchronized with `origin/main`. Spotify correction/test are committed; this deployment-status progress update is local.
 - **Database:** `AddDemoReviews` is applied to the deployment database after a mode-600 integrity-checked backup at `~/Library/Application Support/SoundBite/backups/soundbite-pre-demo-reviews-20261018-150136.db`.
 - **PRs #17–#19:** Notification paging, category preferences, and settings UI are merged into `main`.
 
@@ -432,7 +432,7 @@
 ## 11. Handover for the Next Chat Session
 
 - A is complete: paging, category opt-outs, and the settings page are implemented and merged in PRs #17–#19. Focused notification and route tests passed 53/53 on 2026-10-17; the A3 record reports the full suite passed 263/263.
-- User confirmed code commit `41f90ca` was deployed. Following explicit authorization, backed up the production DB, applied `AddDemoReviews`, and ran the deployed seed successfully: 50 tracks refreshed/imported and 26 labelled demo reviews added for 12 tracks. Backup, migration history, integrity, and host/tailnet routes were verified. Artist import then exposed Spotify's 10-album page-size cap. The fix is local and passes all 268 tests; do not ask the user to retry until it is deployed. Authentication was not the cause. Windows Tailscale viewer access and other presentation acceptance checks remain outstanding.
+- User confirmed code commit `41f90ca` was deployed. Following explicit authorization, backed up the production DB, applied `AddDemoReviews`, and seeded 50 tracks plus 26 labelled demo reviews. Artist import then exposed Spotify's 10-album page-size cap; signed-in admin auth was not the cause. The correction is commit `55f9a20` and all 268 tests pass. Deployment was attempted but failed before stopping/replacing the app because the non-interactive terminal could not prompt for sudo. Run the deploy script interactively and retry only after its health check succeeds. Windows Tailscale viewer access remains outstanding.
 - Notification event delivery is single-instance; shared infrastructure is only needed if deploying multiple instances.
 
 ## 12. Instructions for Updating This File
