@@ -1,11 +1,13 @@
 using System.Net;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using SoundBite.Data;
+using SoundBite.Services;
 
 namespace SoundBite.Tests;
 
@@ -61,12 +63,61 @@ public class AuthenticationUiTests
     {
         var home = await client.GetStringAsync("/");
         var token = Regex.Match(home, "name=\"__RequestVerificationToken\" value=\"([^\"]+)\"").Groups[1].Value;
-        Assert.That(token, Is.Not.Empty, "The top-row logout form must carry an antiforgery token.");
+        Assert.That(token, Is.Not.Empty, "The navbar logout form must carry an antiforgery token.");
         return await client.PostAsync("/account/logout", new FormUrlEncodedContent(
             new Dictionary<string, string>
             {
                 ["__RequestVerificationToken"] = WebUtility.HtmlDecode(token)
             }));
+    }
+
+    [Test]
+    public async Task NavbarShowsDestinationsForSignedOutSignedInAndAdministratorStates()
+    {
+        var signedOut = await client.GetStringAsync("/");
+        Assert.That(signedOut, Does.Contain("href=\"search\"").And.Contain("href=\"feed\"")
+            .And.Contain("href=\"rankings\"").And.Contain("href=\"playlists\"")
+            .And.Contain("href=\"register\"").And.Contain("href=\"login\"")
+            .And.Contain("aria-controls=\"site-nav-menu\"").And.Contain("aria-expanded=\"false\"")
+            .And.Not.Contain("/account/logout").And.Not.Contain("admin/users")
+            .And.Not.Contain("href=\"notifications\""));
+
+        foreach (var (pattern, description) in new[]
+        {
+            ("src=\"([^\"]*soundbite-logo[^\"]*\\.svg)\"", "logo"),
+            ("src=\"([^\"]*site-nav[^\"]*\\.js)\"", "navbar script")
+        })
+        {
+            var url = Regex.Match(signedOut, pattern).Groups[1].Value;
+            Assert.That(url, Is.Not.Empty, $"The navbar {description} must be referenced by the page.");
+            var asset = await client.GetAsync(WebUtility.HtmlDecode(url));
+            Assert.That(asset.StatusCode, Is.EqualTo(HttpStatusCode.OK), $"The navbar {description} must be served.");
+        }
+
+        await Register();
+        var signedIn = await client.GetStringAsync("/");
+        Assert.That(signedIn, Does.Contain("href=\"account\"").And.Contain("href=\"notifications\"")
+            .And.Contain("action=\"/account/logout\"").And.Contain(">Log out</button>")
+            .And.Not.Contain("href=\"register\"").And.Not.Contain("href=\"login\"")
+            .And.Not.Contain("admin/users"));
+
+        using (var scope = app.Services.CreateScope())
+        {
+            var roles = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
+            var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+            var created = await roles.CreateAsync(new IdentityRole(AdminService.AdministratorRole));
+            Assert.That(created.Succeeded, Is.True, string.Join("; ", created.Errors.Select(e => e.Description)));
+            var user = await users.FindByNameAsync("authuser");
+            Assert.That(user, Is.Not.Null);
+            var added = await users.AddToRoleAsync(user!, AdminService.AdministratorRole);
+            Assert.That(added.Succeeded, Is.True, string.Join("; ", added.Errors.Select(e => e.Description)));
+        }
+
+        await Logout();
+        var login = await PostForm("/login", "login", ("loginModel.UserNameOrEmail", "authuser"), ("loginModel.Password", "TestPass123!"));
+        Assert.That(login.StatusCode, Is.EqualTo(HttpStatusCode.Redirect));
+        Assert.That(await client.GetStringAsync("/"), Does.Contain("href=\"admin/users\"")
+            .And.Contain("action=\"/account/logout\""));
     }
 
     [TestCase("/missing-net9-page")]
@@ -114,7 +165,7 @@ public class AuthenticationUiTests
     }
 
     [Test]
-    public async Task TopRowLogoutUsesAntiforgeryProtectedHttpPostAndClearsAuthenticationCookie()
+    public async Task NavbarLogoutUsesAntiforgeryProtectedHttpPostAndClearsAuthenticationCookie()
     {
         await Register();
         var home = await client.GetStringAsync("/");
@@ -122,7 +173,7 @@ public class AuthenticationUiTests
             .And.Contain(">Log out</button>"));
 
         var token = Regex.Match(home, "name=\"__RequestVerificationToken\" value=\"([^\"]+)\"").Groups[1].Value;
-        Assert.That(token, Is.Not.Empty, "The top-row logout form must carry an antiforgery token.");
+        Assert.That(token, Is.Not.Empty, "The navbar logout form must carry an antiforgery token.");
         var logout = await client.PostAsync(
             "/account/logout",
             new FormUrlEncodedContent(new Dictionary<string, string>
