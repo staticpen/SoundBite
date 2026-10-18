@@ -12,6 +12,18 @@ using SoundBite.Strategies;
 
 var builder = WebApplication.CreateBuilder(args);
 
+var externalConfigurationFile =
+    Environment.GetEnvironmentVariable("SOUNDBITE_CONFIG_FILE");
+if (!string.IsNullOrWhiteSpace(externalConfigurationFile))
+{
+    builder.Configuration.AddJsonFile(
+        externalConfigurationFile,
+        optional: false,
+        reloadOnChange: false);
+    builder.Configuration.AddEnvironmentVariables();
+    builder.Configuration.AddCommandLine(args);
+}
+
 builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
     options.UseSqlite(
         builder.Configuration.GetConnectionString("DefaultConnection")));
