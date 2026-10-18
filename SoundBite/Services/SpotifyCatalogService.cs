@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -10,6 +11,7 @@ public sealed class SpotifyCatalogService(
     HttpClient httpClient,
     SpotifyAccessTokenProvider tokenProvider) : ISpotifyCatalog
 {
+    private const int AlbumCoverBatchSize = 20;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     public async Task<IReadOnlyList<SpotifyArtistMatch>> SearchArtistsAsync(
@@ -117,6 +119,62 @@ public sealed class SpotifyCatalogService(
             .ToArray();
     }
 
+    public async Task<IReadOnlyDictionary<string, string>> GetAlbumCoverUrlsAsync(
+        IReadOnlyList<string> spotifyAlbumIds,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(spotifyAlbumIds);
+        if (spotifyAlbumIds.Any(string.IsNullOrWhiteSpace))
+            throw new ArgumentException("Spotify album IDs cannot be empty.", nameof(spotifyAlbumIds));
+
+        var ids = spotifyAlbumIds.Distinct(StringComparer.Ordinal).ToArray();
+        var covers = new Dictionary<string, string>(StringComparer.Ordinal);
+        for (var offset = 0; offset < ids.Length; offset += AlbumCoverBatchSize)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var batch = ids.Skip(offset).Take(AlbumCoverBatchSize).ToArray();
+            var encodedIds = string.Join(",", batch.Select(Uri.EscapeDataString));
+            SpotifyAlbumsResponse? payload;
+            try
+            {
+                payload = await GetApiResponseAsync<SpotifyAlbumsResponse>(
+                    $"albums?ids={encodedIds}",
+                    cancellationToken);
+            }
+            catch (HttpRequestException exception) when (exception.StatusCode == HttpStatusCode.Forbidden)
+            {
+                foreach (var spotifyAlbumId in batch)
+                {
+                    var album = await GetApiResponseAsync<SpotifyAlbumItem>(
+                        $"albums/{Uri.EscapeDataString(spotifyAlbumId)}",
+                        cancellationToken);
+                    if (album is not null &&
+                        string.Equals(album.Id, spotifyAlbumId, StringComparison.Ordinal) &&
+                        SelectAlbumCoverUrl(album.Images) is { } coverUrl)
+                    {
+                        covers[spotifyAlbumId] = coverUrl;
+                    }
+                }
+
+                continue;
+            }
+
+            if (payload?.Albums is null)
+                throw new InvalidDataException("Spotify returned an invalid album-cover response.");
+
+            foreach (var album in payload.Albums)
+            {
+                if (!string.IsNullOrWhiteSpace(album?.Id) &&
+                    SelectAlbumCoverUrl(album.Images) is { } coverUrl)
+                {
+                    covers[album.Id] = coverUrl;
+                }
+            }
+        }
+
+        return covers;
+    }
+
     private static string? SelectAlbumCoverUrl(IEnumerable<SpotifyImageItem>? images) =>
         (images ?? [])
             .Where(image => Uri.TryCreate(image.Url, UriKind.Absolute, out var uri) &&
@@ -164,7 +222,15 @@ public sealed class SpotifyCatalogService(
             await tokenProvider.GetAccessTokenAsync(cancellationToken));
 
         using var response = await httpClient.SendAsync(request, cancellationToken);
-        response.EnsureSuccessStatusCode();
+        if (!response.IsSuccessStatusCode)
+        {
+            var errorDetails = await response.Content.ReadAsStringAsync(cancellationToken);
+            throw new HttpRequestException(
+                $"Spotify API request failed with {(int)response.StatusCode} {response.ReasonPhrase}: {errorDetails}",
+                null,
+                response.StatusCode);
+        }
+
         return await response.Content.ReadFromJsonAsync<T>(JsonOptions, cancellationToken);
     }
 
@@ -183,6 +249,11 @@ public sealed class SpotifyCatalogService(
     private sealed class SpotifyTrackSearchResponse
     {
         public SpotifyPage<SpotifyTrackItem>? Tracks { get; set; }
+    }
+
+    private sealed class SpotifyAlbumsResponse
+    {
+        public List<SpotifyAlbumItem?>? Albums { get; set; }
     }
 
     private sealed class SpotifyPage<T>

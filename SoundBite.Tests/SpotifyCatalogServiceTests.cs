@@ -39,6 +39,11 @@ public class SpotifyCatalogServiceTests
             string query,
             CancellationToken cancellationToken = default) =>
             throw new InvalidOperationException("Spotify must not be called for an anonymous import.");
+
+        public Task<IReadOnlyDictionary<string, string>> GetAlbumCoverUrlsAsync(
+            IReadOnlyList<string> spotifyAlbumIds,
+            CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("Spotify must not be called for an anonymous import.");
     }
 
     private sealed class SpotifyHandler : HttpMessageHandler
@@ -47,6 +52,9 @@ public class SpotifyCatalogServiceTests
         public List<string> ApiRequests { get; } = [];
         public string? LastSearchPathAndQuery { get; private set; }
         public string? LastApiBearerToken { get; private set; }
+        public HttpStatusCode? ApiFailureStatusCode { get; init; }
+        public string ApiFailureBody { get; init; } = "";
+        public bool BulkAlbumLookupForbidden { get; init; }
 
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
@@ -63,6 +71,43 @@ public class SpotifyCatalogServiceTests
             ApiRequests.Add(request.RequestUri!.PathAndQuery);
             LastSearchPathAndQuery = request.RequestUri?.PathAndQuery;
             LastApiBearerToken = request.Headers.Authorization?.Parameter;
+            if (ApiFailureStatusCode is { } failureStatusCode)
+            {
+                return Task.FromResult(new HttpResponseMessage(failureStatusCode)
+                {
+                    Content = new StringContent(ApiFailureBody, Encoding.UTF8, "application/json")
+                });
+            }
+
+            if (LastSearchPathAndQuery?.StartsWith("/v1/albums?ids=", StringComparison.Ordinal) == true)
+            {
+                if (BulkAlbumLookupForbidden)
+                {
+                    return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Forbidden)
+                    {
+                        Content = new StringContent(
+                            """{"error":{"status":403,"message":"Batch lookup forbidden."}}""",
+                            Encoding.UTF8,
+                            "application/json")
+                    });
+                }
+
+                return Task.FromResult(JsonResponse(
+                    """
+                    {"albums":[
+                      {"id":"album-1","images":[{"url":"https://i.scdn.co/image/cover-small","height":64,"width":64},{"url":"https://i.scdn.co/image/cover-large","height":640,"width":640}]},
+                      {"id":"album-unsafe","images":[{"url":"https://images.example.invalid/cover.jpg","height":640,"width":640}]},
+                      null
+                    ]}
+                    """));
+            }
+
+            if (LastSearchPathAndQuery == "/v1/albums/album-1")
+            {
+                return Task.FromResult(JsonResponse(
+                    """{"id":"album-1","images":[{"url":"https://i.scdn.co/image/individual-cover","height":640,"width":640}]}"""));
+            }
+
             if (LastSearchPathAndQuery?.Contains("type=artist", StringComparison.Ordinal) == true)
             {
                 return Task.FromResult(JsonResponse(
@@ -234,6 +279,81 @@ public class SpotifyCatalogServiceTests
                 .Where(path => path.Contains("/albums?include_groups=album", StringComparison.Ordinal))
                 .All(path => path.Contains("limit=10", StringComparison.Ordinal)),
             Is.True);
+    }
+
+    [Test]
+    public async Task SpotifyAlbumCoverLookupUsesTwentyIdBatchesAndOnlyAcceptsSpotifyCdnUrls()
+    {
+        var handler = new SpotifyHandler();
+        var httpClient = new HttpClient(handler)
+        {
+            BaseAddress = new Uri("https://api.spotify.com/v1/")
+        };
+        var service = new SpotifyCatalogService(
+            httpClient,
+            new SpotifyAccessTokenProvider(
+                new TestHttpClientFactory(handler),
+                new MemoryCache(new MemoryCacheOptions()),
+                Options.Create(new SpotifyOptions { ClientId = "test-client", ClientSecret = "test-secret" })));
+        var ids = Enumerable.Range(0, 41).Select(index => $"album-{index}").ToArray();
+
+        var covers = await service.GetAlbumCoverUrlsAsync(ids);
+
+        Assert.That(handler.ApiRequests, Has.Count.EqualTo(3));
+        Assert.That(handler.ApiRequests.All(request =>
+            Uri.UnescapeDataString(request).Split("ids=", StringSplitOptions.None)[1].Split(',').Length <= 20), Is.True);
+        Assert.That(covers["album-1"], Is.EqualTo("https://i.scdn.co/image/cover-large"));
+        Assert.That(covers.ContainsKey("album-unsafe"), Is.False);
+        Assert.That(handler.TokenRequests, Is.EqualTo(1));
+    }
+
+    [Test]
+    public async Task SpotifyApiFailuresIncludeTheResponseDetails()
+    {
+        var handler = new SpotifyHandler
+        {
+            ApiFailureStatusCode = HttpStatusCode.Forbidden,
+            ApiFailureBody = """{"error":{"message":"Album catalog access is unavailable."}}"""
+        };
+        var httpClient = new HttpClient(handler)
+        {
+            BaseAddress = new Uri("https://api.spotify.com/v1/")
+        };
+        var service = new SpotifyCatalogService(
+            httpClient,
+            new SpotifyAccessTokenProvider(
+                new TestHttpClientFactory(handler),
+                new MemoryCache(new MemoryCacheOptions()),
+                Options.Create(new SpotifyOptions { ClientId = "test-client", ClientSecret = "test-secret" })));
+
+        var exception = Assert.ThrowsAsync<HttpRequestException>(
+            async () => await service.GetAlbumCoverUrlsAsync(["album-1"]));
+
+        Assert.That(exception!.StatusCode, Is.EqualTo(HttpStatusCode.Forbidden));
+        Assert.That(exception.Message, Does.Contain("Album catalog access is unavailable."));
+    }
+
+    [Test]
+    public async Task SpotifyAlbumCoverLookupFallsBackToIndividualAlbumsWhenBatchLookupIsForbidden()
+    {
+        var handler = new SpotifyHandler { BulkAlbumLookupForbidden = true };
+        var httpClient = new HttpClient(handler)
+        {
+            BaseAddress = new Uri("https://api.spotify.com/v1/")
+        };
+        var service = new SpotifyCatalogService(
+            httpClient,
+            new SpotifyAccessTokenProvider(
+                new TestHttpClientFactory(handler),
+                new MemoryCache(new MemoryCacheOptions()),
+                Options.Create(new SpotifyOptions { ClientId = "test-client", ClientSecret = "test-secret" })));
+
+        var covers = await service.GetAlbumCoverUrlsAsync(["album-1"]);
+
+        Assert.That(covers["album-1"], Is.EqualTo("https://i.scdn.co/image/individual-cover"));
+        Assert.That(handler.ApiRequests, Has.Count.EqualTo(2));
+        Assert.That(handler.ApiRequests[0], Does.StartWith("/v1/albums?ids="));
+        Assert.That(handler.ApiRequests[1], Is.EqualTo("/v1/albums/album-1"));
     }
 
     [Test]

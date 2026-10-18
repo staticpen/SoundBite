@@ -22,9 +22,9 @@
 
 - **Overall status:** In progress
 - **Current development phase:** Presentation and deployment readiness
-- **Current focus:** Review the simplified homepage layout, which keeps ratings and trends on `/rankings` instead of embedding them on Home
+- **Current focus:** Prepare the cached album-art changes for redeployment; the production schema and catalogue backfill are complete
 - **Last verified:** 2026-10-18
-- **Current blocker:** No production database migration blocker remains: `ReplacePlaylistsWithFavourites` was applied and verified on 2026-10-18 after a private backup. The app does not run migrations at startup. The UI, logout, and Favourites integration still require deployment, which needs interactive macOS administrator authorization. The Spotify album-pagination fix is committed as `55f9a20`; its deployment status still needs confirmation.
+- **Current blocker:** The `AddAlbumCoverUrl` migration and Spotify artwork backfill are complete in production, but the updated application source is not yet committed or deployed. The running service remains responsive on its existing binary.
 
 ## 3. Feature Implementation Tracker
 
@@ -33,7 +33,7 @@
 | Authentication | Implemented — verified | Website registration, username/email login, logout, profile editing, cookie persistence and authorization checks pass using isolated migrated databases; see latest work. |
 | User profiles | Implemented — verified | `ApplicationUser` stores a display name and bio; the account page can edit them, and `/users/{username}` displays the public profile without exposing account email. The migration and persistence round-trip are tested. |
 | Music catalogue | Seeded in production; artist import correction committed, deployment pending | `/search` searches local artists, albums, and tracks, then searches Spotify artists on a local miss. The deployed code fails at Spotify's artist-albums request; committed fix uses live-verified page size 10. Failed attempts left 17 artists, 38 albums, and 50 tracks unchanged. |
-| Spotify integration | Production seed verified; interactive import fix awaits deployment | The deployed credentials completed five default searches, refreshing 50 unique tracks and creating 26 sample reviews across 12 tracks. A live API probe showed artist-album requests accept limit 10 and reject 20 and 50. |
+| Spotify integration | Production seed and album-art backfill verified; current source awaits deployment | The deployed credentials completed five default searches, refreshing 50 unique tracks and creating 26 sample reviews across 12 tracks. Production now has cached cover URLs on all 54 albums. Spotify's batch album endpoint returned 403, so the refresh command fell back to individual album lookups. |
 | Track ratings and reviews | Implemented — verified | Reviews persist through EF Core; the service supports create/read/update, the database enforces one review per user per track and valid 1–5 ratings, and track details support public review reading plus authenticated submission/editing. |
 | Album-track many-to-many relationship | Implemented — unverified | `ApplicationDbContext` maps `ArtistAlbums` and `ArtistTracks` and `Track.AlbumId` with a nullable optional foreign key. This matches the intended design, but the schema has not been validated via a migration review beyond the code. |
 | Favourites | Implemented — production migration and Spotify fallback verified | Each user has one private list. Tracks can be added from search, track details, or the Favourites page; the page supports local catalogue search and, on a track miss, Spotify artist search/import before offering imported tracks to add. Ratings and reviews are not required to save a track. The production migration preserved the existing playlist track in `FavouriteTracks` and removed the playlist tables. |
@@ -44,10 +44,18 @@
 | Rankings and trends | Implemented — verified in isolated SQLite tests and headless Chrome | Shared `RankingsOverview` component shows top-rated tracks (minimum two reviews), most-reviewed tracks overall, and tracks with the most reviews in the last seven days on the separate `/rankings` page. Its navbar link is shown to signed-in users. Separately stored, labelled sample reviews can populate these lists without masquerading as community reviews. |
 | Navigation and home | Implemented — verified | Light navbar with the horizontal `soundbite-logo.png` wordmark linking to `/`, an explicit Home NavLink, a mobile toggle, and keyboard focus styles. Signed-out: Home, Search, Create account, and a primary Log in button. Signed-in: Home, Search, Ratings and Trends, Favourites, then the Account dropdown (Edit Profile, Notifications with unread badge, role-gated Admin, antiforgery-protected POST Log out). `/feed` and `/playlists` return 404; `/favourites` shows only a login prompt to anonymous visitors and uses the shared centred content column. Home shows a centred anonymous hero with a single "Get Started" → `/register` CTA, or a centred signed-in hero welcoming the user by display name (falling back to username, then the claim name, then a generic greeting) with "Search the catalogue". Signed-in Home then shows the global activity feed in the centred 1024px content column; ratings and trends remain on `/rankings`. Successful login redirects to `/`. |
 | Administrative user management | Implemented — verified | `/admin/users` supports user search/paging, account lock/unlock, and admin-role grants/revocation. Every service operation checks live role membership and lockout state server-side. The front-end label is “Admin.” |
-| Automated tests | Passed — verified | Homepage redesign: **300/300**, with 0 failed and 0 skipped. |
+| Automated tests | Passed — verified | Full NUnit suite: **309/309**, with 0 failed and 0 skipped. |
 | Git and repository hygiene | In progress | Branch `feature/frontend-and-user-flow` incorporates `origin/main` (`40cc394`) through resolved and verified merges. The tracked `SoundBite/soundbite.db` has user-owned local modifications that remain deliberately unstaged and uncommitted. |
 
 ## 4. Latest Completed Work
+
+### 2026-10-18 — Applied and backfilled production album artwork
+
+- **Task completed:** Applied `20261018124608_AddAlbumCoverUrl` to the production SQLite database and cached Spotify cover URLs for all 54 existing albums.
+- **Files or components changed:** Added `SpotifyAlbumCoverRefreshService` and the guarded `--refresh-album-covers` command. `SpotifyCatalogService` now batches Spotify album lookups and falls back to individual album requests when the batch endpoint returns 403; API failures include Spotify's response details. Updated interface test doubles and added refresh/API tests.
+- **Important implementation decisions:** The one-off command requires an explicitly configured absolute database outside the repository and fills only missing URLs, preserving existing covers. A mode-600 pre-change backup at `~/Library/Application Support/SoundBite/backups/soundbite-pre-album-covers-20261018-235235.db` passed SQLite integrity and foreign-key checks.
+- **Verification performed and its result:** Production migration history ends at `20261018124608_AddAlbumCoverUrl`; database integrity is `ok`, all 54 albums have cached URLs, no Spotify-linked albums are missing covers, and the running site returned HTTP 200. EF reports no pending model changes; full NUnit suite passed **309/309**.
+- **Remaining limitations:** The production app has not been redeployed; the new source changes remain uncommitted.
 
 ### 2026-10-18 — Simplified Home by keeping rankings on their separate page
 

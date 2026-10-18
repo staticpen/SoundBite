@@ -15,4 +15,8 @@ public interface ISpotifyCatalog
     Task<IReadOnlyList<SpotifyTrackMatch>> SearchTracksAsync(
         string query,
         CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyDictionary<string, string>> GetAlbumCoverUrlsAsync(
+        IReadOnlyList<string> spotifyAlbumIds,
+        CancellationToken cancellationToken = default);
 }

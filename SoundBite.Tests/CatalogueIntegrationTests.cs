@@ -147,6 +147,12 @@ public class CatalogueIntegrationTests
             string query,
             CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<SpotifyTrackMatch>>([]);
+
+        public Task<IReadOnlyDictionary<string, string>> GetAlbumCoverUrlsAsync(
+            IReadOnlyList<string> spotifyAlbumIds,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyDictionary<string, string>>(
+                new Dictionary<string, string>(StringComparer.Ordinal));
     }
 
     [TestCase(" eChO ")]

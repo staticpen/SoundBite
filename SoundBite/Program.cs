@@ -12,6 +12,7 @@ using SoundBite.Services;
 using SoundBite.Strategies;
 
 var seedCatalogue = false;
+var refreshAlbumCovers = false;
 var seedQueries = new List<string>();
 var applicationArgs = new List<string>();
 for (var index = 0; index < args.Length; index++)
@@ -19,6 +20,10 @@ for (var index = 0; index < args.Length; index++)
     if (args[index] == "--seed-catalogue")
     {
         seedCatalogue = true;
+    }
+    else if (args[index] == "--refresh-album-covers")
+    {
+        refreshAlbumCovers = true;
     }
     else if (args[index] == "--seed-query")
     {
@@ -35,6 +40,8 @@ for (var index = 0; index < args.Length; index++)
 
 if (!seedCatalogue && seedQueries.Count > 0)
     throw new ArgumentException("--seed-query can only be used with --seed-catalogue.");
+if (refreshAlbumCovers && (seedCatalogue || seedQueries.Count > 0))
+    throw new ArgumentException("--refresh-album-covers cannot be combined with catalogue seeding.");
 
 var builder = WebApplication.CreateBuilder(applicationArgs.ToArray());
 
@@ -65,6 +72,7 @@ builder.Services.AddHttpClient<ISpotifyCatalog, SpotifyCatalogService>(client =>
     client.BaseAddress = new Uri("https://api.spotify.com/v1/"));
 builder.Services.AddScoped<SpotifyTrackImporter>();
 builder.Services.AddScoped<SpotifyCatalogueSeeder>();
+builder.Services.AddScoped<SpotifyAlbumCoverRefreshService>();
 builder.Services.AddScoped<DemoReviewService>();
 builder.Services.AddScoped<SpotifyArtistCatalogService>();
 builder.Services.AddScoped<ReviewService>();
@@ -124,6 +132,18 @@ var app = builder.Build();
 
 app.UseForwardedHeaders();
 
+if (refreshAlbumCovers)
+{
+    EnsureExplicitExternalDatabase(app);
+    await using var scope = app.Services.CreateAsyncScope();
+    var result = await scope.ServiceProvider
+        .GetRequiredService<SpotifyAlbumCoverRefreshService>()
+        .RefreshMissingCoversAsync();
+    Console.WriteLine(
+        $"Spotify album-cover refresh complete: {result.CoversAdded} covers added, {result.AlbumsWithoutCover} albums without a cover, {result.AlbumsChecked} albums checked.");
+    return;
+}
+
 if (seedCatalogue)
 {
     var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
@@ -172,6 +192,28 @@ app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
 app.Run();
+
+static void EnsureExplicitExternalDatabase(WebApplication app)
+{
+    var connectionString = app.Configuration.GetConnectionString("DefaultConnection");
+    if (string.IsNullOrWhiteSpace(connectionString))
+        throw new InvalidOperationException("Album-cover refresh requires an explicitly configured SQLite connection string.");
+
+    var databasePath = new SqliteConnectionStringBuilder(connectionString).DataSource;
+    if (string.IsNullOrWhiteSpace(databasePath) ||
+        databasePath == ":memory:" ||
+        !Path.IsPathRooted(databasePath))
+    {
+        throw new InvalidOperationException(
+            "Album-cover refresh requires an absolute SQLite database path. Set ConnectionStrings__DefaultConnection explicitly.");
+    }
+
+    var configuredPath = Path.GetFullPath(databasePath);
+    var repositoryDatabase = Path.GetFullPath(
+        Path.Combine(app.Environment.ContentRootPath, "soundbite.db"));
+    if (string.Equals(configuredPath, repositoryDatabase, StringComparison.Ordinal))
+        throw new InvalidOperationException("Album-cover refresh cannot modify the repository's tracked database.");
+}
 
 // Expose the entry point to HTTP integration tests.
 public partial class Program { }
