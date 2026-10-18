@@ -256,6 +256,19 @@ public class TrackDetailsTests
 
     private static ParameterView Parameters(int id) => ParameterView.FromDictionary(new Dictionary<string, object?> { [nameof(TrackDetails.Id)] = id });
 
+    private static int CountOccurrences(string value, string search)
+    {
+        var count = 0;
+        var index = 0;
+        while ((index = value.IndexOf(search, index, StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            index += search.Length;
+        }
+
+        return count;
+    }
+
     [Test]
     public async Task ShowsTrackCollaboratorsAlbumAndStoredSpotifyMetadata()
     {
@@ -271,6 +284,17 @@ public class TrackDetailsTests
             var html = root.ToHtmlString();
             foreach (var expected in new[] { "Track &lt;one&gt;", "First artist", "Second artist", "Album title", "https://open.spotify.com/track/track%2Fid", "https://open.spotify.com/album/album-id" })
                 Assert.That(html, Does.Contain(expected));
+            Assert.That(html, Does.Not.Contain("<code>")
+                .And.Not.Contain("Track Spotify ID")
+                .And.Not.Contain("Album Spotify ID"));
+            Assert.That(CountOccurrences(html, "class=\"btn btn-sm btn-outline-success\""), Is.EqualTo(2));
+            Assert.That(html.IndexOf("Open track on Spotify", StringComparison.Ordinal),
+                Is.LessThan(html.IndexOf("Open album on Spotify", StringComparison.Ordinal)));
+            Assert.That(html, Does.Contain("aria-label=\"Track social actions\"")
+                .And.Contain("class=\"col-12 col-lg-6\"")
+                .And.Contain("id=\"reviews-heading\""));
+            Assert.That(html.IndexOf("id=\"review-form-heading\"", StringComparison.Ordinal),
+                Is.LessThan(html.IndexOf("id=\"reviews-heading\"", StringComparison.Ordinal)));
             Assert.That(catalog.RequestedIds, Is.EqualTo(new[] { 42 }));
         });
     }
