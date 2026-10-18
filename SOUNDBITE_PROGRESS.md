@@ -45,13 +45,13 @@
 | Navigation and home | Implemented — verified after conflict resolution | Light navbar with the horizontal `soundbite-logo.png` wordmark linking to `/`, an explicit Home NavLink, a mobile toggle, and keyboard focus styles. Signed-out: Home, Search, Create account, and a primary Log in button. Signed-in: Home, Search, Ratings and Trends, Favourites, then the Account dropdown (Edit Profile, Notifications with unread badge, role-gated Admin, antiforgery-protected POST Log out). `/feed` and `/playlists` return 404; `/favourites` shows only a login prompt to anonymous visitors and uses the shared centred content column. The signed-out Home shows only the login-first hero. The signed-in Home shows the personalized welcome, a "Search the catalogue" button, and the embedded global activity feed. |
 | Administrative user management | Implemented — verified | `/admin/users` supports user search/paging, account lock/unlock, and admin-role grants/revocation. Every service operation checks live role membership and lockout state server-side. The front-end label is “Admin.” |
 | Automated tests | Passed — verified | The combined conflict resolution passed **283/283**, with 0 failed and 0 skipped. |
-| Git and repository hygiene | In progress | Branch `feature/frontend-and-user-flow` incorporates `origin/main` (`94d0add`) through a resolved and verified merge. The tracked `SoundBite/soundbite.db` has user-owned local modifications that remain deliberately unstaged and uncommitted. |
+| Git and repository hygiene | In progress | Branch `feature/frontend-and-user-flow` incorporates `origin/main` (`40cc394`) through resolved and verified merges. The tracked `SoundBite/soundbite.db` has user-owned local modifications that remain deliberately unstaged and uncommitted. |
 
 ## 4. Latest Completed Work
 
 ### 2026-10-18 — Resolved visual-system PR conflicts with current `main`
 
-- **Resolution:** Merged `origin/main` (`94d0add`) into `feature/frontend-and-user-flow`, retaining `main`'s Favourites replacement, global Home activity feed, removed `/feed` and `/playlists` routes, migrations, services, and tests. Preserved the visual branch's explicit Home link, navigation ordering, primary login treatment, visual tokens, typography, focus styles, and entity-title styling. Applied the shared 1024px content column to Search and the replacement Favourites page, without resurrecting deleted playlist pages.
+- **Resolution:** Merged `origin/main` through `40cc394` into `feature/frontend-and-user-flow`, retaining `main`'s Favourites replacement, global Home activity feed, removed `/feed` and `/playlists` routes, migrations, services, tests, and explicit `/` Home destination. Preserved the visual branch's navigation ordering, primary login treatment, visual tokens, typography, focus styles, and entity-title styling. Applied the shared 1024px content column to Search and the replacement Favourites page, without resurrecting deleted playlist pages.
 - **Tests:** Updated the rendered navigation expectations to Home → Search → Ratings and Trends → Favourites → Account and moved the shared-column coverage from removed routes to `/favourites`. The login-style assertion checks the semantic class and label without depending on Blazor's generated scoped-CSS attribute placement.
 - **Verification:** `dotnet build SoundBite.sln --no-restore` passed with 0 errors and the 2 existing `CS1998` warnings. `dotnet test SoundBite.sln --no-build` passed **283/283**, 0 failed and 0 skipped. `git diff --check` passed and no conflict markers remain. The pre-existing tracked `SoundBite/soundbite.db` stayed byte-identical at SHA-256 `9321727cfeb0cfd61ab43996b4149a658b5486300e3112a1ff8ed2896fd3cd39`. Browser checks were not rerun for the combined merge.
 - **State:** Conflict resolution is complete and verified; no deployment was performed.
@@ -506,7 +506,7 @@
 
 ## 9. Git Status
 
-- **Branch:** `feature/frontend-and-user-flow`, incorporating `origin/main` (`94d0add`) through a resolved and verified merge. The visual-system commits (`5f7b69d`, `357eef7`) and navbar logout fix (`182edc6`) are included.
+- **Branch:** `feature/frontend-and-user-flow`, incorporating `origin/main` (`40cc394`) through resolved and verified merges. The visual-system commits (`5f7b69d`, `357eef7`) and navbar logout fix (`182edc6`) are included.
 - **Database:** `AddDemoReviews` is applied to the deployment database after a mode-600 integrity-checked backup at `~/Library/Application Support/SoundBite/backups/soundbite-pre-demo-reviews-20261018-150136.db`. `ReplacePlaylistsWithFavourites` was later applied after the backup `soundbite-pre-favourites-20261018-184812.db` (see §4). This merge applies no migrations.
 - **PRs #17–#19:** Notification paging, category preferences, and settings UI are merged into `main`.
 

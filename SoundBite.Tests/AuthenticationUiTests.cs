@@ -115,7 +115,7 @@ public class AuthenticationUiTests
     {
         var signedOut = await client.GetStringAsync("/");
         var signedOutNavbar = NavbarOf(signedOut);
-        Assert.That(signedOutNavbar, Does.Contain("<a href=\"\" class=\"nav-link active\" aria-current=\"page\">Home</a>")
+        Assert.That(signedOutNavbar, Does.Contain("<a href=\"/\" class=\"nav-link active\" aria-current=\"page\">Home</a>")
             .And.Contain("<a href=\"search\" class=\"nav-link\">Search</a>")
             .And.Contain("<a href=\"register\" class=\"nav-link\">Create account</a>")
             .And.Contain("<a href=\"login\" class=\"btn btn-primary nav-cta\">Log in</a>")
@@ -125,7 +125,7 @@ public class AuthenticationUiTests
             .And.Not.Contain("href=\"rankings\"").And.Not.Contain("href=\"playlists\"")
             .And.Not.Contain("href=\"favourites\"").And.Not.Contain("/account/logout").And.Not.Contain("admin/users")
             .And.Not.Contain("href=\"notifications\"").And.Not.Contain("soundbite-logo.svg"));
-        Assert.That(Regex.Matches(signedOutNavbar, "class=\"nav-link[\" ]").Count, Is.EqualTo(3),
+        Assert.That(Regex.Matches(signedOutNavbar, "class=\"nav-link(?: active)?\"").Count, Is.EqualTo(3),
             "Only Home, Search and Create account are secondary links; Log in is the primary button.");
         AssertInOrder(signedOutNavbar, ">Home</a>", ">Search</a>", ">Create account</a>", ">Log in</a>");
         Assert.That(signedOut, Does.Not.Contain("/account/logout"));
@@ -145,7 +145,7 @@ public class AuthenticationUiTests
         await Register();
         var signedInHome = await client.GetStringAsync("/");
         var signedIn = NavbarOf(signedInHome);
-        Assert.That(signedIn, Does.Contain("href=\"\" class=\"nav-link active\" aria-current=\"page\">Home</a>")
+        Assert.That(signedIn, Does.Contain("href=\"/\" class=\"nav-link active\" aria-current=\"page\">Home</a>")
             .And.Contain("href=\"search\" class=\"nav-link\">Search</a>")
             .And.Contain("href=\"rankings\" class=\"nav-link\">Ratings and Trends</a>")
             .And.Contain("href=\"favourites\" class=\"nav-link\">Favourites</a>")
