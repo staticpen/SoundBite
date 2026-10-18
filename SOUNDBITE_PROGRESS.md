@@ -22,7 +22,7 @@
 
 - **Overall status:** In progress
 - **Current development phase:** Presentation and deployment readiness
-- **Current focus:** SoundBite visual system and responsive layout (committed on `feature/frontend-and-user-flow`); deploy and browser-verify the UI and the earlier logout fix
+- **Current focus:** Registration-button focus fix is verified but uncommitted; commit it, then deploy the UI and earlier logout fix
 - **Last verified:** 2026-10-18
 - **Current blocker:** The top-row logout fix (antiforgery-validated HTTP POST) is committed as `182edc6` but its deployment is not yet confirmed. Deployment also requires interactive macOS administrator authorization. The Spotify album-pagination fix is committed as `55f9a20`; its deployment status still needs confirmation.
 
@@ -379,6 +379,33 @@
 - **Tests (`AuthenticationUiTests.cs`):** Navbar assertions now expect the active Home link (`aria-current="page"`) and check destination order with a small `AssertInOrder` helper: anonymous Home → Search → Create account → Log in; signed-in Home → Search → Activity Feed → Ratings and Trends → Playlists → Account. Added `SingleColumnPagesUseTheSharedCentredContentColumn` (`/feed`, `/search`, `/playlists`) and `LoginFormUsesThePrimaryActionStyle`. No assertions depend on generated CSS.
 - **Verification:** `dotnet build SoundBite.sln` passed with 0 errors and the 3 existing `CS1998` test warnings. `dotnet test SoundBite.sln --no-build` passed **279/279**; the first run failed 1 test because .NET 9 adds `aria-current="page"` to the active NavLink, and the assertion was corrected. Smoke run in Development against a disposable copy of the database in the session scratchpad: `/`, `/search`, `/feed`, `/playlists`, `/login`, `/register` and `/rankings` returned HTTP 200, the Google Fonts URL rendered intact, the fingerprinted `app.css` was served, and `/search` contained `content-column`. **Not verified:** visual inspection in a browser at desktop or phone widths, and deployment.
 
+### 2026-10-18 — Independent verification of visual-system commit `5f7b69d`
+
+- **Verdict:** PASS WITH ISSUES. The commit is limited to the requested visual system, responsive layout, navigation markup, focused rendered tests, and this progress record; no secrets, generated artifacts, migrations, database files, or unrelated application behavior are included.
+- **Finding:** The custom registration submit button is not matched by the global `.btn:focus-visible` rule and has no scoped `:focus-visible` rule. Real keyboard traversal in Chrome therefore shows the browser's 1px blue outline rather than the 2px `#D91668` SoundBite focus indicator used by links and Bootstrap buttons. Inputs correctly settle to the primary border plus 4px primary focus ring.
+- **Diff hygiene:** The required plain `git diff --check 5f7b69d^ 5f7b69d` reports added lines in the repository's existing CRLF files as trailing whitespace. A CRLF-aware check (`git -c core.whitespace=cr-at-eol diff --check`) passes, and an explicit before/after audit found no line-ending conversion or mixed endings.
+- **Automated verification:** `dotnet build SoundBite.sln` passed with 0 errors and the 3 existing `CS1998` warnings. `dotnet test SoundBite.sln` passed **279/279**, 0 failed and 0 skipped. The changed tests meaningfully render and inspect anonymous/authenticated navigation order and state, the three shared content-column wrappers, and the login primary-action class; they do not duplicate generated CSS values.
+- **Browser verification:** Installed Google Chrome was run headlessly against a freshly migrated `/tmp/soundbite-verify-5f7b69d.vLwwbs/browser.db` at 1440x900, 1024x768, and 390x844. All requested routes loaded in both relevant authentication states with zero horizontal overflow. Feed, Search, and Playlists measured 1024px wide with balanced 208px desktop margins and 358px wide with 16px mobile padding; Rankings remained 1296px wide on desktop. The desktop/tablet nav stayed in one right-aligned cluster, the mobile menu opened and closed, and the account dropdown stayed inside every viewport. A disposable account verified authenticated ordering, the unread badge/ARIA label, role-gated Admin link, and antiforgery POST logout without the Blazor error banner.
+- **Computed styles/resources:** Body text resolved to DM Sans at 16px/400/25.6px in `#091227`; headings resolved to Outfit (hero 48px/800 desktop and 34px/800 mobile; page titles 32px/700 desktop and 27px/700 mobile). Primary actions resolved to `#D91668` with white text, with hover/active token `#B61863`; secondary controls resolve from `#7E0C8B`. The Google Fonts stylesheet and DM Sans/Outfit WOFF2 resources all returned HTTP 200, and weight-specific FontFace checks passed.
+- **Isolation:** Browser screenshots and the detailed report are under `/tmp/soundbite-verify-5f7b69d.vLwwbs`. The pre-existing tracked `SoundBite/soundbite.db` remained byte-identical during verification at SHA-256 `9321727cfeb0cfd61ab43996b4149a658b5486300e3112a1ff8ed2896fd3cd39`; it remains the user's only pre-existing unstaged change. No implementation fix, stage, commit, push, deployment, or repository dependency installation was performed.
+
+### 2026-10-18 — Registration button keyboard-focus fix (uncommitted)
+
+- **Change:** `SoundBite/Components/Pages/Register.razor.css` only. Added `.register-button:focus-visible { outline: 2px solid var(--sb-primary); outline-offset: 2px; }`, matching the global `.btn`/link focus treatment, and added `:active` to the existing `:hover` rule so pressed and hovered states both use `--sb-primary-hover`. No markup, navigation, or other styles changed.
+- **Diff hygiene:** Plain `git diff --check` and `git -c core.whitespace=cr-at-eol diff --check` both pass with no output. `Register.razor.css` uses LF, so there are no CRLF false positives for this change.
+- **Automated verification:** `dotnet build SoundBite.sln` passed with 0 errors and 0 warnings (incremental build; the test project was not recompiled, so the 3 existing `CS1998` warnings were not re-emitted). `dotnet test SoundBite.sln` passed **279/279**, 0 failed and 0 skipped.
+- **Browser verification:** Installed headless Chrome 155 was driven over the DevTools protocol using Node 24's built-in WebSocket, with no dependencies installed. The app ran in Development against a disposable copy of the database at `/tmp/soundbite-a11y-register.NzFfza/browser.db`. At both 1440x900 and 390x844, real Tab key presses reached "Create account" in 5 steps. Computed styles:
+  - Normal state: background `rgb(217, 22, 104)` (`#D91668`), no outline.
+  - Keyboard focus: `:focus-visible` matched, with a `solid 2px rgb(217, 22, 104)` outline and `2px` offset.
+  - Real pointer hover: background `rgb(182, 24, 99)` (`#B61863`).
+  - Real mouse press: background `#B61863`.
+  - Forced `:active` without hover: background `#B61863`.
+  - Layout: no horizontal overflow (scrollWidth equals viewport width), and the focus ring sits inside the viewport with no clipping ancestors.
+  - Focus loss: after a press released off the button, focus stayed on the button and the page stayed on `/register`.
+
+  Screenshots and the JSON report are in `/tmp/soundbite-a11y-register.NzFfza/`.
+- **Isolation:** The tracked `SoundBite/soundbite.db` SHA-256 was `9321727cfeb0cfd61ab43996b4149a658b5486300e3112a1ff8ed2896fd3cd39` before and after. Nothing was staged, committed, pushed, merged, or deployed.
+
 ## 5. Current Implementation Details
 
 - The application entry point in `SoundBite/Program.cs` configures a Blazor Web App with `AddRazorComponents().AddInteractiveServerComponents()`, SQLite via `UseSqlite(...)`, ASP.NET Core Identity, and the ranking/trend services and strategies.
@@ -453,7 +480,7 @@
 
 - A is complete: paging, category opt-outs, and the settings page are implemented and merged in PRs #17–#19. Focused notification and route tests passed 53/53 on 2026-10-17; the A3 record reports the full suite passed 263/263.
 - User confirmed code commit `41f90ca` was deployed. Following explicit authorization, backed up the production DB, applied `AddDemoReviews`, and seeded 50 tracks plus 26 labelled demo reviews. Artist import then exposed Spotify's 10-album page-size cap; its correction is commit `55f9a20`. This session fixed the separate top-row logout error with a native antiforgery-validated HTTP POST; focused authentication tests passed 15/15 and the full suite passed 269/269. Logout fix is not yet deployed; run the deploy script in a local interactive terminal for sudo authorization, then browser-test logout. Windows Tailscale viewer access remains outstanding.
-- 2026-10-18: SoundBite visual system and responsive layout committed (tokens and type scale in `app.css`, Home nav link, right-aligned desktop nav, `.content-column` on feed/search/playlists); 279/279 tests pass. Browser visual check at desktop/phone widths is still outstanding.
+- 2026-10-18: SoundBite visual system and responsive layout committed (tokens and type scale in `app.css`, Home nav link, right-aligned desktop nav, `.content-column` on feed/search/playlists); independent review passed 279/279 tests and real Chrome checks at desktop/tablet/mobile widths. That review's low-severity registration-button focus issue is now fixed and browser-verified at 1440x900 and 390x844 (uncommitted; 279/279 tests pass).
 - Notification event delivery is single-instance; shared infrastructure is only needed if deploying multiple instances.
 
 ## 12. Instructions for Updating This File

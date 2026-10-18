@@ -64,8 +64,14 @@
     margin-top: 0.5rem;
 }
 
-.register-button:hover {
+.register-button:hover,
+.register-button:active {
     background: var(--sb-primary-hover);
+}
+
+.register-button:focus-visible {
+    outline: 2px solid var(--sb-primary);
+    outline-offset: 2px;
 }
 
 .register-button:disabled {
