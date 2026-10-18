@@ -112,6 +112,36 @@ public class TrackDetailsTests
     }
 
     [Test]
+    public async Task TrackDetailsShowsCommunityReviewsButNotSampleReviews()
+    {
+        var catalog = new CatalogStub { Load = _ => Task.FromResult<Track?>(new Track { Title = "Reviewed track" }) };
+        await RenderAsync(catalog, async renderer =>
+        {
+            var root = await renderer.RenderComponentAsync<TrackDetails>(Parameters(1));
+            var html = root.ToHtmlString();
+            Assert.That(html, Does.Contain("Reviews (1)")
+                .And.Contain("Community review")
+                .And.Not.Contain("Sample reviews (demo data)")
+                .And.Not.Contain("Example sample review")
+                .And.Not.Contain("Sample reviewer"));
+        }, db =>
+        {
+            var user = new ApplicationUser { Id = "user-1", UserName = "alice", DisplayName = "Alice" };
+            db.Users.Add(user);
+            db.Tracks.Add(new Track { Id = 1, Title = "Reviewed track" });
+            db.Reviews.Add(new Review { UserId = user.Id, TrackId = 1, Rating = 5, Comment = "Community review" });
+            db.DemoReviews.Add(new DemoReview
+            {
+                SeedKey = "sample-track-1",
+                ReviewerLabel = "Sample reviewer",
+                TrackId = 1,
+                Rating = 4,
+                Comment = "Example sample review"
+            });
+        });
+    }
+
+    [Test]
     public async Task SignedInVisitorSeesRatingFormAndExistingReviewAsEditable()
     {
         var catalog = new CatalogStub { Load = _ => Task.FromResult<Track?>(new Track { Title = "Reviewed track" }) };
@@ -229,7 +259,6 @@ public class TrackDetailsTests
             .AddSingleton<IMusicCatalog>(catalog)
             .AddSingleton<IDbContextFactory<ApplicationDbContext>>(factory)
             .AddScoped<ReviewService>()
-            .AddScoped<DemoReviewService>()
             .AddScoped<FavouriteService>()
             .AddSingleton<NotificationEventDispatcher>()
             .AddScoped<SocialInteractionService>()

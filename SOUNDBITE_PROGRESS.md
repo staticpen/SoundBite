@@ -22,7 +22,7 @@
 
 - **Overall status:** In progress
 - **Current development phase:** Presentation and deployment readiness
-- **Current focus:** Public profile favourites and reviews; profile changes are implemented locally and verified, with deployment not performed
+- **Current focus:** Profile visibility and review presentation; local changes are verified, with deployment not performed
 - **Last verified:** 2026-10-19
 - **Current blocker:** The current local source changes have not been committed or deployed.
 
@@ -34,7 +34,7 @@
 | User profiles | Implemented — verified | `ApplicationUser` stores a display name and bio; the account page can edit them, and `/users/{username}` displays the public profile, that user's favourites, and public reviews without exposing account email. The profile UI and per-user data queries are covered by tests. |
 | Music catalogue | Seeded in production; artist import correction committed, deployment pending | `/search` searches local artists, albums, and tracks, then searches Spotify artists on a local miss. The deployed code fails at Spotify's artist-albums request; committed fix uses live-verified page size 10. Failed attempts left 17 artists, 38 albums, and 50 tracks unchanged. |
 | Spotify integration | Production seed and album-art backfill verified; current source awaits deployment | The deployed credentials completed five default searches, refreshing 50 unique tracks and creating 26 sample reviews across 12 tracks. Production now has cached cover URLs on all 54 albums. Spotify's batch album endpoint returned 403, so the refresh command fell back to individual album lookups. |
-| Track ratings and reviews | Implemented — verified | Reviews persist through EF Core; the service supports create/read/update, the database enforces one review per user per track and valid 1–5 ratings, and track details support public review reading plus authenticated submission/editing. |
+| Track ratings and reviews | Implemented — verified | Reviews persist through EF Core; the service supports create/read/update, the database enforces one review per user per track and valid 1–5 ratings, and track details support public community-review reading plus authenticated submission/editing. Sample reviews are not displayed on track details; they remain available to the rankings. |
 | Album-track many-to-many relationship | Implemented — unverified | `ApplicationDbContext` maps `ArtistAlbums` and `ArtistTracks` and `Track.AlbumId` with a nullable optional foreign key. This matches the intended design, but the schema has not been validated via a migration review beyond the code. |
 | Favourites | Implemented — production migration and Spotify fallback verified | Each user has one list, publicly displayed on their profile; only the owner can manage it from the Favourites page. Tracks can be added from search, track details, or the Favourites page; the page supports local catalogue search and, on a track miss, Spotify artist search/import before offering imported tracks to add. Ratings and reviews are not required to save a track. The production migration preserved the existing playlist track in `FavouriteTracks` and removed the playlist tables. |
 | Following and followers | Implemented — verified | Authenticated idempotent follow/unfollow, public counts and expandable 10-user pages; database constraints, concurrent requests, account deletion and browser flows verified. Merged into `main` at `ac92cbe`. |
@@ -44,10 +44,17 @@
 | Rankings and trends | Implemented — verified in isolated SQLite tests and headless Chrome | Shared `RankingsOverview` component shows top-rated tracks (minimum two reviews), most-reviewed tracks overall, and tracks with the most reviews in the last seven days on the separate `/rankings` page. Its navbar link is shown to signed-in users. Separately stored, labelled sample reviews can populate these lists without masquerading as community reviews. |
 | Navigation and home | Implemented — verified | Light navbar with the horizontal `soundbite-logo.png` wordmark linking to `/`, an explicit Home NavLink, a mobile toggle, and keyboard focus styles. Signed-out: Home, Search, Create account, and a primary Log in button. Signed-in: Home, Search, Ratings and Trends, Favourites, then the Account dropdown (Edit Profile, Notifications with unread badge, role-gated Admin, antiforgery-protected POST Log out). `/feed` and `/playlists` return 404; `/favourites` shows only a login prompt to anonymous visitors and uses the shared centred content column. Home shows a centred anonymous hero with a single "Get Started" → `/register` CTA, or a centred signed-in hero welcoming the user by display name (falling back to username, then the claim name, then a generic greeting) with "Search the catalogue". Signed-in Home then shows the global activity feed in the centred 1024px content column; ratings and trends remain on `/rankings`. Successful login redirects to `/`. |
 | Administrative user management | Implemented — verified | `/admin/users` supports user search/paging, account lock/unlock, and admin-role grants/revocation. Every service operation checks live role membership and lockout state server-side. The front-end label is “Admin.” |
-| Automated tests | Passed — verified | Full NUnit suite: **312/312**, with 0 failed and 0 skipped. |
-| Git and repository hygiene | In progress | Current profile and documentation changes are uncommitted. No tracked database modification was present in the working tree at the start of this task. |
+| Automated tests | Passed — verified | Full NUnit suite: **313/313**, with 0 failed and 0 skipped. |
+| Git and repository hygiene | In progress | Current profile and review-presentation changes are uncommitted. No tracked database modification was present in the working tree at the start of this task. |
 
 ## 4. Latest Completed Work
+
+### 2026-10-19 — Remove sample reviews from track details
+
+- **Task completed:** Track detail pages now show only community reviews. Removed the sample-review query and the labelled demo-review section from `TrackDetails.razor`; sample reviews continue to be available to rankings.
+- **Tests:** Added rendered-page coverage confirming a community review remains visible while sample-review content is absent.
+- **Verification:** Focused `TrackDetailsTests` passed 17/17. Full `dotnet test SoundBite.sln --no-restore` passed **313/313**, 0 failed and 0 skipped. `git diff --check` passed.
+- **Remaining limitations:** Local changes are not committed or deployed.
 
 ### 2026-10-19 — Show favourites and reviews on public profiles
 
