@@ -95,6 +95,7 @@ public class TrackDetailsTests
             var root = await renderer.RenderComponentAsync<TrackDetails>(Parameters(1));
             var html = root.ToHtmlString();
             Assert.That(html, Does.Contain("Reviews (1)")
+                .And.Contain("<h1 class=\"card-title fs-2\">Reviewed track</h1>")
                 .And.Contain("Alice")
                 .And.Contain("A great track")
                 .And.Contain("Log in to like")

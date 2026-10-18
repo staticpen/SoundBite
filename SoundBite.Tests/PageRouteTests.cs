@@ -33,6 +33,7 @@ public class PageRouteTests
     [TestCase("/notifications/settings", typeof(NotificationSettings))]
     [TestCase("/rankings", typeof(Rankings))]
     [TestCase("/admin/users", typeof(AdminUsers))]
+    [TestCase("/listeners", typeof(FindListeners))]
     [TestCase("/artists/{Id:int}", typeof(ArtistDetails))]
     [TestCase("/albums/{Id:int}", typeof(AlbumDetails))]
     public void AuthenticationRoute_HasExpectedOwner(string template, Type expectedComponent)

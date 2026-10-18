@@ -72,6 +72,43 @@ public class AuthenticationUiTests
             .And.Contain("class=\"register-card\""));
     }
 
+    [Test]
+    public async Task ListenerDiscoveryPageShowsUsernameSearchAndRecentReviewers()
+    {
+        await Register();
+        using (var scope = app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var track = await db.Tracks.SingleAsync(item => item.Title == "Authentication test track");
+            db.Users.Add(new ApplicationUser
+            {
+                Id = "recent-listener",
+                UserName = "recentlistener",
+                NormalizedUserName = "RECENTLISTENER",
+                DisplayName = "Recent Listener"
+            });
+            db.Reviews.Add(new SoundBite.Models.Review
+            {
+                UserId = "recent-listener",
+                TrackId = track.Id,
+                Rating = 5,
+                Comment = "A recent review",
+                CreatedAt = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var html = await client.GetStringAsync("/listeners");
+
+        Assert.That(html, Does.Contain("<h1>Find listeners</h1>")
+            .And.Contain("id=\"listener-query\"")
+            .And.Contain("Check these active listeners out")
+            .And.Contain("Recent Listener")
+            .And.Contain("@recentlistener")
+            .And.Contain("Authentication test track")
+            .And.Contain("/users/recentlistener"));
+    }
+
     private async Task<HttpResponseMessage> Logout()
     {
         var home = await client.GetStringAsync("/");
@@ -131,7 +168,8 @@ public class AuthenticationUiTests
             .And.Contain("aria-controls=\"site-nav-menu\"").And.Contain("aria-expanded=\"false\"")
             .And.Not.Contain("href=\"feed\"")
             .And.Not.Contain("href=\"rankings\"").And.Not.Contain("href=\"playlists\"")
-            .And.Not.Contain("href=\"favourites\"").And.Not.Contain("/account/logout").And.Not.Contain("admin/users")
+            .And.Not.Contain("href=\"favourites\"").And.Not.Contain("href=\"listeners\"")
+            .And.Not.Contain("/account/logout").And.Not.Contain("admin/users")
             .And.Not.Contain("href=\"notifications\"").And.Not.Contain("soundbite-logo.svg"));
         Assert.That(Regex.Matches(signedOutNavbar, "class=\"nav-link(?: active)?\"").Count, Is.EqualTo(3),
             "Only Home, Search and Create account are secondary links; Log in is the primary button.");
@@ -157,6 +195,7 @@ public class AuthenticationUiTests
             .And.Contain("href=\"search\" class=\"nav-link\">Search</a>")
             .And.Contain("href=\"rankings\" class=\"nav-link\">Ratings and Trends</a>")
             .And.Contain("href=\"favourites\" class=\"nav-link\">Favourites</a>")
+            .And.Contain("href=\"listeners\" class=\"nav-link\">Find listeners</a>")
             .And.Not.Contain("href=\"feed\"").And.Not.Contain("href=\"playlists\"")
             .And.Contain(">Account</summary>")
             .And.Contain("href=\"account\" class=\"nav-link\">Edit Profile</a>").And.Contain("href=\"notifications\"")
@@ -165,7 +204,7 @@ public class AuthenticationUiTests
             .And.Not.Contain("href=\"register\"")
             .And.Not.Contain("href=\"login\"").And.Not.Contain("admin/users"));
         AssertInOrder(signedIn, ">Home</a>", ">Search</a>",
-            ">Ratings and Trends</a>", ">Favourites</a>", ">Account</summary>");
+            ">Ratings and Trends</a>", ">Favourites</a>", ">Find listeners</a>", ">Account</summary>");
 
         using (var scope = app.Services.CreateScope())
         {
@@ -295,6 +334,7 @@ public class AuthenticationUiTests
         Assert.That(await client.GetStringAsync("/favourites"), Does.Contain("Favourites").And.Contain("Add Tracks"));
         var home = await client.GetStringAsync("/");
         Assert.That(NavbarOf(home), Does.Contain("href=\"favourites\" class=\"nav-link\">Favourites</a>"));
+        Assert.That(NavbarOf(home), Does.Contain("href=\"listeners\" class=\"nav-link\">Find listeners</a>"));
         Assert.That(WebUtility.HtmlDecode(HeroOf(home)), Does.Contain("Welcome back, Updated name! Your music journey starts here."),
             "The welcome uses the saved display name in preference to the username.");
         Assert.That(home, Does.Contain("Activity Feed")

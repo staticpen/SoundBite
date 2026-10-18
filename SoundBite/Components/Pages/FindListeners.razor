@@ -1,0 +1,181 @@
+@page "/listeners"
+
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using SoundBite.Services
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ListenerDiscoveryService ListenerDiscovery
+@inject ILogger<FindListeners> Logger
+
+<PageTitle>Find listeners — SoundBite</PageTitle>
+
+<div class="content-column">
+    <h1>Find listeners</h1>
+    <p>Search for someone by username or discover listeners who have reviewed music recently.</p>
+
+    <section aria-labelledby="listener-search-heading">
+        <h2 id="listener-search-heading" class="h4">Find someone by username</h2>
+        <form @onsubmit="SearchAsync" @onsubmit:preventDefault>
+            <label for="listener-query" class="form-label">Username</label>
+            <div class="input-group mb-3">
+                <input id="listener-query" type="search" class="form-control"
+                       @bind="query" @bind:event="oninput" maxlength="256"
+                       placeholder="Enter at least 2 characters" disabled="@searching" />
+                <button type="submit" class="btn btn-primary" disabled="@searching">
+                    @(searching ? "Searching..." : "Search")
+                </button>
+            </div>
+        </form>
+
+        @if (searchError is not null)
+        {
+            <p class="alert alert-danger" role="alert">@searchError</p>
+        }
+        else if (searchMessage is not null)
+        {
+            <p role="status">@searchMessage</p>
+        }
+        else if (searchResults is not null)
+        {
+            <h3 class="h5">Search results for “@searchedQuery”</h3>
+            @if (searchResults.Count == 0)
+            {
+                <p role="status">No usernames found.</p>
+            }
+            else
+            {
+                <ul class="list-group mb-4">
+                    @foreach (var listener in searchResults)
+                    {
+                        <li class="list-group-item d-flex justify-content-between align-items-center gap-3"
+                            @key="listener.UserName">
+                            <span class="text-break">
+                                <strong>@PreferredName(listener.DisplayName, listener.UserName)</strong>
+                                <span class="text-muted">(@@@listener.UserName)</span>
+                            </span>
+                            <a class="btn btn-sm btn-outline-primary flex-shrink-0"
+                               href="@ProfileUrl(listener.UserName)">View profile</a>
+                        </li>
+                    }
+                </ul>
+            }
+        }
+        else
+        {
+            <p class="text-muted">Search usernames to find people to follow.</p>
+        }
+    </section>
+
+    <section class="mt-5" aria-labelledby="active-listeners-heading" aria-busy="@loadingActiveListeners">
+        <h2 id="active-listeners-heading" class="h4">Check these active listeners out</h2>
+        <p class="text-muted">Listeners who have shared a review in the last 30 days.</p>
+        @if (activeListenersError is not null)
+        {
+            <p class="alert alert-danger" role="alert">@activeListenersError</p>
+        }
+        else if (loadingActiveListeners)
+        {
+            <p role="status">Loading active listeners...</p>
+        }
+        else if (activeListeners.Count == 0)
+        {
+            <p role="status">No recent reviewers to show yet.</p>
+        }
+        else
+        {
+            <ul class="list-group">
+                @foreach (var listener in activeListeners)
+                {
+                    <li class="list-group-item" @key="listener.UserName">
+                        <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
+                            <div class="text-break">
+                                <a href="@ProfileUrl(listener.UserName)" class="fw-semibold">
+                                    @PreferredName(listener.DisplayName, listener.UserName)
+                                </a>
+                                <span class="text-muted">(@@@listener.UserName)</span>
+                                <div>
+                                    Reviewed <a href="@($"/tracks/{listener.TrackId}")">@listener.TrackTitle</a>
+                                    <time class="text-muted" datetime="@listener.ReviewedAt.ToString("O")">
+                                        @listener.ReviewedAt.ToLocalTime().ToString("g")
+                                    </time>
+                                </div>
+                            </div>
+                            <a class="btn btn-sm btn-outline-primary flex-shrink-0"
+                               href="@ProfileUrl(listener.UserName)">View profile</a>
+                        </div>
+                    </li>
+                }
+            </ul>
+        }
+    </section>
+</div>
+
+@code {
+    private string? currentUserId;
+    private string query = string.Empty;
+    private string? searchedQuery;
+    private string? searchMessage;
+    private string? searchError;
+    private bool searching;
+    private IReadOnlyList<ListenerProfile>? searchResults;
+    private IReadOnlyList<ActiveListenerProfile> activeListeners = [];
+    private bool loadingActiveListeners = true;
+    private string? activeListenersError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+        currentUserId = user.Identity?.IsAuthenticated == true
+            ? user.FindFirstValue(ClaimTypes.NameIdentifier)
+            : null;
+
+        try
+        {
+            activeListeners = await ListenerDiscovery.GetActiveListenersAsync(currentUserId);
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Unable to load active listeners");
+            activeListenersError = "Active listeners couldn't be loaded. Please try again later.";
+        }
+        finally
+        {
+            loadingActiveListeners = false;
+        }
+    }
+
+    private async Task SearchAsync()
+    {
+        searchResults = null;
+        searchError = null;
+        searchMessage = null;
+        searchedQuery = query.Trim();
+
+        if (searchedQuery.Length < ListenerDiscoveryService.MinimumSearchLength)
+        {
+            searchMessage = $"Enter at least {ListenerDiscoveryService.MinimumSearchLength} characters to search usernames.";
+            return;
+        }
+
+        searching = true;
+        try
+        {
+            searchResults = await ListenerDiscovery.FindUsersAsync(searchedQuery, currentUserId);
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Unable to search listener usernames");
+            searchError = "Usernames couldn't be searched. Please try again later.";
+        }
+        finally
+        {
+            searching = false;
+        }
+    }
+
+    private static string PreferredName(string displayName, string userName) =>
+        string.IsNullOrWhiteSpace(displayName) ? userName : displayName;
+
+    private static string ProfileUrl(string userName) =>
+        $"/users/{Uri.EscapeDataString(userName)}";
+}

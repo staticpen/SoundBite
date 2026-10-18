@@ -71,6 +71,7 @@ builder.Services.AddScoped<SpotifyArtistCatalogService>();
 builder.Services.AddScoped<ReviewService>();
 builder.Services.AddScoped<FavouriteService>();
 builder.Services.AddScoped<FollowService>();
+builder.Services.AddScoped<ListenerDiscoveryService>();
 builder.Services.AddScoped<SocialInteractionService>();
 builder.Services.AddScoped<FeedService>();
 builder.Services.AddScoped<UserService>();
