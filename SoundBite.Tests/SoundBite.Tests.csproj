@@ -22,6 +22,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\SoundBite\SoundBite.csproj" />
+    <ProjectReference Include="..\tools\SoundBite.Demo\SoundBite.Demo.csproj" />
   </ItemGroup>
 
 </Project>

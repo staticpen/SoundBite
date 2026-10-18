@@ -50,6 +50,28 @@
 
 ## 4. Latest Completed Work
 
+### 2026-10-18 — Offline demo generator final compatibility verification
+
+- Integrated fetched `origin/main` at `b2f25be` by fast-forward on `chore/demo-database`, preserving all uncommitted generator work. Reconciled this document by retaining main's complete content and restoring the prior offline-demo entry; teammates' deployment updates remain intact.
+- Standalone generator retains the original synthetic catalogue, three Identity accounts and all social data. Fresh generation applies all 13 unchanged EF migrations, including AddNotificationOptOuts and AddDemoReviews. DemoReviews stays empty: existing user-linked reviews continue to populate the new combined rankings/trends queries without application changes.
+- Completed-demo reruns now compare recorded migrations with the current assembly using immutable read-only SQLite access. Old or unknown migration histories fail with instructions to create a NEW external directory, change the connection override and use new credentials. Nonempty transaction journals are refused so uncheckpointed changes are never ignored. No database/credential mutation or WAL/SHM creation occurs during the check.
+- `docs/DEMO_DATABASE.md` now covers portable macOS/PowerShell setup, exact SDK requirements, private generated credentials, explicit connection overrides, safe reset, stale-schema handling and separation from the live Spotify/production workflow.
+- Verification: Release build via test invocation succeeded; 37 focused NUnit tests passed and the full suite passed 279/279 with no failures/skips. Three pre-existing CS1998 test warnings remain. New coverage verifies the 13-migration schema, unchanged 11-migration rejection, transaction-journal refusal, rerun/reset safety, rankings with zero DemoReviews, all three generated logins, catalogue/reviews/playlists/profile/feed/notification pages. Full suite also covers social interaction services. No browser testing repeated.
+- Fresh external demo created at `/Users/khoapham/.local/share/SoundBiteDemo/rehearsal-20261018`; rerun accepted without reseeding. SQLite integrity `ok`, no foreign-key violations; counts remain 10 artists, 15 albums, 40 tracks, 3 users, 90 reviews, 6 playlists, 6 follows, 60 likes, 36 comments and 84 notifications. The previous 20261017 demo was rejected as outdated; all original old-demo file hashes remain unchanged.
+- Protected application DB SHA-256 remains `33a52d2df14e62092d70cf729bbba9ab81c13a2ed699e33a168edc975e1ee53c`; no application source, migration or production database changes. Initial test implementation exposed SQLite read-only sidecar creation; immutable inspection and journal refusal resolved it, with regression coverage.
+- Verification completed locally before publication. User authorized an exact-scope commit, branch push and PR to main after passing checks; no PR merge authorized. Windows VS2022/F5, live Spotify and production deployment remain separate work.
+
+### 2026-10-17 — Isolated reproducible demonstration database (uncommitted)
+
+- Created `chore/demo-database` from fetched `origin/main` at `988588a`; preserved the existing checkout files and application database. No commit or push performed.
+- Added standalone `tools/SoundBite.Demo` (net9.0) and `docs/DEMO_DATABASE.md`. Explicit CLI opt-in creates a new external directory, applies unchanged migrations using pinned EF Core 9.0.21/SDK 9.0.319, and seeds through existing EF models and Identity UserManager in a transaction. No application startup hooks or feature changes.
+- Seeds 10 artists, 15 albums, 40 tracks, 3 ordinary users, 90 reviews, 6 playlists/48 items, 6 follows, 36 comments/replies, 60 likes and 84 notifications. Existing services derive feeds and rankings; recent timestamps populate trends. Spotify IDs stay null.
+- Generates unique passwords into a private external credentials file; no passwords or databases in source control. Completed reruns preserve database/credentials byte-for-byte. Safe reset creates a fresh directory and preserves the old demo; rejects repository paths, aliases, unrelated existing directories and explicit Production environments.
+- Verification: tool Release build passed (0 warnings/errors); 33 focused NUnit tests passed across DemoDatabaseTests, CataloguePersistenceTests and RankingAndTrendServiceTests. Existing test compilation reports 3 CS1998 warnings. Tests include all three generated logins and server-rendered catalogue, artist/album/track, playlist, ranking, profile, feed and notification pages; migrations, integrity/foreign keys, rerun and reset checks pass. Initial two notification assertions incorrectly assumed all users receive Alex's playlist notification; corrected to check each user's own notifications.
+- Created and reran an external demo at `/Users/khoapham/.local/share/SoundBiteDemo/rehearsal-20261017`. Real app startup succeeded against this database; interactive browser catalogue search returned Harbour Lanterns and Harbour Lights. Setup/run/reset and Windows environment-variable instructions are in the runbook.
+- Original `SoundBite/soundbite.db` SHA-256 remains `33a52d2df14e62092d70cf729bbba9ab81c13a2ed699e33a168edc975e1ee53c`. Historical migrations unchanged. Windows VS2022/F5, live Spotify and reconnection validation remain separate tasks; no full NUnit rerun.
+
+
 ### 2026-10-17 — B: local release-readiness checks (partial; environment-dependent checks outstanding)
 
 - **Build and tests:** With SDK 9.0.319, `dotnet build SoundBite.sln --configuration Release --no-restore` passed with 0 warnings/errors. `dotnet test SoundBite.sln --configuration Release --no-build` passed **263/263**, 0 failed/skipped.
