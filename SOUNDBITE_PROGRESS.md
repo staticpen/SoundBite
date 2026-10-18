@@ -22,7 +22,7 @@
 
 - **Overall status:** In progress
 - **Current development phase:** Presentation and deployment readiness
-- **Current focus:** Complete PR review and deployment after resolving and verifying the visual-system branch against the Favourites/global-feed changes on `main`
+- **Current focus:** Review and deploy the homepage redesign (centred heroes, live ratings/trends on Home, login → `/`), committed on `feature/frontend-and-user-flow` on top of merged PR #22 (`1eeea33`)
 - **Last verified:** 2026-10-18
 - **Current blocker:** No production database migration blocker remains: `ReplacePlaylistsWithFavourites` was applied and verified on 2026-10-18 after a private backup. The app does not run migrations at startup. The UI, logout, and Favourites integration still require deployment, which needs interactive macOS administrator authorization. The Spotify album-pagination fix is committed as `55f9a20`; its deployment status still needs confirmation.
 
@@ -41,13 +41,35 @@
 | Likes and comments | Implemented — verified | Signed-in users can idempotently like reviews, tracks, and comments. Users can add/edit/delete their own review comments and reply one level deep to top-level comments. Replies are grouped under parents, cannot be nested further, and are preserved as top-level comments if their parent is deleted. |
 | Activity feed | Implemented — global signed-in feed shown on Home | Home renders globally ordered, paginated reviews, comments/replies, likes, and Favourites additions from all users to signed-in viewers, regardless of follow relationships. Favourite-list contents remain private. The standalone Activity Feed navigation item and route are removed. |
 | Notifications | Implemented — verified | In addition to recipient-scoped notifications, `/notifications` uses keyset paging to load older items without duplicates; unread counts and read-state behavior remain independent of the displayed page. Users can persist per-category opt-outs from `/notifications/settings`, affecting future notifications only. Paging, authorization, read state, preference persistence/isolation, and UI behavior are covered by tests. The single-instance event dispatcher updates active recipient circuits; navigation and reconnection reload persisted state. |
-| Rankings and trends | Implemented — verified in isolated SQLite tests | `/rankings` shows top-rated tracks (minimum two reviews), most-reviewed tracks overall, and tracks with the most reviews in the last seven days. Separately stored, labelled sample reviews can populate these lists without masquerading as community reviews. |
-| Navigation and home | Implemented — verified after conflict resolution | Light navbar with the horizontal `soundbite-logo.png` wordmark linking to `/`, an explicit Home NavLink, a mobile toggle, and keyboard focus styles. Signed-out: Home, Search, Create account, and a primary Log in button. Signed-in: Home, Search, Ratings and Trends, Favourites, then the Account dropdown (Edit Profile, Notifications with unread badge, role-gated Admin, antiforgery-protected POST Log out). `/feed` and `/playlists` return 404; `/favourites` shows only a login prompt to anonymous visitors and uses the shared centred content column. The signed-out Home shows only the login-first hero. The signed-in Home shows the personalized welcome, a "Search the catalogue" button, and the embedded global activity feed. |
+| Rankings and trends | Implemented — verified in isolated SQLite tests and headless Chrome | Shared `RankingsOverview` component shows top-rated tracks (minimum two reviews), most-reviewed tracks overall, and tracks with the most reviews in the last seven days, on both `/rankings` and directly under the Home hero for every visitor. Separately stored, labelled sample reviews can populate these lists without masquerading as community reviews. |
+| Navigation and home | Implemented — verified after conflict resolution | Light navbar with the horizontal `soundbite-logo.png` wordmark linking to `/`, an explicit Home NavLink, a mobile toggle, and keyboard focus styles. Signed-out: Home, Search, Create account, and a primary Log in button. Signed-in: Home, Search, Ratings and Trends, Favourites, then the Account dropdown (Edit Profile, Notifications with unread badge, role-gated Admin, antiforgery-protected POST Log out). `/feed` and `/playlists` return 404; `/favourites` shows only a login prompt to anonymous visitors and uses the shared centred content column. Home: a centred anonymous hero with a single "Get Started" → `/register` CTA, or a centred signed-in hero welcoming the user by display name (falling back to username, then the claim name, then a generic greeting) with "Search the catalogue"; then live ratings and trends for everyone; then, for signed-in users, the global activity feed in the centred 1024px content column. Successful login redirects to `/`. |
 | Administrative user management | Implemented — verified | `/admin/users` supports user search/paging, account lock/unlock, and admin-role grants/revocation. Every service operation checks live role membership and lockout state server-side. The front-end label is “Admin.” |
-| Automated tests | Passed — verified | The combined conflict resolution passed **283/283**, with 0 failed and 0 skipped. |
+| Automated tests | Passed — verified | Homepage redesign: **300/300**, with 0 failed and 0 skipped. |
 | Git and repository hygiene | In progress | Branch `feature/frontend-and-user-flow` incorporates `origin/main` (`40cc394`) through resolved and verified merges. The tracked `SoundBite/soundbite.db` has user-owned local modifications that remain deliberately unstaged and uncommitted. |
 
 ## 4. Latest Completed Work
+
+### 2026-10-18 — Homepage redesign, live ratings/trends on Home, login lands on `/`
+
+- **Base:** Current HEAD `1eeea33` (merge of PR #22), not `5f7b69d` directly. The only pre-existing working-tree change was the user-owned `SoundBite/soundbite.db`, left untouched and unstaged.
+- **Anonymous hero (`Components/Pages/Home.razor`):** Centre-aligned (`text-center` on `#home-hero`, copy capped at 46rem by `.sb-hero-copy`). `h1` "Your music taste deserves a place of its own.", the intro, a `<strong>` "Every track has a story. What's yours?", an unstyled list of four features (⭐/✍️/👥/❤️ in `aria-hidden` spans; Rate/Review/Follow/Save in `<strong>`), a single primary "Get Started" → `/register` (Log in remains in the navbar), and an `<em>` tagline. Plain spaces only; no HTML entities in the source.
+- **Signed-in hero:** "Welcome back, {name}! Your music journey starts here." with the two requested paragraphs ("Ready to get started?" in `<strong>`) and the "Search the catalogue" → `/search` CTA. The name comes from the new `UserService.GetPreferredNameAsync` (display name, else username). If the principal lacks a `NameIdentifier`, the user row is missing, or the lookup throws, Home logs it and falls back to `Identity.Name`, then to "Welcome back! Your music journey starts here."; exception details are never rendered.
+- **Shared rankings (`Components/Pages/RankingsOverview.razor`):** Extracted unchanged from `Rankings.razor`: data loading, loading/error/empty states, metric descriptions, `/tracks/{id}` links, sample-review badges and the demonstration-review note. Columns are `col-12 col-lg-4` (stacked below 992px, three equal columns above). `HeadingLevel` accepts only 2 or 3 and throws `ArgumentOutOfRangeException` otherwise. `/rankings` keeps `h1` → `h2` metrics; Home uses `h1` hero → `h2` "Ratings and trends" → `h3` metrics. Home had no other discovery links to keep.
+- **Activity feed:** On signed-in Home it moved from the left-aligned `col-lg-6` row into `<div id="home-activity" class="content-column">`, below ratings and trends: full width on mobile, capped at the 1024px content column and centred on desktop.
+- **Login (`Account.razor`):** A successful login now calls `NavigateTo("/", forceLoad: true)`. `ReturnUrl` is still never read, so there is no open redirect. Registration still redirects to `/account`.
+- **Other files:** `Services/UserService.cs` (was an empty placeholder) and its registration in `Program.cs`. `wwwroot/app.css` gained hero copy, feature list and tagline rules (global, not scoped, so markup carries no generated attributes). `Rankings.razor` is now page title + intro + `<RankingsOverview />`.
+- **Tests:** `CatalogueIntegrationTests` covers the anonymous copy, emphasis, decorative emoji, tagline, centring and single `/register` CTA; the display-name welcome; username, claim-name and generic fallbacks; Home still rendering when the name lookup throws; ratings/trends directly after the hero for both states, with `h3` metrics and real data/empty states; and the centred `content-column` feed with no `col-lg-6`. Primary-button extraction matches the class token, independent of attribute order. `RankingAndTrendServiceTests` covers `/rankings` `h1`/`h2` structure, `h3` nesting with three responsive columns, rejection of levels 1 and 4, the demo note appearing only when demo data exists, empty states, and a generic error alert on an unmigrated database. `AuthenticationUiTests` covers the real-pipeline hero for both states, the display-name welcome after a profile save, anonymous ratings/trends below the hero, login → `https://localhost/` for username and email, and `ReturnUrl` values `https://evil.example`, `//evil.example`, `/\evil.example`, `javascript:alert(1)` and `/account` all redirecting to `https://localhost/`. `ActivityFeedUiTests` registers the new Home dependencies.
+- **Verification:** `dotnet build SoundBite.sln` passed with 0 errors and the 2 existing `CS1998` warnings. `dotnet test SoundBite.sln --no-build` passed **300/300**, 0 failed and 0 skipped.
+- **Browser check:** Ran headless Chrome over the DevTools protocol against the app in Development, using a freshly migrated disposable database in the session scratchpad. The tracked DB lags current migrations, so it wasn't used. The database was seeded with five tracks, three reviewers, eight reviews and two demo reviews. Results at 1440x900 and 390x844:
+  - Both heroes' headings, paragraphs and lists computed `text-align: center`, and the CTAs sat centred.
+  - The ranking columns shared one row on desktop (432px each) and stacked on mobile; the demo note was shown.
+  - The signed-in feed measured 1024px, centred, on desktop and 358px with 16px gutters on mobile.
+  - A newly registered user saw "Welcome back, browseruser!", which became "Welcome back, Browser Display!" after a profile save.
+  - Logout followed by login with `ReturnUrl=https://evil.example` landed on `http://localhost:5199/`.
+  - `/rankings` kept `h1` + `h2` headings.
+  - No page had horizontal overflow, and the Blazor error banner never appeared.
+
+  The tracked `SoundBite/soundbite.db` stayed byte-identical at SHA-256 `9321727cfeb0cfd61ab43996b4149a658b5486300e3112a1ff8ed2896fd3cd39`. Not deployed.
 
 ### 2026-10-18 — Resolved visual-system PR conflicts with current `main`
 
@@ -459,8 +481,8 @@
 - `Album`, `Artist`, and `Track` models initialize empty navigation collections and enforce basic validation requirements.
 - `Endpoints/AccountEndpoints.cs` exposes registration, login, logout, and current-user endpoints.
 - `Data/ApplicationUser.cs` includes `DisplayName` and optional `Bio`. The account page edits these fields; `/users/{username}` displays a public profile without exposing email.
-- Remaining model and service placeholders include `UserService`. Rankings combine community reviews with clearly labelled `DemoReviews`; Spotify access requires configured credentials. Likes support reviews, tracks, and comments (playlist likes were removed by `ReplacePlaylistsWithFavourites`); comments/feed entries remain review-scoped.
-- The NUnit test project is active; the combined conflict resolution passed 283/283.
+- `UserService` resolves a user's preferred name (display name, else username) for the Home welcome. Rankings combine community reviews with clearly labelled `DemoReviews`; Spotify access requires configured credentials. Likes support reviews, tracks, and comments (playlist likes were removed by `ReplacePlaylistsWithFavourites`); comments/feed entries remain review-scoped.
+- The NUnit test project is active; the homepage redesign passed 300/300.
 - `20261018035010_AddDemoReviews` adds the separate sample-review table and has been applied to the configured deployment database after an integrity-checked backup.
 
 ## 6. Important Decisions and Assumptions
@@ -496,8 +518,9 @@
 
 | Check | Result | Notes |
 |---|---|---|
-| Application build | Passed | `dotnet build SoundBite.sln --no-restore` (default Debug configuration) on the resolved visual-system/Favourites merge, 2026-10-18: 0 errors and 2 existing `CS1998` warnings in `AdminServiceTests.cs:136` and `ReviewServiceTests.cs:88`. A Release build was not run for this merge. |
-| Automated tests | Passed — verified | Resolved visual-system/Favourites merge, 2026-10-18, `dotnet test SoundBite.sln --no-build` (Debug): full suite **283 passed**, 0 failed/skipped. |
+| Application build | Passed | `dotnet build SoundBite.sln` (default Debug configuration) for the homepage redesign, 2026-10-18: 0 errors and 2 existing `CS1998` warnings in `AdminServiceTests.cs:136` and `ReviewServiceTests.cs:88`. A Release build was not run. |
+| Automated tests | Passed — verified | Homepage redesign, 2026-10-18, `dotnet test SoundBite.sln --no-build` (Debug): full suite **300 passed**, 0 failed/skipped. |
+| Homepage browser check | Passed | Headless Chrome at 1440x900 and 390x844 against a disposable migrated DB: centred heroes, responsive ranking columns, centred 1024px feed, display-name/username welcome, login → `/`, no horizontal overflow (see §4). |
 | Application publish | Passed | `dotnet publish SoundBite/SoundBite.csproj --configuration Release --no-build --output /tmp/soundbite-b-readiness-publish` succeeded. |
 | Application startup and local smoke test | Passed | App ran against a disposable copy at `/tmp/soundbite-b-readiness.db`; `/` returned HTTP 200, catalogue search rendered and accepted a local-search interaction. No target database was used. |
 | Circuit reconnect | Partially verified | A running page survived a local server stop/restart: the rejoining dialog appeared and dismissed, and page interaction worked afterward. Manual Retry and Reload buttons were not reached. |
@@ -506,7 +529,7 @@
 
 ## 9. Git Status
 
-- **Branch:** `feature/frontend-and-user-flow`, incorporating `origin/main` (`40cc394`) through resolved and verified merges. The visual-system commits (`5f7b69d`, `357eef7`) and navbar logout fix (`182edc6`) are included.
+- **Branch:** `feature/frontend-and-user-flow`. PR #22 is merged (`1eeea33`). The homepage redesign is committed locally on top as `feat(home): redesign homepage and post-login experience` and has not been pushed.
 - **Database:** `AddDemoReviews` is applied to the deployment database after a mode-600 integrity-checked backup at `~/Library/Application Support/SoundBite/backups/soundbite-pre-demo-reviews-20261018-150136.db`. `ReplacePlaylistsWithFavourites` was later applied after the backup `soundbite-pre-favourites-20261018-184812.db` (see §4). This merge applies no migrations.
 - **PRs #17–#19:** Notification paging, category preferences, and settings UI are merged into `main`.
 
@@ -525,6 +548,7 @@
 - A is complete: paging, category opt-outs, and the settings page are implemented and merged in PRs #17–#19. Focused notification and route tests passed 53/53 on 2026-10-17; the A3 record reports the full suite passed 263/263.
 - User confirmed code commit `41f90ca` was deployed. Following explicit authorization, backed up the production DB, applied `AddDemoReviews`, and seeded 50 tracks plus 26 labelled demo reviews. Artist import then exposed Spotify's 10-album page-size cap; its correction is commit `55f9a20`. This session fixed the separate top-row logout error with a native antiforgery-validated HTTP POST; focused authentication tests passed 15/15 and the full suite passed 269/269. Logout fix is not yet deployed; run the deploy script in a local interactive terminal for sudo authorization, then browser-test logout. Windows Tailscale viewer access remains outstanding.
 - 2026-10-18: SoundBite visual system and responsive layout committed (tokens and type scale in `app.css`, Home nav link, right-aligned desktop nav); independent review passed 279/279 tests and real Chrome checks at desktop/tablet/mobile widths. The registration-button focus issue was fixed, browser-verified, committed as `357eef7`, and pushed. Conflicts with current `main` were resolved by retaining Favourites and the embedded global Home feed, moving the shared centred column to Search and Favourites, and keeping the visual navigation system; the combined suite passes 283/283. The combined merge was not browser-retested.
+- 2026-10-18: Homepage redesign committed (not pushed) on top of `1eeea33`. Changes: centred anonymous and personalised heroes, the shared `RankingsOverview` on Home and `/rankings`, the centred signed-in feed, and login → `/`. 300/300 tests pass, and the headless Chrome desktop/mobile check passed. Next: push, open a PR, deploy, and spot-check Home on the deployed site.
 - Notification event delivery is single-instance; shared infrastructure is only needed if deploying multiple instances.
 
 ## 12. Instructions for Updating This File

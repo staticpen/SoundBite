@@ -1,3 +1,4 @@
+using System.Net;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Components.Authorization;
 using System.Reflection;
@@ -14,6 +15,7 @@ using SoundBite.Data;
 using SoundBite.Interfaces;
 using SoundBite.Models;
 using SoundBite.Services;
+using SoundBite.Strategies;
 
 namespace SoundBite.Tests;
 
@@ -249,24 +251,6 @@ public class CatalogueIntegrationTests
         });
     }
 
-    [Test]
-    public async Task HomePageShowsCatalogueSearchAndActivityFeed()
-    {
-        await WithCatalogue(async renderer =>
-        {
-            var home = await renderer.RenderComponentAsync<Home>(ParameterView.Empty);
-            var html = home.ToHtmlString();
-            Assert.That(html, Does.Contain("Discover music")
-                .And.Contain("href=\"/search\"")
-                .And.Contain("Activity Feed")
-                .And.Contain("col-lg-6")
-                .And.Not.Contain("Browse music")
-                .And.Not.Contain("Discover playlists")
-                .And.Not.Contain("Join the community")
-                .And.Not.Contain("Ratings and trends"));
-        }, new SignedInAuthenticationStateProvider());
-    }
-
     private static string HeroOf(string html)
     {
         var hero = Regex.Match(html, "<section id=\"home-hero\".*?</section>", RegexOptions.Singleline);
@@ -274,53 +258,137 @@ public class CatalogueIntegrationTests
         return hero.Value;
     }
 
-    private static string[] PrimaryHeroActions(string hero) =>
-        Regex.Matches(hero, "<a class=\"btn btn-primary[^\"]*\" href=\"([^\"]+)\"[^>]*>([^<]+)</a>")
-            .Select(match => $"{match.Groups[1].Value}|{match.Groups[2].Value.Trim()}").ToArray();
+    // Matches primary buttons by class token so attribute order and extra attributes don't matter.
+    private static string[] PrimaryActions(string html) =>
+        Regex.Matches(html, "<a\\b([^>]*)>(.*?)</a>", RegexOptions.Singleline)
+            .Where(match => Regex.IsMatch(match.Groups[1].Value, "class=\"[^\"]*\\bbtn-primary\\b"))
+            .Select(match => Regex.Match(match.Groups[1].Value, "href=\"([^\"]*)\"").Groups[1].Value + "|" +
+                WebUtility.HtmlDecode(match.Groups[2].Value).Trim())
+            .ToArray();
+
+    private static bool IsCentred(string hero) =>
+        Regex.IsMatch(hero, "^<section id=\"home-hero\"[^>]*class=\"[^\"]*\\btext-center\\b");
+
+    private static async Task<string> RenderHomeAsync(TestRenderer renderer) =>
+        (await renderer.RenderComponentAsync<Home>(ParameterView.Empty)).ToHtmlString();
 
     [Test]
-    public async Task SignedOutHomePageHeroMakesLogInThePrimaryAction()
+    public async Task SignedOutHomePageHeroInvitesVisitorsToGetStarted()
     {
         await WithCatalogue(async renderer =>
         {
-            var home = await renderer.RenderComponentAsync<Home>(ParameterView.Empty);
-            var html = home.ToHtmlString();
+            var html = await RenderHomeAsync(renderer);
             var hero = HeroOf(html);
-            Assert.That(PrimaryHeroActions(hero), Is.EqualTo(new[] { "/login|Log in" }));
-            Assert.That(hero, Does.Contain("href=\"/register\">Create account</a>")
-                .And.Contain("Rate tracks").And.Contain("Write reviews")
-                .And.Contain("Follow other listeners").And.Contain("Save favourite tracks")
-                .And.Not.Contain("playlist").And.Not.Contain("Playlist")
-                .And.Not.Contain("href=\"/search\"").And.Not.Contain("Welcome,"));
+            var text = WebUtility.HtmlDecode(hero);
+            Assert.That(IsCentred(hero), Is.True, "The anonymous hero must be centre-aligned.");
+            Assert.That(PrimaryActions(hero), Is.EqualTo(new[] { "/register|Get Started" }));
+            Assert.That(text, Does.Contain("Your music taste deserves a place of its own.</h1>")
+                .And.Contain("Discover new favourites, rate the tracks you love, and share your taste with people who get it.")
+                .And.Contain("<strong>Every track has a story. What's yours?</strong>")
+                .And.Contain("⭐</span> <strong>Rate</strong> the music that moves you.")
+                .And.Contain("✍️</span> <strong>Review</strong> tracks worth talking about.")
+                .And.Contain("👥</span> <strong>Follow</strong> listeners who share your taste.")
+                .And.Contain("\u2764\uFE0F</span> <strong>Save</strong> your favourites, all in one place.")
+                .And.Contain("<em>Your music. Your ratings. Your SoundBite.</em>"));
+            Assert.That(Regex.Matches(hero, "<span aria-hidden=\"true\">").Count, Is.EqualTo(4),
+                "Decorative feature emoji must be hidden from assistive technology.");
+            Assert.That(hero, Does.Not.Contain("href=\"/login\"").And.Not.Contain("&nbsp;")
+                .And.Not.Contain("href=\"/search\"").And.Not.Contain("Welcome back"));
             Assert.That(html, Does.Not.Contain("activity-feed-heading")
                 .And.Not.Contain("to see recent community activity"));
         });
     }
 
     [Test]
-    public async Task HomePageFallsBackToGenericWelcomeWhenTheUserHasNoName()
+    public async Task HomePageWelcomesTheSignedInUserByDisplayName()
     {
         await WithCatalogue(async renderer =>
         {
-            var home = await renderer.RenderComponentAsync<Home>(ParameterView.Empty);
-            var html = home.ToHtmlString();
-            var hero = HeroOf(html);
-            Assert.That(hero, Does.Contain("Welcome back to SoundBite.").And.Not.Contain("Welcome,"));
-            Assert.That(PrimaryHeroActions(hero), Is.EqualTo(new[] { "/search|Search the catalogue" }));
-            Assert.That(html, Does.Contain("activity-feed-heading"));
-        }, new UnnamedSignedInAuthenticationStateProvider());
+            var hero = HeroOf(await RenderHomeAsync(renderer));
+            var text = WebUtility.HtmlDecode(hero);
+            Assert.That(IsCentred(hero), Is.True, "The signed-in hero must be centre-aligned like the anonymous hero.");
+            Assert.That(text, Does.Contain("Welcome back, Listener Display! Your music journey starts here.</h1>")
+                .And.Contain("SoundBite is a community for discovering, rating, and reviewing music.")
+                .And.Contain("share your own opinions through ratings and reviews.")
+                .And.Contain("<strong>Ready to get started?</strong> Search for your favourite artist")
+                .And.Contain("connect with other music lovers through shared experiences."));
+            Assert.That(PrimaryActions(hero), Is.EqualTo(new[] { "/search|Search the catalogue" }));
+            Assert.That(hero, Does.Not.Contain("href=\"/login\"").And.Not.Contain("href=\"/register\""));
+        }, new SignedInAuthenticationStateProvider());
+    }
+
+    [TestCase("plainlistener", "Claim name", "Welcome back, plainlistener! Your music journey starts here.")]
+    [TestCase("missing-user", "Claim name", "Welcome back, Claim name! Your music journey starts here.")]
+    [TestCase(null, "Claim name", "Welcome back, Claim name! Your music journey starts here.")]
+    [TestCase(null, null, "Welcome back! Your music journey starts here.")]
+    public async Task HomePageWelcomeFallsBackFromDisplayNameToUsernameToClaimNameToGenericGreeting(
+        string? userId, string? claimName, string expectedHeading)
+    {
+        await WithCatalogue(async renderer =>
+        {
+            var hero = WebUtility.HtmlDecode(HeroOf(await RenderHomeAsync(renderer)));
+            Assert.That(hero, Does.Contain(expectedHeading + "</h1>"));
+            Assert.That(PrimaryActions(hero), Is.EqualTo(new[] { "/search|Search the catalogue" }));
+        }, new SignedInAuthenticationStateProvider(userId, claimName));
     }
 
     [Test]
-    public async Task HomePageWelcomesTheSignedInUserByName()
+    public async Task HomePageStillRendersWhenThePreferredNameLookupFails()
     {
         await WithCatalogue(async renderer =>
         {
-            var home = await renderer.RenderComponentAsync<Home>(ParameterView.Empty);
-            var hero = HeroOf(home.ToHtmlString());
-            Assert.That(hero, Does.Contain("Welcome, Listener.")
-                .And.Not.Contain("href=\"/login\"").And.Not.Contain("href=\"/register\""));
-            Assert.That(PrimaryHeroActions(hero), Is.EqualTo(new[] { "/search|Search the catalogue" }));
+            var html = await RenderHomeAsync(renderer);
+            Assert.That(WebUtility.HtmlDecode(HeroOf(html)), Does.Contain("Welcome back, Listener! Your music journey starts here."));
+            Assert.That(html, Does.Not.Contain("Simulated name lookup failure")
+                .And.Contain("id=\"home-rankings\"")
+                .And.Contain("activity-feed-heading"));
+        }, new SignedInAuthenticationStateProvider(), services =>
+            services.AddScoped(_ => new UserService(new FailingContextFactory())));
+    }
+
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task HomePageShowsLiveRatingsAndTrendsDirectlyBelowTheHero(bool signedIn)
+    {
+        await WithCatalogue(async renderer =>
+        {
+            var html = WebUtility.HtmlDecode(await RenderHomeAsync(renderer));
+            var heroEnd = html.IndexOf("</section>", html.IndexOf("id=\"home-hero\"", StringComparison.Ordinal), StringComparison.Ordinal);
+            var rankingsStart = html.IndexOf("<section id=\"home-rankings\"", StringComparison.Ordinal);
+            Assert.That(rankingsStart, Is.GreaterThan(heroEnd), "Ratings and trends must follow the hero.");
+            Assert.That(html[heroEnd..rankingsStart].Replace("</section>", "").Trim(), Is.Empty,
+                "Nothing may sit between the hero and the ratings and trends section.");
+
+            var rankings = html[rankingsStart..];
+            Assert.That(rankings, Does.Contain("<h2 id=\"home-rankings-title\">Ratings and trends</h2>")
+                .And.Contain("<h3 id=\"top-rated-heading\">Top rated</h3>")
+                .And.Contain("<h3 id=\"most-reviewed-heading\">Most reviewed</h3>")
+                .And.Contain("<h3 id=\"trending-heading\">Trending this week</h3>")
+                .And.Contain("tracks need at least 2 reviews")
+                .And.Contain("There aren't enough reviews to rank tracks yet.")
+                .And.Contain("href=\"/tracks/42\"").And.Contain("href=\"/tracks/907\"")
+                .And.Contain("1 reviews · 4.0 / 5 average")
+                .And.Contain("1 recent reviews · 2.0 / 5 average")
+                .And.Not.Contain("<h2 id=\"top-rated-heading\""));
+
+            var feed = html.IndexOf("activity-feed-heading", StringComparison.Ordinal);
+            if (signedIn)
+                Assert.That(feed, Is.GreaterThan(rankingsStart), "The activity feed belongs below ratings and trends.");
+            else
+                Assert.That(feed, Is.EqualTo(-1));
+        }, signedIn ? new SignedInAuthenticationStateProvider() : null);
+    }
+
+    [Test]
+    public async Task SignedInHomePageCentresTheActivityFeedInTheSharedContentColumn()
+    {
+        await WithCatalogue(async renderer =>
+        {
+            var html = await RenderHomeAsync(renderer);
+            Assert.That(Regex.IsMatch(html,
+                    "<div id=\"home-activity\"[^>]*class=\"content-column\"[^>]*>\\s*<section[^>]*aria-labelledby=\"activity-feed-heading\""),
+                Is.True, "The feed must sit in the centred, 1024px-capped content column.");
+            Assert.That(html, Does.Not.Contain("col-lg-6"));
         }, new SignedInAuthenticationStateProvider());
     }
 
@@ -381,32 +449,34 @@ public class CatalogueIntegrationTests
             Task.FromResult(new AuthenticationState(new ClaimsPrincipal(new ClaimsIdentity())));
     }
 
-    private sealed class SignedInAuthenticationStateProvider : AuthenticationStateProvider
+    private sealed class SignedInAuthenticationStateProvider(string? userId = "listener", string? name = "Listener")
+        : AuthenticationStateProvider
     {
-        public override Task<AuthenticationState> GetAuthenticationStateAsync() =>
-            Task.FromResult(new AuthenticationState(new ClaimsPrincipal(new ClaimsIdentity(
-            [
-                new Claim(ClaimTypes.NameIdentifier, "listener"),
-                new Claim(ClaimTypes.Name, "Listener")
-            ],
-            "test"))));
+        public override Task<AuthenticationState> GetAuthenticationStateAsync()
+        {
+            var claims = new List<Claim>();
+            if (userId is not null)
+                claims.Add(new Claim(ClaimTypes.NameIdentifier, userId));
+            if (name is not null)
+                claims.Add(new Claim(ClaimTypes.Name, name));
+            return Task.FromResult(new AuthenticationState(new ClaimsPrincipal(new ClaimsIdentity(claims, "test"))));
+        }
     }
 
-    private sealed class UnnamedSignedInAuthenticationStateProvider : AuthenticationStateProvider
+    private sealed class FailingContextFactory : IDbContextFactory<ApplicationDbContext>
     {
-        public override Task<AuthenticationState> GetAuthenticationStateAsync() =>
-            Task.FromResult(new AuthenticationState(new ClaimsPrincipal(new ClaimsIdentity(
-                [new Claim(ClaimTypes.NameIdentifier, "listener")],
-                "test"))));
+        public ApplicationDbContext CreateDbContext() =>
+            throw new InvalidOperationException("Simulated name lookup failure");
     }
 
     private static async Task WithCatalogue(
         Func<TestRenderer, Task> assertion,
-        AuthenticationStateProvider? authenticationStateProvider = null)
+        AuthenticationStateProvider? authenticationStateProvider = null,
+        Action<IServiceCollection>? configureServices = null)
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync();
-        await using var services = new ServiceCollection().AddLogging()
+        var serviceCollection = new ServiceCollection().AddLogging()
             .AddDbContextFactory<ApplicationDbContext>(options => options.UseSqlite(connection))
             .AddScoped<IMusicCatalog, CatalogueService>()
             .AddSingleton<ISpotifyCatalog, TestSpotifyCatalog>()
@@ -418,9 +488,15 @@ public class CatalogueIntegrationTests
             .AddScoped<FeedService>()
             .AddSingleton<NotificationEventDispatcher>()
             .AddScoped<SocialInteractionService>()
+            .AddScoped<IRankingStrategy, RatingRankingStrategy>()
+            .AddScoped<IRankingStrategy, PopularityRankingStrategy>()
+            .AddScoped<RankingService>()
+            .AddScoped<TrendService>()
+            .AddScoped<UserService>()
             .AddSingleton<AuthenticationStateProvider>(
-                authenticationStateProvider ?? new AnonymousAuthenticationStateProvider())
-            .BuildServiceProvider();
+                authenticationStateProvider ?? new AnonymousAuthenticationStateProvider());
+        configureServices?.Invoke(serviceCollection);
+        await using var services = serviceCollection.BuildServiceProvider();
         await using var scope = services.CreateAsyncScope();
         await using (var db = await services.GetRequiredService<IDbContextFactory<ApplicationDbContext>>().CreateDbContextAsync())
         {
@@ -432,7 +508,8 @@ public class CatalogueIntegrationTests
                 new Track { Id = 907, Title = "Echo <track>", SpotifyId = "spotify-second" });
             db.Users.AddRange(
                 new ApplicationUser { Id = "reviewer", UserName = "reviewer", DisplayName = "Integration reviewer" },
-                new ApplicationUser { Id = "listener", UserName = "listener" });
+                new ApplicationUser { Id = "listener", UserName = "listener", DisplayName = "Listener Display" },
+                new ApplicationUser { Id = "plainlistener", UserName = "plainlistener" });
             db.Reviews.Add(new Review { UserId = "reviewer", TrackId = 42, Rating = 4, Comment = "First track review" });
             db.Reviews.Add(new Review { UserId = "reviewer", TrackId = 907, Rating = 2, Comment = "Second track review" });
             await db.SaveChangesAsync();

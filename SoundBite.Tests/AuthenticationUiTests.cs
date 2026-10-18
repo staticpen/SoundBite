@@ -99,6 +99,14 @@ public class AuthenticationUiTests
         return hero.Value;
     }
 
+    // Matches primary buttons by class token so attribute order and extra attributes don't matter.
+    private static string[] PrimaryActions(string html) =>
+        Regex.Matches(html, "<a\\b([^>]*)>(.*?)</a>", RegexOptions.Singleline)
+            .Where(match => Regex.IsMatch(match.Groups[1].Value, "class=\"[^\"]*\\bbtn-primary\\b"))
+            .Select(match => Regex.Match(match.Groups[1].Value, "href=\"([^\"]*)\"").Groups[1].Value + "|" +
+                WebUtility.HtmlDecode(match.Groups[2].Value).Trim())
+            .ToArray();
+
     private static void AssertInOrder(string html, params string[] fragments)
     {
         var position = -1;
@@ -179,21 +187,44 @@ public class AuthenticationUiTests
     }
 
     [Test]
-    public async Task HomepageHeroPromotesLogInWhenSignedOutAndCatalogueSearchWhenSignedIn()
+    public async Task HomepageHeroInvitesVisitorsToGetStartedAndWelcomesSignedInUsersByName()
     {
         var signedOutHome = await client.GetStringAsync("/");
-        Assert.That(HeroOf(signedOutHome), Does.Contain("<a class=\"btn btn-primary btn-lg\" href=\"/login\">Log in</a>")
-            .And.Contain("href=\"/register\">Create account</a>")
-            .And.Not.Contain("Search the catalogue"));
+        var signedOutHero = HeroOf(signedOutHome);
+        Assert.That(PrimaryActions(signedOutHero), Is.EqualTo(new[] { "/register|Get Started" }),
+            "Get Started is the hero's single primary action; Log in stays in the navbar.");
+        Assert.That(WebUtility.HtmlDecode(signedOutHero), Does.Contain("Your music taste deserves a place of its own.")
+            .And.Contain("Every track has a story. What's yours?")
+            .And.Contain("<em>Your music. Your ratings. Your SoundBite.</em>")
+            .And.Not.Contain("href=\"/login\"").And.Not.Contain("Search the catalogue"));
         Assert.That(signedOutHome, Does.Not.Contain("activity-feed-heading")
             .And.Not.Contain("to see recent community activity"),
-            "The anonymous homepage must show only the login-first hero, not the activity feed prompt.");
+            "The anonymous homepage must not show the activity feed prompt.");
 
         await Register();
-        var signedInHero = HeroOf(await client.GetStringAsync("/"));
-        Assert.That(signedInHero, Does.Contain("Welcome, authuser.")
-            .And.Contain("<a class=\"btn btn-primary btn-lg\" href=\"/search\">Search the catalogue</a>")
-            .And.Not.Contain("href=\"/login\""));
+        var signedInHome = await client.GetStringAsync("/");
+        var signedInHero = HeroOf(signedInHome);
+        Assert.That(WebUtility.HtmlDecode(signedInHero), Does.Contain("Welcome back, authuser! Your music journey starts here.")
+            .And.Contain("<strong>Ready to get started?</strong>")
+            .And.Not.Contain("href=\"/login\"").And.Not.Contain("Get Started"));
+        Assert.That(PrimaryActions(signedInHero), Is.EqualTo(new[] { "/search|Search the catalogue" }));
+        Assert.That(signedInHome.IndexOf("activity-feed-heading", StringComparison.Ordinal),
+            Is.GreaterThan(signedInHome.IndexOf("id=\"home-rankings\"", StringComparison.Ordinal)),
+            "The activity feed sits below ratings and trends.");
+    }
+
+    [Test]
+    public async Task AnonymousHomepageShowsRatingsAndTrendsBelowTheHero()
+    {
+        var home = WebUtility.HtmlDecode(await client.GetStringAsync("/"));
+        var heroEnd = home.IndexOf(HeroOf(home), StringComparison.Ordinal) + HeroOf(home).Length;
+        var rankings = home.IndexOf("id=\"home-rankings\"", StringComparison.Ordinal);
+        Assert.That(rankings, Is.GreaterThan(heroEnd - 1), "Ratings and trends must follow the hero.");
+        Assert.That(home[rankings..], Does.Contain("Ratings and trends</h2>")
+            .And.Contain("Top rated</h3>").And.Contain("Most reviewed</h3>").And.Contain("Trending this week</h3>")
+            .And.Contain("There aren't enough reviews to rank tracks yet.")
+            .And.Contain("No tracks have reviews yet.")
+            .And.Contain("No tracks have been reviewed in the last week."));
     }
 
     [TestCase("/search")]
@@ -262,13 +293,15 @@ public class AuthenticationUiTests
         Assert.That(await client.GetStringAsync("/favourites"), Does.Contain("Favourites").And.Contain("Add Tracks"));
         var home = await client.GetStringAsync("/");
         Assert.That(NavbarOf(home), Does.Contain("href=\"favourites\" class=\"nav-link\">Favourites</a>"));
+        Assert.That(WebUtility.HtmlDecode(HeroOf(home)), Does.Contain("Welcome back, Updated name! Your music journey starts here."),
+            "The welcome uses the saved display name in preference to the username.");
         Assert.That(home, Does.Contain("Activity Feed")
+            .And.Contain("Ratings and trends</h2>")
             .And.Not.Contain("href=\"feed\"")
             .And.Not.Contain("href=\"playlists\"")
             .And.Not.Contain("Browse music")
             .And.Not.Contain("Discover playlists")
-            .And.Not.Contain("Join the community")
-            .And.Not.Contain("Ratings and trends"));
+            .And.Not.Contain("Join the community"));
         Assert.That(await client.GetStringAsync("/tracks/1"), Does.Contain("Write a review"));
         var logout = await Logout();
         Assert.That(logout.StatusCode, Is.EqualTo(HttpStatusCode.Redirect));
@@ -281,6 +314,8 @@ public class AuthenticationUiTests
         {
             var login = await PostForm("/login", "login", ("loginModel.UserNameOrEmail", identifier), ("loginModel.Password", "TestPass123!"));
             Assert.That(login.StatusCode, Is.EqualTo(HttpStatusCode.Redirect));
+            Assert.That(login.Headers.Location!.OriginalString, Is.EqualTo("https://localhost/"),
+                "A successful login lands on the homepage.");
             Assert.That(await client.GetStringAsync("/account"), Does.Contain("Signed in"));
             await Logout();
         }
@@ -375,16 +410,20 @@ public class AuthenticationUiTests
         Assert.That((await client.GetAsync("/api/account/me")).StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized));
     }
 
-    [Test]
-    public async Task LoginIgnoresExternalReturnUrl()
+    [TestCase("https://evil.example")]
+    [TestCase("//evil.example")]
+    [TestCase("/\\evil.example")]
+    [TestCase("javascript:alert(1)")]
+    [TestCase("/account")]
+    public async Task LoginIgnoresReturnUrlAndRedirectsToTheHomepage(string returnUrl)
     {
         await Register();
         await Logout();
-        var response = await PostForm("/login?ReturnUrl=https%3A%2F%2Fevil.example", "login",
+        var response = await PostForm("/login?ReturnUrl=" + Uri.EscapeDataString(returnUrl), "login",
             ("loginModel.UserNameOrEmail", "authuser"), ("loginModel.Password", "TestPass123!"),
-            ("ReturnUrl", "//evil.example"));
+            ("ReturnUrl", returnUrl));
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Redirect));
-        Assert.That(response.Headers.Location!.OriginalString, Is.EqualTo("https://localhost/account"));
+        Assert.That(response.Headers.Location!.OriginalString, Is.EqualTo("https://localhost/"));
     }
 
     [Test]

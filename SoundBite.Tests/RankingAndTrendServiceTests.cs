@@ -1,3 +1,4 @@
+using System.Net;
 using Microsoft.Data.Sqlite;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
@@ -45,14 +46,7 @@ public sealed class RankingAndTrendServiceTests
     {
         connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync();
-        provider = new ServiceCollection()
-            .AddLogging()
-            .AddDbContextFactory<ApplicationDbContext>(options => options.UseSqlite(connection))
-            .AddScoped<IRankingStrategy, RatingRankingStrategy>()
-            .AddScoped<IRankingStrategy, PopularityRankingStrategy>()
-            .AddScoped<RankingService>()
-            .AddScoped<TrendService>()
-            .BuildServiceProvider();
+        provider = BuildProvider(connection);
         contextFactory = provider.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
         rankings = new RankingService(contextFactory,
         [
@@ -169,6 +163,105 @@ public sealed class RankingAndTrendServiceTests
                 .And.Contain("href=\"/tracks/2\"")
                 .And.Contain("Widely reviewed")
                 .And.Contain("Highest rated"));
+            Assert.That(html, Does.Contain("<h1>Ratings and trends</h1>")
+                .And.Contain("<h2 id=\"top-rated-heading\">Top rated</h2>")
+                .And.Contain("<h2 id=\"most-reviewed-heading\">Most reviewed</h2>")
+                .And.Contain("<h2 id=\"trending-heading\">Trending this week</h2>")
+                .And.Not.Contain("<h3"));
+        });
+    }
+
+    [Test]
+    public async Task RankingsOverviewNestsMetricHeadingsBelowAHostSectionHeading()
+    {
+        var html = await RenderOverviewAsync(provider, headingLevel: 3);
+
+        Assert.That(html, Does.Contain("<h3 id=\"top-rated-heading\">Top rated</h3>")
+            .And.Contain("<h3 id=\"most-reviewed-heading\">Most reviewed</h3>")
+            .And.Contain("<h3 id=\"trending-heading\">Trending this week</h3>")
+            .And.Contain("href=\"/tracks/1\"")
+            .And.Not.Contain("<h2"));
+        Assert.That(System.Text.RegularExpressions.Regex.Matches(html, "class=\"col-12 col-lg-4\"").Count, Is.EqualTo(3),
+            "The three metrics stack on small screens and share the row equally on large screens.");
+    }
+
+    [TestCase(1)]
+    [TestCase(4)]
+    public void RankingsOverviewRejectsUnsupportedHeadingLevels(int headingLevel)
+    {
+        Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => RenderOverviewAsync(provider, headingLevel));
+    }
+
+    [Test]
+    public async Task RankingsOverviewExplainsLabelledDemonstrationReviewsOnlyWhenPresent()
+    {
+        Assert.That(await RenderOverviewAsync(provider), Does.Not.Contain("demonstration reviews")
+            .And.Not.Contain("sample reviews"));
+
+        await new DemoReviewSeeder(contextFactory).SeedAsync();
+
+        Assert.That(await RenderOverviewAsync(provider), Does.Contain("clearly labelled demonstration reviews")
+            .And.Contain("Sample reviews are not real user submissions.")
+            .And.Contain("sample reviews</span>"));
+    }
+
+    [Test]
+    public async Task RankingsOverviewShowsEmptyStatesWhenNothingHasBeenReviewed()
+    {
+        await using var emptyConnection = new SqliteConnection("Data Source=:memory:");
+        await emptyConnection.OpenAsync();
+        await using var emptyProvider = BuildProvider(emptyConnection);
+        await using (var db = await emptyProvider.GetRequiredService<IDbContextFactory<ApplicationDbContext>>().CreateDbContextAsync())
+            await db.Database.MigrateAsync();
+
+        var html = await RenderOverviewAsync(emptyProvider);
+
+        Assert.That(html, Does.Contain("There aren't enough reviews to rank tracks yet.")
+            .And.Contain("No tracks have reviews yet.")
+            .And.Contain("No tracks have been reviewed in the last week.")
+            .And.Not.Contain("list-group-item")
+            .And.Not.Contain("role=\"alert\""));
+    }
+
+    [Test]
+    public async Task RankingsOverviewShowsAnErrorWithoutExceptionDetailsWhenRankingsCannotLoad()
+    {
+        // An unmigrated database has no tables, so every ranking query fails.
+        await using var brokenConnection = new SqliteConnection("Data Source=:memory:");
+        await brokenConnection.OpenAsync();
+        await using var brokenProvider = BuildProvider(brokenConnection);
+
+        var html = await RenderOverviewAsync(brokenProvider);
+
+        Assert.That(html, Does.Contain("role=\"alert\"")
+            .And.Contain("Rankings couldn't be loaded. Please try again later.")
+            .And.Not.Contain("no such table")
+            .And.Not.Contain("top-rated-heading"));
+    }
+
+    private static ServiceProvider BuildProvider(SqliteConnection databaseConnection) =>
+        new ServiceCollection()
+            .AddLogging()
+            .AddDbContextFactory<ApplicationDbContext>(options => options.UseSqlite(databaseConnection))
+            .AddScoped<IRankingStrategy, RatingRankingStrategy>()
+            .AddScoped<IRankingStrategy, PopularityRankingStrategy>()
+            .AddScoped<RankingService>()
+            .AddScoped<TrendService>()
+            .BuildServiceProvider();
+
+    private static async Task<string> RenderOverviewAsync(IServiceProvider services, int? headingLevel = null)
+    {
+        await using var renderer = new TestRenderer(services, services.GetRequiredService<ILoggerFactory>());
+        return await renderer.Dispatcher.InvokeAsync(async () =>
+        {
+            var parameters = headingLevel is null
+                ? ParameterView.Empty
+                : ParameterView.FromDictionary(new Dictionary<string, object?>
+                {
+                    [nameof(RankingsOverview.HeadingLevel)] = headingLevel.Value
+                });
+            var overview = await renderer.RenderComponentAsync<RankingsOverview>(parameters);
+            return WebUtility.HtmlDecode(overview.ToHtmlString());
         });
     }
 
