@@ -46,7 +46,14 @@
             </NavLink>
         </div>
         <div class="nav-item px-3">
-            <details class="account-menu">
+            @if (!signedIn)
+            {
+                <NavLink class="nav-link" href="register">Create account</NavLink>
+                <NavLink class="nav-link" href="login">Log in</NavLink>
+            }
+            else
+            {
+                <details class="account-menu">
                 <summary class="nav-link" @onclick:stopPropagation="true">
                     <span class="bi bi-person-circle-nav-menu" aria-hidden="true"></span> Account
                 </summary>
@@ -63,11 +70,6 @@
                             <span class="badge text-bg-warning ms-1" title="Unread notification count unavailable">!</span>
                         }
                     </NavLink>
-                    @if (!signedIn)
-                    {
-                        <NavLink class="nav-link" href="register">Create account</NavLink>
-                        <NavLink class="nav-link" href="login">Log in</NavLink>
-                    }
                     <AuthorizeView Roles="Administrator">
                         <Authorized>
                             <NavLink class="nav-link" href="admin/users">Admin</NavLink>
@@ -75,6 +77,7 @@
                     </AuthorizeView>
                 </div>
             </details>
+            }
         </div>
     </nav>
 </div>
