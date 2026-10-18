@@ -99,6 +99,17 @@ public class AuthenticationUiTests
         return hero.Value;
     }
 
+    private static void AssertInOrder(string html, params string[] fragments)
+    {
+        var position = -1;
+        foreach (var fragment in fragments)
+        {
+            var next = html.IndexOf(fragment, position + 1, StringComparison.Ordinal);
+            Assert.That(next, Is.GreaterThan(position), $"Expected \"{fragment}\" after the previous navbar item.");
+            position = next;
+        }
+    }
+
     [Test]
     public async Task NavbarShowsDestinationsForSignedOutSignedInAndAdministratorStates()
     {
@@ -116,6 +127,7 @@ public class AuthenticationUiTests
             .And.Not.Contain("href=\"notifications\"").And.Not.Contain("soundbite-logo.svg"));
         Assert.That(Regex.Matches(signedOutNavbar, "class=\"nav-link(?: active)?\"").Count, Is.EqualTo(3),
             "Only Home, Search and Create account are secondary links; Log in is the primary button.");
+        AssertInOrder(signedOutNavbar, ">Home</a>", ">Search</a>", ">Create account</a>", ">Log in</a>");
         Assert.That(signedOut, Does.Not.Contain("/account/logout"));
 
         foreach (var (pattern, description) in new[]
@@ -144,6 +156,8 @@ public class AuthenticationUiTests
             .And.Contain("btn-outline-secondary").And.Not.Contain("btn-outline-light")
             .And.Not.Contain("href=\"register\"")
             .And.Not.Contain("href=\"login\"").And.Not.Contain("admin/users"));
+        AssertInOrder(signedIn, ">Home</a>", ">Search</a>",
+            ">Ratings and Trends</a>", ">Favourites</a>", ">Account</summary>");
 
         using (var scope = app.Services.CreateScope())
         {
@@ -188,6 +202,21 @@ public class AuthenticationUiTests
     {
         var response = await client.GetAsync(path);
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+    }
+
+    [TestCase("/search")]
+    [TestCase("/favourites")]
+    public async Task SingleColumnPagesUseTheSharedCentredContentColumn(string path)
+    {
+        Assert.That(await client.GetStringAsync(path), Does.Contain("<div class=\"content-column\">"));
+    }
+
+    [Test]
+    public async Task LoginFormUsesThePrimaryActionStyle()
+    {
+        Assert.That(await client.GetStringAsync("/login"), Does.Contain("class=\"btn btn-primary w-100\"")
+            .And.Contain(">Log in</button>")
+            .And.Not.Contain("btn-success"));
     }
 
     [Test]

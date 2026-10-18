@@ -71,7 +71,7 @@
                         <InputText type="password" @bind-Value="loginModel.Password" class="form-control" />
                     </div>
 
-                    <button type="submit" class="btn btn-success w-100" disabled="@isBusy">Log in</button>
+                    <button type="submit" class="btn btn-primary w-100" disabled="@isBusy">Log in</button>
                     @if (!string.IsNullOrWhiteSpace(loginMessage))
                     {
                         <div class="alert alert-danger mt-3 mb-0">@loginMessage</div>

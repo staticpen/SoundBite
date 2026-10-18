@@ -41,7 +41,7 @@ else
                     @foreach (var track in topRated)
                     {
                         <li class="list-group-item" @key="track.TrackId">
-                            <a href="@($"/tracks/{track.TrackId}")">@track.Title</a>
+                            <a href="@($"/tracks/{track.TrackId}")" class="sb-item-title">@track.Title</a>
                             <div class="small text-muted">@track.AverageRating.ToString("0.0") / 5 · @track.ReviewCount reviews</div>
                             @if (track.DemoReviewCount > 0)
                             {
@@ -66,7 +66,7 @@ else
                     @foreach (var track in mostReviewed)
                     {
                         <li class="list-group-item" @key="track.TrackId">
-                            <a href="@($"/tracks/{track.TrackId}")">@track.Title</a>
+                            <a href="@($"/tracks/{track.TrackId}")" class="sb-item-title">@track.Title</a>
                             <div class="small text-muted">@track.ReviewCount reviews · @track.AverageRating.ToString("0.0") / 5 average</div>
                             @if (track.DemoReviewCount > 0)
                             {
@@ -91,7 +91,7 @@ else
                     @foreach (var track in trending)
                     {
                         <li class="list-group-item" @key="track.TrackId">
-                            <a href="@($"/tracks/{track.TrackId}")">@track.Title</a>
+                            <a href="@($"/tracks/{track.TrackId}")" class="sb-item-title">@track.Title</a>
                             <div class="small text-muted">@track.RecentReviewCount recent reviews · @track.RecentAverageRating.ToString("0.0") / 5 average</div>
                             @if (track.DemoReviewCount > 0)
                             {

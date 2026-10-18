@@ -45,7 +45,7 @@ else
                     @foreach (var album in artist.Albums.OrderBy(album => album.Title).ThenBy(album => album.Id))
                     {
                         <li class="list-group-item" @key="album.Id">
-                            <a href="@($"/albums/{album.Id}")">@album.Title</a>
+                            <a href="@($"/albums/{album.Id}")" class="sb-item-title">@album.Title</a>
                             <span class="text-muted"> · @album.Tracks.Count tracks</span>
                         </li>
                     }
@@ -65,7 +65,7 @@ else
                     @foreach (var track in artist.Tracks.OrderBy(track => track.Title).ThenBy(track => track.Id))
                     {
                         <li class="list-group-item" @key="track.Id">
-                            <a href="@($"/tracks/{track.Id}")">@track.Title</a>
+                            <a href="@($"/tracks/{track.Id}")" class="sb-item-title">@track.Title</a>
                             @if (track.Album is not null)
                             {
                                 <span class="text-muted"> · <a href="@($"/albums/{track.Album.Id}")">@track.Album.Title</a></span>

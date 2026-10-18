@@ -14,6 +14,7 @@
 
 <PageTitle>Search</PageTitle>
 
+<div class="content-column">
 <h1>Search</h1>
 <p>Find artists by name, or albums and tracks by title.</p>
 
@@ -72,7 +73,7 @@
                     {
                         <li class="list-group-item d-flex justify-content-between align-items-center gap-3"
                             @key="artist.SpotifyId">
-                            <span class="text-break">@artist.Name</span>
+                            <span class="sb-item-title text-break">@artist.Name</span>
                             @if (signedIn)
                             {
                                 <button type="button" class="btn btn-sm btn-outline-primary flex-shrink-0"
@@ -115,7 +116,7 @@
                     @foreach (var artist in results.Artists)
                     {
                         <li class="list-group-item text-break" @key="artist.Id">
-                            <a href="@($"/artists/{artist.Id}")">@artist.Name</a>
+                            <a href="@($"/artists/{artist.Id}")" class="sb-item-title">@artist.Name</a>
                         </li>
                     }
                 </ul>
@@ -130,7 +131,7 @@
                     @foreach (var album in results.Albums)
                     {
                         <li class="list-group-item text-break" @key="album.Id">
-                            <a href="@($"/albums/{album.Id}")">@album.Title</a>
+                            <a href="@($"/albums/{album.Id}")" class="sb-item-title">@album.Title</a>
                         </li>
                     }
                 </ul>
@@ -145,7 +146,7 @@
                     @foreach (var track in results.Tracks)
                     {
                         <li class="list-group-item text-break" @key="track.Id">
-                            <a href="@($"/tracks/{track.Id}")">@track.Title</a>
+                            <a href="@($"/tracks/{track.Id}")" class="sb-item-title">@track.Title</a>
                             <div class="mt-2">
                                 @if (signedIn && favouriteTrackIds is null)
                                 {
@@ -182,12 +183,13 @@
             @foreach (var artist in catalogueArtists)
             {
                 <li class="list-group-item" @key="artist.Id">
-                    <a href="@($"/artists/{artist.Id}")">@artist.Name</a>
+                    <a href="@($"/artists/{artist.Id}")" class="sb-item-title">@artist.Name</a>
                 </li>
             }
         </ul>
     }
 </section>
+</div>
 
 @code {
     private string query = string.Empty;

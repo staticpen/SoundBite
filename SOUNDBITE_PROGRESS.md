@@ -21,10 +21,10 @@
 ## 2. Current Status
 
 - **Overall status:** In progress
-- **Current development phase:** Feature updates and validation
-- **Current focus:** Integrate the login-first navbar and homepage with Favourites and the global Home feed
+- **Current development phase:** Presentation and deployment readiness
+- **Current focus:** Complete PR review and deployment after resolving and verifying the visual-system branch against the Favourites/global-feed changes on `main`
 - **Last verified:** 2026-10-18
-- **Current blocker:** No production database migration blocker remains: `ReplacePlaylistsWithFavourites` was applied and verified on 2026-10-18 after a private backup. The app does not run migrations at startup. Local UI and activity-feed follow-ups are uncommitted and require deployment to appear in production. The Spotify album-pagination fix is committed as `55f9a20`; its deployment status still needs confirmation.
+- **Current blocker:** No production database migration blocker remains: `ReplacePlaylistsWithFavourites` was applied and verified on 2026-10-18 after a private backup. The app does not run migrations at startup. The UI, logout, and Favourites integration still require deployment, which needs interactive macOS administrator authorization. The Spotify album-pagination fix is committed as `55f9a20`; its deployment status still needs confirmation.
 
 ## 3. Feature Implementation Tracker
 
@@ -42,12 +42,19 @@
 | Activity feed | Implemented — global signed-in feed shown on Home | Home renders globally ordered, paginated reviews, comments/replies, likes, and Favourites additions from all users to signed-in viewers, regardless of follow relationships. Favourite-list contents remain private. The standalone Activity Feed navigation item and route are removed. |
 | Notifications | Implemented — verified | In addition to recipient-scoped notifications, `/notifications` uses keyset paging to load older items without duplicates; unread counts and read-state behavior remain independent of the displayed page. Users can persist per-category opt-outs from `/notifications/settings`, affecting future notifications only. Paging, authorization, read state, preference persistence/isolation, and UI behavior are covered by tests. The single-instance event dispatcher updates active recipient circuits; navigation and reconnection reload persisted state. |
 | Rankings and trends | Implemented — verified in isolated SQLite tests | `/rankings` shows top-rated tracks (minimum two reviews), most-reviewed tracks overall, and tracks with the most reviews in the last seven days. Separately stored, labelled sample reviews can populate these lists without masquerading as community reviews. |
-| Navigation and home | Implemented — tested after merge | Light navbar with the horizontal `soundbite-logo.png` wordmark linking to `/` (no separate Home item), a mobile toggle, and keyboard focus styles. Signed-out: Search, Create account, and a primary Log in button. Signed-in: Search, Ratings and Trends, Favourites, then the Account dropdown (Edit Profile, Notifications with unread badge, role-gated Admin, antiforgery-protected POST Log out). `/feed` and `/playlists` return 404; `/favourites` shows only a login prompt to anonymous visitors. The signed-out Home shows only the login-first hero (Log in primary, Create account secondary). The signed-in Home shows the personalized welcome (generic fallback when no name is available), a "Search the catalogue" button, and the embedded activity feed. The former home cards are removed. |
+| Navigation and home | Implemented — verified after conflict resolution | Light navbar with the horizontal `soundbite-logo.png` wordmark linking to `/`, an explicit Home NavLink, a mobile toggle, and keyboard focus styles. Signed-out: Home, Search, Create account, and a primary Log in button. Signed-in: Home, Search, Ratings and Trends, Favourites, then the Account dropdown (Edit Profile, Notifications with unread badge, role-gated Admin, antiforgery-protected POST Log out). `/feed` and `/playlists` return 404; `/favourites` shows only a login prompt to anonymous visitors and uses the shared centred content column. The signed-out Home shows only the login-first hero. The signed-in Home shows the personalized welcome, a "Search the catalogue" button, and the embedded global activity feed. |
 | Administrative user management | Implemented — verified | `/admin/users` supports user search/paging, account lock/unlock, and admin-role grants/revocation. Every service operation checks live role membership and lockout state server-side. The front-end label is “Admin.” |
-| Automated tests | Passed — verified | On the merged tree (2026-10-18), the full NUnit suite passed **280/280**; focused authentication UI, catalogue integration, Favourites, and feed tests passed **51/51**. |
-| Git and repository hygiene | In progress | Branch `integrate/login-first-favourites` is merging `feature/frontend-and-user-flow` (`694800c`) into `origin/main` (`8214e16`). The merge is resolved locally and uncommitted. |
+| Automated tests | Passed — verified | The combined conflict resolution passed **283/283**, with 0 failed and 0 skipped. |
+| Git and repository hygiene | In progress | Branch `feature/frontend-and-user-flow` incorporates `origin/main` (`40cc394`) through resolved and verified merges. The tracked `SoundBite/soundbite.db` has user-owned local modifications that remain deliberately unstaged and uncommitted. |
 
 ## 4. Latest Completed Work
+
+### 2026-10-18 — Resolved visual-system PR conflicts with current `main`
+
+- **Resolution:** Merged `origin/main` through `40cc394` into `feature/frontend-and-user-flow`, retaining `main`'s Favourites replacement, global Home activity feed, removed `/feed` and `/playlists` routes, migrations, services, tests, and explicit `/` Home destination. Preserved the visual branch's navigation ordering, primary login treatment, visual tokens, typography, focus styles, and entity-title styling. Applied the shared 1024px content column to Search and the replacement Favourites page, without resurrecting deleted playlist pages.
+- **Tests:** Updated the rendered navigation expectations to Home → Search → Ratings and Trends → Favourites → Account and moved the shared-column coverage from removed routes to `/favourites`. The login-style assertion checks the semantic class and label without depending on Blazor's generated scoped-CSS attribute placement.
+- **Verification:** `dotnet build SoundBite.sln --no-restore` passed with 0 errors and the 2 existing `CS1998` warnings. `dotnet test SoundBite.sln --no-build` passed **283/283**, 0 failed and 0 skipped. `git diff --check` passed and no conflict markers remain. The pre-existing tracked `SoundBite/soundbite.db` stayed byte-identical at SHA-256 `9321727cfeb0cfd61ab43996b4149a658b5486300e3112a1ff8ed2896fd3cd39`. Browser checks were not rerun for the combined merge.
+- **State:** Conflict resolution is complete and verified; no deployment was performed.
 
 ### 2026-10-18 — Integrated the login-first navbar and homepage with Favourites
 
@@ -404,6 +411,45 @@
 - **Change:** Kept the button in the top row but made it submit a normal browser POST to `/account/logout`. The endpoint explicitly validates the antiforgery token, signs out through Identity during the HTTP request, and redirects to `/`. The existing JSON `/api/account/logout` route remains unchanged.
 - **Verification:** Focused `AuthenticationUiTests` passed 15/15, including the top-row form submission, cookie clearing, and rejection of requests without an antiforgery token. Full NUnit suite passed 269/269. No production deployment or browser test was performed. Changes are uncommitted.
 
+### 2026-10-18 — SoundBite visual system and responsive layout
+
+- **What:** Applied one SoundBite palette and type scale across the app, added a Home nav link, right-aligned the desktop nav cluster, and centred the single-column pages.
+- **Design tokens (`wwwroot/app.css`):** `--sb-primary #D91668`, `--sb-primary-hover #B61863`, `--sb-secondary #7E0C8B`, `--sb-text #091227`, `--sb-bg #FFFFFF`, `--sb-surface #F7F8FC`, `--sb-border #E6E8F0`, mapped onto Bootstrap 5.3 variables (`--bs-primary`, `--bs-secondary`, body colour/background/font, `--bs-tertiary-bg`, `--bs-border-color`, link and focus-ring colours) and onto the `--bs-btn-*` variables of primary, outline-primary, secondary, outline-secondary and link buttons. Danger/warning/success/info alerts, badges and validation colours are unchanged.
+- **Typography:** Outfit (headings) and DM Sans (body, nav, controls, buttons) load from Google Fonts in `Components/App.razor`; no local font files existed. System fallbacks: system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, Arial. Visual roles are mapped without changing semantic heading levels: `.sb-hero-title` 48px/800; `h1` page title 32px/700; `h2`/`h3`/`.h4` section heading 24px/700; `.h5`/`.card-title`/`.sb-item-title` entity title 18px/600; body 16px/400 at line-height 1.6; buttons and nav 14px/600 with 0.01em letter-spacing; `small`/`.sb-meta` 13px. Below 768px: hero 34px, page title 27px, section 21px. Headings use line-height 1.2 (hero 1.15) and -0.02em (hero -0.03em) letter-spacing.
+- **Accessibility:** Links, buttons and `summary` get a 2px primary `:focus-visible` outline. Form controls get a primary border and focus ring. Form-control borders use `--sb-control-border` (main text at 50% opacity, about 3.5:1 on white) because `#E6E8F0` is too faint to identify inputs under WCAG 1.4.11. Primary text and white-on-primary contrast is about 4.9:1; hover is about 6.4:1.
+- **Navigation (`NavMenu.razor` and `.razor.css`):** Added `<NavLink href="" Match="NavLinkMatch.All">Home</NavLink>` first for every user. On desktop, `.nav-links` uses `margin-left: auto`, so the links sit immediately left of the Account dropdown or the anonymous Create account/Log in pair. Hard-coded greys and blues were replaced with tokens. The logo, hamburger toggle, account `<details>`, unread badge, Admin link and antiforgery logout form are unchanged.
+- **Layout:** New `.content-column` (max-width 64rem, auto side margins, full width on small screens, text left-aligned) wraps the markup of `ActivityFeed.razor`, `CatalogueSearch.razor` and `Playlists.razor`; the wrapped markup is reindented only. Rankings and other wide pages are unchanged. There is no Favourites page; Playlists is treated as that destination, and no new route or feature was added.
+- **Other markup:** The login submit in `Account.razor` changed from `btn-success` to `btn-primary`. The home hero `h1` uses `sb-hero-title` instead of `display-5 fw-bold`. `.sb-item-title` was added to artist/album/track titles in result and card lists in `CatalogueSearch.razor`, `Rankings.razor`, `ArtistDetails.razor`, `AlbumDetails.razor` and `PlaylistDetails.razor` (not to inline mentions such as feed sentences). `Register.razor.css` uses the palette instead of `#7657e8`.
+- **Tests (`AuthenticationUiTests.cs`):** Navbar assertions now expect the active Home link (`aria-current="page"`) and check destination order with a small `AssertInOrder` helper: anonymous Home → Search → Create account → Log in; signed-in Home → Search → Activity Feed → Ratings and Trends → Playlists → Account. Added `SingleColumnPagesUseTheSharedCentredContentColumn` (`/feed`, `/search`, `/playlists`) and `LoginFormUsesThePrimaryActionStyle`. No assertions depend on generated CSS.
+- **Verification:** `dotnet build SoundBite.sln` passed with 0 errors and the 3 existing `CS1998` test warnings. `dotnet test SoundBite.sln --no-build` passed **279/279**; the first run failed 1 test because .NET 9 adds `aria-current="page"` to the active NavLink, and the assertion was corrected. Smoke run in Development against a disposable copy of the database in the session scratchpad: `/`, `/search`, `/feed`, `/playlists`, `/login`, `/register` and `/rankings` returned HTTP 200, the Google Fonts URL rendered intact, the fingerprinted `app.css` was served, and `/search` contained `content-column`. **Not verified:** visual inspection in a browser at desktop or phone widths, and deployment.
+
+### 2026-10-18 — Independent verification of visual-system commit `5f7b69d`
+
+- **Verdict:** PASS WITH ISSUES. The commit is limited to the requested visual system, responsive layout, navigation markup, focused rendered tests, and this progress record; no secrets, generated artifacts, migrations, database files, or unrelated application behavior are included.
+- **Finding:** The custom registration submit button is not matched by the global `.btn:focus-visible` rule and has no scoped `:focus-visible` rule. Real keyboard traversal in Chrome therefore shows the browser's 1px blue outline rather than the 2px `#D91668` SoundBite focus indicator used by links and Bootstrap buttons. Inputs correctly settle to the primary border plus 4px primary focus ring.
+- **Diff hygiene:** The required plain `git diff --check 5f7b69d^ 5f7b69d` reports added lines in the repository's existing CRLF files as trailing whitespace. A CRLF-aware check (`git -c core.whitespace=cr-at-eol diff --check`) passes, and an explicit before/after audit found no line-ending conversion or mixed endings.
+- **Automated verification:** `dotnet build SoundBite.sln` passed with 0 errors and the 3 existing `CS1998` warnings. `dotnet test SoundBite.sln` passed **279/279**, 0 failed and 0 skipped. The changed tests meaningfully render and inspect anonymous/authenticated navigation order and state, the three shared content-column wrappers, and the login primary-action class; they do not duplicate generated CSS values.
+- **Browser verification:** Installed Google Chrome was run headlessly against a freshly migrated `/tmp/soundbite-verify-5f7b69d.vLwwbs/browser.db` at 1440x900, 1024x768, and 390x844. All requested routes loaded in both relevant authentication states with zero horizontal overflow. Feed, Search, and Playlists measured 1024px wide with balanced 208px desktop margins and 358px wide with 16px mobile padding; Rankings remained 1296px wide on desktop. The desktop/tablet nav stayed in one right-aligned cluster, the mobile menu opened and closed, and the account dropdown stayed inside every viewport. A disposable account verified authenticated ordering, the unread badge/ARIA label, role-gated Admin link, and antiforgery POST logout without the Blazor error banner.
+- **Computed styles/resources:** Body text resolved to DM Sans at 16px/400/25.6px in `#091227`; headings resolved to Outfit (hero 48px/800 desktop and 34px/800 mobile; page titles 32px/700 desktop and 27px/700 mobile). Primary actions resolved to `#D91668` with white text, with hover/active token `#B61863`; secondary controls resolve from `#7E0C8B`. The Google Fonts stylesheet and DM Sans/Outfit WOFF2 resources all returned HTTP 200, and weight-specific FontFace checks passed.
+- **Isolation:** Browser screenshots and the detailed report are under `/tmp/soundbite-verify-5f7b69d.vLwwbs`. The pre-existing tracked `SoundBite/soundbite.db` remained byte-identical during verification at SHA-256 `9321727cfeb0cfd61ab43996b4149a658b5486300e3112a1ff8ed2896fd3cd39`; it remains the user's only pre-existing unstaged change. No implementation fix, stage, commit, push, deployment, or repository dependency installation was performed.
+
+### 2026-10-18 — Registration button keyboard-focus fix (`357eef7`)
+
+- **Change:** `SoundBite/Components/Pages/Register.razor.css` only. Added `.register-button:focus-visible { outline: 2px solid var(--sb-primary); outline-offset: 2px; }`, matching the global `.btn`/link focus treatment, and added `:active` to the existing `:hover` rule so pressed and hovered states both use `--sb-primary-hover`. No markup, navigation, or other styles changed.
+- **Diff hygiene:** Plain `git diff --check` and `git -c core.whitespace=cr-at-eol diff --check` both pass with no output. `Register.razor.css` uses LF, so there are no CRLF false positives for this change.
+- **Automated verification:** `dotnet build SoundBite.sln` passed with 0 errors and 0 warnings (incremental build; the test project was not recompiled, so the 3 existing `CS1998` warnings were not re-emitted). `dotnet test SoundBite.sln` passed **279/279**, 0 failed and 0 skipped.
+- **Browser verification:** Installed headless Chrome 155 was driven over the DevTools protocol using Node 24's built-in WebSocket, with no dependencies installed. The app ran in Development against a disposable copy of the database at `/tmp/soundbite-a11y-register.NzFfza/browser.db`. At both 1440x900 and 390x844, real Tab key presses reached "Create account" in 5 steps. Computed styles:
+  - Normal state: background `rgb(217, 22, 104)` (`#D91668`), no outline.
+  - Keyboard focus: `:focus-visible` matched, with a `solid 2px rgb(217, 22, 104)` outline and `2px` offset.
+  - Real pointer hover: background `rgb(182, 24, 99)` (`#B61863`).
+  - Real mouse press: background `#B61863`.
+  - Forced `:active` without hover: background `#B61863`.
+  - Layout: no horizontal overflow (scrollWidth equals viewport width), and the focus ring sits inside the viewport with no clipping ancestors.
+  - Focus loss: after a press released off the button, focus stayed on the button and the page stayed on `/register`.
+
+  Screenshots and the JSON report are in `/tmp/soundbite-a11y-register.NzFfza/`.
+- **Isolation:** The tracked `SoundBite/soundbite.db` SHA-256 was `9321727cfeb0cfd61ab43996b4149a658b5486300e3112a1ff8ed2896fd3cd39` before and after. Nothing was staged, committed, pushed, merged, or deployed.
+
 ## 5. Current Implementation Details
 
 - The application entry point in `SoundBite/Program.cs` configures a Blazor Web App with `AddRazorComponents().AddInteractiveServerComponents()`, SQLite via `UseSqlite(...)`, ASP.NET Core Identity, and the ranking/trend services and strategies.
@@ -414,7 +460,7 @@
 - `Endpoints/AccountEndpoints.cs` exposes registration, login, logout, and current-user endpoints.
 - `Data/ApplicationUser.cs` includes `DisplayName` and optional `Bio`. The account page edits these fields; `/users/{username}` displays a public profile without exposing email.
 - Remaining model and service placeholders include `UserService`. Rankings combine community reviews with clearly labelled `DemoReviews`; Spotify access requires configured credentials. Likes support reviews, tracks, and comments (playlist likes were removed by `ReplacePlaylistsWithFavourites`); comments/feed entries remain review-scoped.
-- The NUnit test project is active; the full suite passed 280/280 for the merged tree on `integrate/login-first-favourites`.
+- The NUnit test project is active; the combined conflict resolution passed 283/283.
 - `20261018035010_AddDemoReviews` adds the separate sample-review table and has been applied to the configured deployment database after an integrity-checked backup.
 
 ## 6. Important Decisions and Assumptions
@@ -450,8 +496,8 @@
 
 | Check | Result | Notes |
 |---|---|---|
-| Application build | Passed | `dotnet build SoundBite.sln` (default Debug configuration) on the merged tree, 2026-10-18: 0 errors, 2 pre-existing `CS1998` warnings in `AdminServiceTests.cs:136` and `ReviewServiceTests.cs:88`. A Release build was not run for this merge. |
-| Automated tests | Passed — verified | Merged tree, 2026-10-18, `dotnet test SoundBite.sln --no-build` (Debug): full suite 280 passed, 0 failed/skipped. Focused authentication UI, catalogue integration, Favourites, and feed tests passed 51/51. |
+| Application build | Passed | `dotnet build SoundBite.sln --no-restore` (default Debug configuration) on the resolved visual-system/Favourites merge, 2026-10-18: 0 errors and 2 existing `CS1998` warnings in `AdminServiceTests.cs:136` and `ReviewServiceTests.cs:88`. A Release build was not run for this merge. |
+| Automated tests | Passed — verified | Resolved visual-system/Favourites merge, 2026-10-18, `dotnet test SoundBite.sln --no-build` (Debug): full suite **283 passed**, 0 failed/skipped. |
 | Application publish | Passed | `dotnet publish SoundBite/SoundBite.csproj --configuration Release --no-build --output /tmp/soundbite-b-readiness-publish` succeeded. |
 | Application startup and local smoke test | Passed | App ran against a disposable copy at `/tmp/soundbite-b-readiness.db`; `/` returned HTTP 200, catalogue search rendered and accepted a local-search interaction. No target database was used. |
 | Circuit reconnect | Partially verified | A running page survived a local server stop/restart: the rejoining dialog appeared and dismissed, and page interaction worked afterward. Manual Retry and Reload buttons were not reached. |
@@ -460,7 +506,7 @@
 
 ## 9. Git Status
 
-- **Branch:** `integrate/login-first-favourites`, based on `origin/main` at `8214e16`, with a resolved but uncommitted merge of `feature/frontend-and-user-flow` (`694800c`). The navbar logout fix from that branch is included in the merge.
+- **Branch:** `feature/frontend-and-user-flow`, incorporating `origin/main` (`40cc394`) through resolved and verified merges. The visual-system commits (`5f7b69d`, `357eef7`) and navbar logout fix (`182edc6`) are included.
 - **Database:** `AddDemoReviews` is applied to the deployment database after a mode-600 integrity-checked backup at `~/Library/Application Support/SoundBite/backups/soundbite-pre-demo-reviews-20261018-150136.db`. `ReplacePlaylistsWithFavourites` was later applied after the backup `soundbite-pre-favourites-20261018-184812.db` (see §4). This merge applies no migrations.
 - **PRs #17–#19:** Notification paging, category preferences, and settings UI are merged into `main`.
 
@@ -478,6 +524,7 @@
 
 - A is complete: paging, category opt-outs, and the settings page are implemented and merged in PRs #17–#19. Focused notification and route tests passed 53/53 on 2026-10-17; the A3 record reports the full suite passed 263/263.
 - User confirmed code commit `41f90ca` was deployed. Following explicit authorization, backed up the production DB, applied `AddDemoReviews`, and seeded 50 tracks plus 26 labelled demo reviews. Artist import then exposed Spotify's 10-album page-size cap; its correction is commit `55f9a20`. This session fixed the separate top-row logout error with a native antiforgery-validated HTTP POST; focused authentication tests passed 15/15 and the full suite passed 269/269. Logout fix is not yet deployed; run the deploy script in a local interactive terminal for sudo authorization, then browser-test logout. Windows Tailscale viewer access remains outstanding.
+- 2026-10-18: SoundBite visual system and responsive layout committed (tokens and type scale in `app.css`, Home nav link, right-aligned desktop nav); independent review passed 279/279 tests and real Chrome checks at desktop/tablet/mobile widths. The registration-button focus issue was fixed, browser-verified, committed as `357eef7`, and pushed. Conflicts with current `main` were resolved by retaining Favourites and the embedded global Home feed, moving the shared centred column to Search and Favourites, and keeping the visual navigation system; the combined suite passes 283/283. The combined merge was not browser-retested.
 - Notification event delivery is single-instance; shared infrastructure is only needed if deploying multiple instances.
 
 ## 12. Instructions for Updating This File

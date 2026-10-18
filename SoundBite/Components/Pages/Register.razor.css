@@ -12,14 +12,12 @@
     padding: 2rem;
     border-radius: 16px;
     background: var(--bs-body-bg, #ffffff);
-    border: 1px solid var(--bs-border-color, #dee2e6);
+    border: 1px solid var(--sb-border);
     box-shadow: 0 8px 28px rgba(0, 0, 0, 0.08);
 }
 
 .register-card h1 {
     margin-bottom: 0.5rem;
-    font-size: 2rem;
-    font-weight: 700;
 }
 
 .subtitle {
@@ -41,13 +39,13 @@
     display: block;
     width: 100%;
     padding: 0.7rem 0.8rem;
-    border: 1px solid #ced4da;
+    border: 1px solid var(--sb-control-border);
     border-radius: 8px;
     box-sizing: border-box;
 }
 
 .form-control:focus {
-    outline: 2px solid #7657e8;
+    outline: 2px solid var(--sb-primary);
     outline-offset: 1px;
 }
 
@@ -56,15 +54,24 @@
     padding: 0.8rem;
     border: none;
     border-radius: 8px;
-    background: #7657e8;
-    color: white;
-    font-weight: 700;
+    background: var(--sb-primary);
+    color: #fff;
+    font-family: var(--sb-font-body);
+    font-size: 0.875rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
     cursor: pointer;
     margin-top: 0.5rem;
 }
 
-.register-button:hover {
-    background: #6242d0;
+.register-button:hover,
+.register-button:active {
+    background: var(--sb-primary-hover);
+}
+
+.register-button:focus-visible {
+    outline: 2px solid var(--sb-primary);
+    outline-offset: 2px;
 }
 
 .register-button:disabled {
