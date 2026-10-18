@@ -290,6 +290,10 @@ public class TrackDetailsTests
             Assert.That(CountOccurrences(html, "class=\"btn btn-sm btn-outline-success\""), Is.EqualTo(2));
             Assert.That(html.IndexOf("Open track on Spotify", StringComparison.Ordinal),
                 Is.LessThan(html.IndexOf("Open album on Spotify", StringComparison.Ordinal)));
+            var trackCardStart = html.IndexOf("<article class=\"card\"", StringComparison.Ordinal);
+            var trackActionsStart = html.IndexOf("aria-label=\"Track actions\"", StringComparison.Ordinal);
+            var trackCardEnd = html.IndexOf("</article>", trackCardStart, StringComparison.Ordinal);
+            Assert.That(trackActionsStart, Is.GreaterThan(trackCardStart).And.LessThan(trackCardEnd));
             Assert.That(html, Does.Contain("aria-label=\"Track social actions\"")
                 .And.Contain("aria-label=\"Review form\"")
                 .And.Contain("class=\"col-12 col-lg-6\"")

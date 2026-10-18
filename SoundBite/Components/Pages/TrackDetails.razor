@@ -60,22 +60,22 @@ else
                     {
                         <p class="text-muted">No album information available.</p>
                     }
+                    <div class="d-flex flex-wrap align-items-center gap-2 mt-3" aria-label="Track actions">
+                        @if (!string.IsNullOrWhiteSpace(track.SpotifyId))
+                        {
+                            <a href="@SpotifyUrl("track", track.SpotifyId)" class="btn btn-sm btn-outline-success">Open track on Spotify</a>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(track.Album?.SpotifyId))
+                        {
+                            <a href="@SpotifyUrl("album", track.Album.SpotifyId)" class="btn btn-sm btn-outline-success">Open album on Spotify</a>
+                        }
+                        <div class="d-flex flex-wrap align-items-center gap-2 ms-lg-auto" aria-label="Track social actions">
+                            <LikeButton TargetType="LikeTargetType.Track" TargetId="@track.Id" />
+                            <FavouriteButton TrackId="@track.Id" />
+                        </div>
+                    </div>
                 </div>
             </article>
-            <div class="d-flex flex-wrap align-items-center gap-2 mt-3" aria-label="Track actions">
-                @if (!string.IsNullOrWhiteSpace(track.SpotifyId))
-                {
-                    <a href="@SpotifyUrl("track", track.SpotifyId)" class="btn btn-sm btn-outline-success">Open track on Spotify</a>
-                }
-                @if (!string.IsNullOrWhiteSpace(track.Album?.SpotifyId))
-                {
-                    <a href="@SpotifyUrl("album", track.Album.SpotifyId)" class="btn btn-sm btn-outline-success">Open album on Spotify</a>
-                }
-                <div class="d-flex flex-wrap align-items-center gap-2 ms-lg-auto" aria-label="Track social actions">
-                    <LikeButton TargetType="LikeTargetType.Track" TargetId="@track.Id" />
-                    <FavouriteButton TrackId="@track.Id" />
-                </div>
-            </div>
         </div>
 
         <div class="col-12 col-lg-6">
