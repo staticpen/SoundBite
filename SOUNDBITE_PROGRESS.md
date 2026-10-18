@@ -22,32 +22,40 @@
 
 - **Overall status:** In progress
 - **Current development phase:** Presentation and deployment readiness
-- **Current focus:** Prepare the cached album-art changes for redeployment; the production schema and catalogue backfill are complete
-- **Last verified:** 2026-10-18
-- **Current blocker:** The `AddAlbumCoverUrl` migration and Spotify artwork backfill are complete in production, but the updated application source is not yet committed or deployed. The running service remains responsive on its existing binary.
+- **Current focus:** Public profile favourites and reviews; profile changes are implemented locally and verified, with deployment not performed
+- **Last verified:** 2026-10-19
+- **Current blocker:** The current local source changes have not been committed or deployed.
 
 ## 3. Feature Implementation Tracker
 
 | Feature | Status | Evidence / notes |
 |---|---|---|
 | Authentication | Implemented — verified | Website registration, username/email login, logout, profile editing, cookie persistence and authorization checks pass using isolated migrated databases; see latest work. |
-| User profiles | Implemented — verified | `ApplicationUser` stores a display name and bio; the account page can edit them, and `/users/{username}` displays the public profile without exposing account email. The migration and persistence round-trip are tested. |
+| User profiles | Implemented — verified | `ApplicationUser` stores a display name and bio; the account page can edit them, and `/users/{username}` displays the public profile, that user's favourites, and public reviews without exposing account email. The profile UI and per-user data queries are covered by tests. |
 | Music catalogue | Seeded in production; artist import correction committed, deployment pending | `/search` searches local artists, albums, and tracks, then searches Spotify artists on a local miss. The deployed code fails at Spotify's artist-albums request; committed fix uses live-verified page size 10. Failed attempts left 17 artists, 38 albums, and 50 tracks unchanged. |
 | Spotify integration | Production seed and album-art backfill verified; current source awaits deployment | The deployed credentials completed five default searches, refreshing 50 unique tracks and creating 26 sample reviews across 12 tracks. Production now has cached cover URLs on all 54 albums. Spotify's batch album endpoint returned 403, so the refresh command fell back to individual album lookups. |
 | Track ratings and reviews | Implemented — verified | Reviews persist through EF Core; the service supports create/read/update, the database enforces one review per user per track and valid 1–5 ratings, and track details support public review reading plus authenticated submission/editing. |
 | Album-track many-to-many relationship | Implemented — unverified | `ApplicationDbContext` maps `ArtistAlbums` and `ArtistTracks` and `Track.AlbumId` with a nullable optional foreign key. This matches the intended design, but the schema has not been validated via a migration review beyond the code. |
-| Favourites | Implemented — production migration and Spotify fallback verified | Each user has one private list. Tracks can be added from search, track details, or the Favourites page; the page supports local catalogue search and, on a track miss, Spotify artist search/import before offering imported tracks to add. Ratings and reviews are not required to save a track. The production migration preserved the existing playlist track in `FavouriteTracks` and removed the playlist tables. |
+| Favourites | Implemented — production migration and Spotify fallback verified | Each user has one list, publicly displayed on their profile; only the owner can manage it from the Favourites page. Tracks can be added from search, track details, or the Favourites page; the page supports local catalogue search and, on a track miss, Spotify artist search/import before offering imported tracks to add. Ratings and reviews are not required to save a track. The production migration preserved the existing playlist track in `FavouriteTracks` and removed the playlist tables. |
 | Following and followers | Implemented — verified | Authenticated idempotent follow/unfollow, public counts and expandable 10-user pages; database constraints, concurrent requests, account deletion and browser flows verified. Merged into `main` at `ac92cbe`. |
 | Likes and comments | Implemented — verified | Signed-in users can idempotently like reviews, tracks, and comments. Users can add/edit/delete their own review comments and reply one level deep to top-level comments. Replies are grouped under parents, cannot be nested further, and are preserved as top-level comments if their parent is deleted. |
-| Activity feed | Implemented — global signed-in feed shown on Home | Home renders globally ordered, paginated reviews, comments/replies, likes, and Favourites additions from all users to signed-in viewers, regardless of follow relationships. Favourite-list contents remain private. The standalone Activity Feed navigation item and route are removed. |
+| Activity feed | Implemented — global signed-in feed shown on Home | Home renders globally ordered, paginated reviews, comments/replies, likes, and Favourites additions from all users to signed-in viewers, regardless of follow relationships. The feed remains an activity snapshot; full Favourites lists are displayed on public user profiles. The standalone Activity Feed navigation item and route are removed. |
 | Notifications | Implemented — verified | In addition to recipient-scoped notifications, `/notifications` uses keyset paging to load older items without duplicates; unread counts and read-state behavior remain independent of the displayed page. Users can persist per-category opt-outs from `/notifications/settings`, affecting future notifications only. Paging, authorization, read state, preference persistence/isolation, and UI behavior are covered by tests. The single-instance event dispatcher updates active recipient circuits; navigation and reconnection reload persisted state. |
 | Rankings and trends | Implemented — verified in isolated SQLite tests and headless Chrome | Shared `RankingsOverview` component shows top-rated tracks (minimum two reviews), most-reviewed tracks overall, and tracks with the most reviews in the last seven days on the separate `/rankings` page. Its navbar link is shown to signed-in users. Separately stored, labelled sample reviews can populate these lists without masquerading as community reviews. |
 | Navigation and home | Implemented — verified | Light navbar with the horizontal `soundbite-logo.png` wordmark linking to `/`, an explicit Home NavLink, a mobile toggle, and keyboard focus styles. Signed-out: Home, Search, Create account, and a primary Log in button. Signed-in: Home, Search, Ratings and Trends, Favourites, then the Account dropdown (Edit Profile, Notifications with unread badge, role-gated Admin, antiforgery-protected POST Log out). `/feed` and `/playlists` return 404; `/favourites` shows only a login prompt to anonymous visitors and uses the shared centred content column. Home shows a centred anonymous hero with a single "Get Started" → `/register` CTA, or a centred signed-in hero welcoming the user by display name (falling back to username, then the claim name, then a generic greeting) with "Search the catalogue". Signed-in Home then shows the global activity feed in the centred 1024px content column; ratings and trends remain on `/rankings`. Successful login redirects to `/`. |
 | Administrative user management | Implemented — verified | `/admin/users` supports user search/paging, account lock/unlock, and admin-role grants/revocation. Every service operation checks live role membership and lockout state server-side. The front-end label is “Admin.” |
-| Automated tests | Passed — verified | Full NUnit suite: **309/309**, with 0 failed and 0 skipped. |
-| Git and repository hygiene | In progress | Branch `feature/frontend-and-user-flow` incorporates `origin/main` (`40cc394`) through resolved and verified merges. The tracked `SoundBite/soundbite.db` has user-owned local modifications that remain deliberately unstaged and uncommitted. |
+| Automated tests | Passed — verified | Full NUnit suite: **312/312**, with 0 failed and 0 skipped. |
+| Git and repository hygiene | In progress | Current profile and documentation changes are uncommitted. No tracked database modification was present in the working tree at the start of this task. |
 
 ## 4. Latest Completed Work
+
+### 2026-10-19 — Show favourites and reviews on public profiles
+
+- **Task completed:** `/users/{username}` now displays the selected user's favourite tracks and public reviews, including track links, artist names when available, review ratings, and written comments. Empty sections have explicit empty states.
+- **Visibility and access:** Public profile reads are scoped to the resolved profile's user ID. The `/favourites` page and its add/remove operations remain owner-scoped; the profile view does not add management controls. Updated `SOUNDBITE_CONTEXT.md` to document the public profile visibility.
+- **Files or components changed:** `UserProfile.razor`, `FavouriteService`, `ReviewService`, their tests, and `UserProfileTests`.
+- **Verification:** Focused service/profile tests passed 17/17. Full `dotnet test SoundBite.sln --no-restore` passed **312/312**, 0 failed and 0 skipped. `git diff --check` passed.
+- **Remaining limitations:** Changes are local and have not been committed or deployed.
 
 ### 2026-10-18 — Applied and backfilled production album artwork
 

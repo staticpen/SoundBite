@@ -57,6 +57,24 @@ public class ReviewService(IDbContextFactory<ApplicationDbContext> contextFactor
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<Review>> GetReviewsForUserAsync(
+        string userId,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(userId))
+            throw new ArgumentException("User ID is required.", nameof(userId));
+
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+
+        return await db.Reviews.AsNoTracking()
+            .Where(review => review.UserId == userId)
+            .Include(review => review.Track)
+                .ThenInclude(track => track!.Artists.OrderBy(artist => artist.Name))
+            .OrderByDescending(review => review.CreatedAt)
+            .ThenByDescending(review => review.Id)
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<Review?> GetUserReviewForTrackAsync(
         string userId,
         int trackId,

@@ -194,12 +194,12 @@ Requirements:
 
 ### 6.4 Favourites
 
-Each user has one private favourites list. Users should be able to:
+Each user has one Favourites list, shown publicly on their profile. Users should be able to:
 
 - Add tracks from catalogue search or track details without submitting a rating or review.
 - Search the catalogue and add tracks from the Favourites page.
 - Remove tracks from the list.
-- Keep favourites private to the owning user.
+- View any user's favourites on that user's public profile. Only the owner can add or remove entries through the Favourites page.
 
 A track must not appear more than once in a user's favourites list.
 
@@ -213,7 +213,7 @@ The social layer should support:
 
 - A signed-in user's global feed of recent activity from all users, regardless of follow relationships.
 - Recent reviews, ratings, and other supported music-related actions.
-- Activity entries when users like music or add a track to Favourites; the Favourites list itself remains private.
+- Activity entries when users like music or add a track to Favourites; the complete list is also available on the user's public profile.
 - Likes on reviews, comments, and tracks.
 - Comments on reviews.
 - Replies to comments, where supported by the final data model.
@@ -287,9 +287,9 @@ Do not assume that a track belongs to exactly one album.
 - Each user has exactly one implicit Favourites list; there is no separate list entity, name, description, or visibility setting.
 - A `FavouriteTrack` references a valid user and a valid track and records when it was added (`AddedAt`). Favourites are listed in the order they were added, oldest first.
 - The composite key on user and track prevents the same track appearing twice in a user's Favourites. The service also reports a duplicate add as a validation failure.
-- Favourites are private. Only the owning user can list, add, or remove their own entries; anonymous users cannot use Favourites.
+- The `/favourites` page is private to the signed-in owner for list management, while a user's full Favourites list is publicly visible on `/users/{username}`. Only the owner can add or remove entries; anonymous users cannot use the management page.
 - Removing a favourite does not delete the track. Deleting a user or track removes the corresponding favourites.
-- Adding a favourite does not require a rating or review. The global activity feed may show that a user added a track, but never exposes the full list.
+- Adding a favourite does not require a rating or review. The global activity feed may show that a user added a track; the full list is shown on the user's public profile.
 
 ### Social relationship rules
 

@@ -74,6 +74,22 @@ public class FavouriteServiceTests
     }
 
     [Test]
+    public async Task ProfileCanReadTargetUsersFavouritesWithoutChangingOwnList()
+    {
+        await service.AddAsync(firstTrackId);
+        await using (var db = factory.CreateDbContext())
+        {
+            db.FavouriteTracks.Add(new FavouriteTrack { UserId = "bob", TrackId = secondTrackId });
+            await db.SaveChangesAsync();
+        }
+
+        var bobFavourites = await service.GetForUserAsync("bob");
+
+        Assert.That(bobFavourites.Select(item => item.Track?.Title), Is.EqualTo(new[] { "Second track" }));
+        Assert.That((await service.GetMineAsync()).Select(item => item.Track?.Title), Is.EqualTo(new[] { "First track" }));
+    }
+
+    [Test]
     public async Task UserCanRemoveFavouriteWithoutDeletingTrack()
     {
         await service.AddAsync(firstTrackId);

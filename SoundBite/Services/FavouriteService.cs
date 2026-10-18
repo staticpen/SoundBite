@@ -27,6 +27,16 @@ public sealed class FavouriteService(
         CancellationToken cancellationToken = default)
     {
         var userId = await GetCurrentUserIdAsync();
+        return await GetForUserAsync(userId, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<FavouriteTrack>> GetForUserAsync(
+        string userId,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(userId))
+            throw new ArgumentException("User ID is required.", nameof(userId));
+
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         return await db.FavouriteTracks.AsNoTracking()
             .Where(item => item.UserId == userId)

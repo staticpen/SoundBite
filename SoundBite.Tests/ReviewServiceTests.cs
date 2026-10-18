@@ -62,6 +62,19 @@ public class ReviewServiceTests
     }
 
     [Test]
+    public async Task GetReviewsForUserReturnsOnlyThatUsersReviewsWithTracks()
+    {
+        await service.CreateReviewAsync("user-1", trackId, 5, "Alice's review");
+        await service.CreateReviewAsync("user-2", trackId, 3, "Bob's review");
+
+        var reviews = await service.GetReviewsForUserAsync("user-1");
+
+        Assert.That(reviews, Has.Count.EqualTo(1));
+        Assert.That(reviews[0].Comment, Is.EqualTo("Alice's review"));
+        Assert.That(reviews[0].Track?.Title, Is.EqualTo("Mock track"));
+    }
+
+    [Test]
     public async Task DuplicateReviewForSameUserAndTrackIsRejected()
     {
         await service.CreateReviewAsync("user-1", trackId, 5, "First");

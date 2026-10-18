@@ -2,7 +2,12 @@
 
 @using Microsoft.AspNetCore.Identity
 @using SoundBite.Data
+@using SoundBite.Models
+@using SoundBite.Services
 @inject UserManager<ApplicationUser> UserManager
+@inject FavouriteService FavouriteService
+@inject ReviewService ReviewService
+@inject ILogger<UserProfile> Logger
 
 <PageTitle>@(profile is null ? "Profile not found" : $"{ProfileTitle} — SoundBite")</PageTitle>
 
@@ -15,23 +20,83 @@ else if (profile is null)
     <h1>Profile not found</h1>
     <p>No user with that username could be found.</p>
 }
+else if (loadFailed)
+{
+    <h1>@ProfileTitle</h1>
+    <div class="alert alert-danger" role="alert">This profile's favourites and reviews couldn't be loaded. Please try again later.</div>
+}
 else
 {
-    <article class="card">
-        <div class="card-body">
-            <h1>@ProfileTitle</h1>
-            <p class="text-muted">@@@profile.UserName</p>
-            @if (!string.IsNullOrWhiteSpace(profile.Bio))
+    <div class="content-column">
+        <article class="card">
+            <div class="card-body">
+                <h1>@ProfileTitle</h1>
+                <p class="text-muted">@@@profile.UserName</p>
+                @if (!string.IsNullOrWhiteSpace(profile.Bio))
+                {
+                    <p class="mb-0">@profile.Bio</p>
+                }
+                else
+                {
+                    <p class="text-muted mb-0">No bio added yet.</p>
+                }
+            </div>
+        </article>
+        <ProfileFollowPanel @key="profile.Id" UserId="@profile.Id" />
+
+        <section class="mt-4" aria-labelledby="profile-favourites-heading">
+            <h2 id="profile-favourites-heading">Favourites (@favourites.Count)</h2>
+            @if (favourites.Count == 0)
             {
-                <p class="mb-0">@profile.Bio</p>
+                <p class="text-muted">No favourite tracks yet.</p>
             }
             else
             {
-                <p class="text-muted mb-0">No bio added yet.</p>
+                <ul class="list-group">
+                    @foreach (var favourite in favourites)
+                    {
+                        <li class="list-group-item" @key="favourite.TrackId">
+                            <a href="@($"/tracks/{favourite.TrackId}")" class="sb-item-title">@favourite.Track?.Title</a>
+                            @if (favourite.Track?.Artists.Count > 0)
+                            {
+                                <span class="text-muted"> · @string.Join(", ", favourite.Track.Artists.Select(artist => artist.Name))</span>
+                            }
+                        </li>
+                    }
+                </ul>
             }
-        </div>
-    </article>
-    <ProfileFollowPanel @key="profile.Id" UserId="@profile.Id" />
+        </section>
+
+        <section class="mt-4" aria-labelledby="profile-reviews-heading">
+            <h2 id="profile-reviews-heading">Reviews (@reviews.Count)</h2>
+            @if (reviews.Count == 0)
+            {
+                <p class="text-muted">No reviews yet.</p>
+            }
+            else
+            {
+                <div class="list-group">
+                    @foreach (var review in reviews)
+                    {
+                        <article class="list-group-item" @key="review.Id">
+                            <h3 class="h5">
+                                <a href="@($"/tracks/{review.TrackId}")">@review.Track?.Title</a>
+                                <span class="text-muted"> · @review.Rating / 5</span>
+                            </h3>
+                            @if (review.Track?.Artists.Count > 0)
+                            {
+                                <p class="text-muted mb-1">@string.Join(", ", review.Track.Artists.Select(artist => artist.Name))</p>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(review.Comment))
+                            {
+                                <p class="mb-0">@review.Comment</p>
+                            }
+                        </article>
+                    }
+                </div>
+            }
+        </section>
+    </div>
 }
 
 @code {
@@ -39,7 +104,10 @@ else
     public string UserName { get; set; } = string.Empty;
 
     private ApplicationUser? profile;
+    private IReadOnlyList<FavouriteTrack> favourites = [];
+    private IReadOnlyList<Review> reviews = [];
     private bool isLoading = true;
+    private bool loadFailed;
     private string ProfileTitle => profile is null || string.IsNullOrWhiteSpace(profile.DisplayName)
         ? profile?.UserName ?? "Profile"
         : profile.DisplayName;
@@ -47,7 +115,30 @@ else
     protected override async Task OnParametersSetAsync()
     {
         isLoading = true;
-        profile = await UserManager.FindByNameAsync(UserName);
-        isLoading = false;
+        loadFailed = false;
+        profile = null;
+        favourites = [];
+        reviews = [];
+        try
+        {
+            profile = await UserManager.FindByNameAsync(UserName);
+            if (profile is not null)
+            {
+                var favouriteTask = FavouriteService.GetForUserAsync(profile.Id);
+                var reviewTask = ReviewService.GetReviewsForUserAsync(profile.Id);
+                await Task.WhenAll(favouriteTask, reviewTask);
+                favourites = await favouriteTask;
+                reviews = await reviewTask;
+            }
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Unable to load public profile for username {UserName}", UserName);
+            loadFailed = true;
+        }
+        finally
+        {
+            isLoading = false;
+        }
     }
 }
