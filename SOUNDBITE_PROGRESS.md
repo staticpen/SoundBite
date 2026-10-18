@@ -22,9 +22,9 @@
 
 - **Overall status:** In progress
 - **Current development phase:** Presentation and deployment readiness
-- **Current focus:** Complete deployment of the committed Spotify artist-album pagination fix, then retry artist import
+- **Current focus:** Deploy and verify the top-row logout fix
 - **Last verified:** 2026-10-18
-- **Current blocker:** Production artist imports still fail on the currently deployed code because Spotify rejects `limit=50` on the artist-albums endpoint. The correction is committed as `55f9a20`, but deployment stopped before tests/publish because this non-interactive terminal cannot provide the LaunchDaemon's sudo password. Run the deployment script in a local interactive terminal, then retry. Failed attempts did not change catalogue counts.
+- **Current blocker:** Top-row logout now uses an antiforgery-validated HTTP POST rather than attempting to change the auth cookie from an interactive Blazor response. The change passes the full test suite but is not yet committed/deployed. Deployment also requires interactive macOS administrator authorization. The Spotify album-pagination fix is committed as `55f9a20`; its deployment status still needs confirmation.
 
 ## 3. Feature Implementation Tracker
 
@@ -45,8 +45,8 @@
 | Rankings and trends | Implemented — verified in isolated SQLite tests | `/rankings` shows top-rated tracks (minimum two reviews), most-reviewed tracks overall, and tracks with the most reviews in the last seven days. Separately stored, labelled sample reviews can populate these lists without masquerading as community reviews. |
 | Navigation and home | Implemented — tested | Navigation order is Home, Search, Activity Feed, Ratings and Trends, Playlists, Account. Account opens a dropdown with Edit Profile, Notifications, and role-gated Admin. Home shows a personalized welcome to signed-in users. |
 | Administrative user management | Implemented — verified | `/admin/users` supports user search/paging, account lock/unlock, and admin-role grants/revocation. Every service operation checks live role membership and lockout state server-side. The front-end label is “Admin.” |
-| Automated tests | Passed — verified | Full NUnit suite passed **268/268** on 2026-10-18; the focused catalogue, Spotify, rankings, track-detail, and route suite passed **46/46**. EF reports no pending model changes. |
-| Git and repository hygiene | In progress | Fix commit `55f9a20` is synchronized with `origin/main`; this deployment-status update is the only uncommitted change. The new code commit is not yet deployed. |
+| Automated tests | Passed — verified | Full NUnit suite passed **269/269** on 2026-10-18; focused authentication UI tests passed **15/15**. |
+| Git and repository hygiene | In progress | `main` is at the user's `381562b` layout commit. The logout fix in `MainLayout.razor`, `AccountEndpoints.cs`, and `AuthenticationUiTests.cs` is uncommitted. |
 
 ## 4. Latest Completed Work
 
@@ -360,6 +360,13 @@
 - **Fix prepared:** `SpotifyCatalogService` now requests 10 albums per page. The mock test follows Spotify's `offset=10` continuation and asserts each artist-album page uses `limit=10`.
 - **Verification:** A read-only live API request fetched all 11 album releases for the failing artist across two pages (10 + 1). Focused Spotify tests passed 4/4 and the full suite passed 268/268. The fix was committed as `55f9a20`; deployment was attempted but the script could not obtain interactive sudo authorization in the agent terminal. It must be run in a local interactive terminal before the user retries. No production DB migration or data changes were required.
 
+### 2026-10-18 — Fixed top-row logout response error
+
+- **Reported symptom:** Clicking the Log out button in the layout's top row showed Blazor's “An unhandled error has occurred” banner.
+- **Cause:** The form used `@onsubmit` to call `HttpContext.SignOutAsync()` from an interactive circuit. At that point the HTTP response had started, so ASP.NET Core could not append the authentication-cookie deletion header.
+- **Change:** Kept the button in the top row but made it submit a normal browser POST to `/account/logout`. The endpoint explicitly validates the antiforgery token, signs out through Identity during the HTTP request, and redirects to `/`. The existing JSON `/api/account/logout` route remains unchanged.
+- **Verification:** Focused `AuthenticationUiTests` passed 15/15, including the top-row form submission, cookie clearing, and rejection of requests without an antiforgery token. Full NUnit suite passed 269/269. No production deployment or browser test was performed. Changes are uncommitted.
+
 ## 5. Current Implementation Details
 
 - The application entry point in `SoundBite/Program.cs` configures a Blazor Web App with `AddRazorComponents().AddInteractiveServerComponents()`, SQLite via `UseSqlite(...)`, ASP.NET Core Identity, and the ranking/trend services and strategies.
@@ -370,7 +377,7 @@
 - `Endpoints/AccountEndpoints.cs` exposes registration, login, logout, and current-user endpoints.
 - `Data/ApplicationUser.cs` includes `DisplayName` and optional `Bio`. The account page edits these fields; `/users/{username}` displays a public profile without exposing email.
 - Remaining model and service placeholders include `UserService`. Rankings combine community reviews with clearly labelled `DemoReviews`; Spotify access requires configured credentials. Likes support reviews, tracks, playlists, and comments; comments/feed entries remain review-scoped.
-- The NUnit test project is active; the full suite passed 268/268 for the current worktree.
+- The NUnit test project is active; the full suite passed 269/269 for the current worktree.
 - `20261018035010_AddDemoReviews` adds the separate sample-review table and has been applied to the configured deployment database after an integrity-checked backup.
 
 ## 6. Important Decisions and Assumptions
@@ -394,6 +401,7 @@
 
 | Issue | Impact | Evidence | Next action | Status |
 |---|---|---|---|---|
+| Interactive logout cannot update the auth cookie after response start | The top-row logout handler previously ran inside an interactive Blazor circuit, causing the global unhandled-error banner | Logout now uses an antiforgery-validated native POST to `/account/logout`; 15 focused authentication tests and 269 full tests pass | Commit and deploy the fix; then verify browser logout clears the session without a Blazor error | Fixed locally; deployment pending |
 | Registration form cannot reach endpoint | Resolved | Replaced server-side loopback HTTP call with static SSR form processing | Verified in browser and HTTP tests | Closed |
 | Interactive login cannot set cookie | Resolved | Cookie operations now execute during HTTP form requests before rendering | Verified registration, login and logout | Closed |
 | Multi-instance notification delivery | Notifications are not backed by a distributed event bus | Live delivery uses an in-process dispatcher by design for the current single-instance app | Add a distributed backplane only if deploying multiple instances | Open |
@@ -406,7 +414,7 @@
 | Check | Result | Notes |
 |---|---|---|
 | Application build | Passed | Release build completed as part of the 2026-10-18 full test run; three pre-existing `CS1998` warnings remain in test files. |
-| Automated tests | Passed — verified | Full .NET 9 Release suite: 268 passed, 0 failed/skipped. Focused catalogue, Spotify, rankings, track detail, and route suite passed 46/46. |
+| Automated tests | Passed — verified | Full .NET 9 Release suite: 269 passed, 0 failed/skipped. Focused authentication UI suite passed 15/15; catalogue, Spotify, rankings, track detail, and route suite previously passed 46/46. |
 | Application publish | Passed | `dotnet publish SoundBite/SoundBite.csproj --configuration Release --no-build --output /tmp/soundbite-b-readiness-publish` succeeded. |
 | Application startup and local smoke test | Passed | App ran against a disposable copy at `/tmp/soundbite-b-readiness.db`; `/` returned HTTP 200, catalogue search rendered and accepted a local-search interaction. No target database was used. |
 | Circuit reconnect | Partially verified | A running page survived a local server stop/restart: the rejoining dialog appeared and dismissed, and page interaction worked afterward. Manual Retry and Reload buttons were not reached. |
@@ -415,7 +423,7 @@
 
 ## 9. Git Status
 
-- **Branch:** `main` at `55f9a20` (`Fix Spotify artist album pagination limit`), synchronized with `origin/main`. Spotify correction/test are committed; this deployment-status progress update is local.
+- **Branch:** `main` at `381562b` (`Updated MainLayout.razor`), synchronized state not yet rechecked. The logout fix in the layout, account endpoint, and authentication UI tests is uncommitted; this progress record is also modified.
 - **Database:** `AddDemoReviews` is applied to the deployment database after a mode-600 integrity-checked backup at `~/Library/Application Support/SoundBite/backups/soundbite-pre-demo-reviews-20261018-150136.db`.
 - **PRs #17–#19:** Notification paging, category preferences, and settings UI are merged into `main`.
 
@@ -432,7 +440,7 @@
 ## 11. Handover for the Next Chat Session
 
 - A is complete: paging, category opt-outs, and the settings page are implemented and merged in PRs #17–#19. Focused notification and route tests passed 53/53 on 2026-10-17; the A3 record reports the full suite passed 263/263.
-- User confirmed code commit `41f90ca` was deployed. Following explicit authorization, backed up the production DB, applied `AddDemoReviews`, and seeded 50 tracks plus 26 labelled demo reviews. Artist import then exposed Spotify's 10-album page-size cap; signed-in admin auth was not the cause. The correction is commit `55f9a20` and all 268 tests pass. Deployment was attempted but failed before stopping/replacing the app because the non-interactive terminal could not prompt for sudo. Run the deploy script interactively and retry only after its health check succeeds. Windows Tailscale viewer access remains outstanding.
+- User confirmed code commit `41f90ca` was deployed. Following explicit authorization, backed up the production DB, applied `AddDemoReviews`, and seeded 50 tracks plus 26 labelled demo reviews. Artist import then exposed Spotify's 10-album page-size cap; its correction is commit `55f9a20`. This session fixed the separate top-row logout error with a native antiforgery-validated HTTP POST; focused authentication tests passed 15/15 and the full suite passed 269/269. Logout fix is not yet deployed; run the deploy script in a local interactive terminal for sudo authorization, then browser-test logout. Windows Tailscale viewer access remains outstanding.
 - Notification event delivery is single-instance; shared infrastructure is only needed if deploying multiple instances.
 
 ## 12. Instructions for Updating This File

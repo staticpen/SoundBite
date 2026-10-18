@@ -57,6 +57,18 @@ public class AuthenticationUiTests
         ("model.UserName", "authuser"), ("model.Email", "authuser@example.com"),
         ("model.Password", "TestPass123!"), ("model.ConfirmPassword", confirm));
 
+    private async Task<HttpResponseMessage> Logout()
+    {
+        var home = await client.GetStringAsync("/");
+        var token = Regex.Match(home, "name=\"__RequestVerificationToken\" value=\"([^\"]+)\"").Groups[1].Value;
+        Assert.That(token, Is.Not.Empty, "The top-row logout form must carry an antiforgery token.");
+        return await client.PostAsync("/account/logout", new FormUrlEncodedContent(
+            new Dictionary<string, string>
+            {
+                ["__RequestVerificationToken"] = WebUtility.HtmlDecode(token)
+            }));
+    }
+
     [TestCase("/missing-net9-page")]
     [TestCase("/missing/deep/link")]
     public async Task UnknownRouteReturns404AndApplicationNotFoundContent(string path)
@@ -85,7 +97,7 @@ public class AuthenticationUiTests
         Assert.That(await client.GetStringAsync("/users/authuser"), Does.Contain("Updated name").And.Not.Contain("authuser@example.com"));
         Assert.That(await client.GetStringAsync("/playlists"), Does.Contain("Create a playlist"));
         Assert.That(await client.GetStringAsync("/tracks/1"), Does.Contain("Write a review"));
-        var logout = await PostForm("/account", "logout");
+        var logout = await Logout();
         Assert.That(logout.StatusCode, Is.EqualTo(HttpStatusCode.Redirect));
         Assert.That((await client.GetAsync("/api/account/me")).StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized));
         Assert.That(await client.GetStringAsync("/notifications"), Does.Contain("Log in")
@@ -97,8 +109,33 @@ public class AuthenticationUiTests
             var login = await PostForm("/login", "login", ("loginModel.UserNameOrEmail", identifier), ("loginModel.Password", "TestPass123!"));
             Assert.That(login.StatusCode, Is.EqualTo(HttpStatusCode.Redirect));
             Assert.That(await client.GetStringAsync("/account"), Does.Contain("Signed in"));
-            await PostForm("/account", "logout");
+            await Logout();
         }
+    }
+
+    [Test]
+    public async Task TopRowLogoutUsesAntiforgeryProtectedHttpPostAndClearsAuthenticationCookie()
+    {
+        await Register();
+        var home = await client.GetStringAsync("/");
+        Assert.That(home, Does.Contain("action=\"/account/logout\"")
+            .And.Contain(">Log out</button>"));
+
+        var token = Regex.Match(home, "name=\"__RequestVerificationToken\" value=\"([^\"]+)\"").Groups[1].Value;
+        Assert.That(token, Is.Not.Empty, "The top-row logout form must carry an antiforgery token.");
+        var logout = await client.PostAsync(
+            "/account/logout",
+            new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["__RequestVerificationToken"] = WebUtility.HtmlDecode(token)
+            }));
+
+        Assert.That(logout.StatusCode, Is.EqualTo(HttpStatusCode.Redirect));
+        Assert.That(logout.Headers.Location?.OriginalString, Is.EqualTo("/"));
+        Assert.That((await client.GetAsync("/api/account/me")).StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized));
+
+        var missingToken = await client.PostAsync("/account/logout", new FormUrlEncodedContent([]));
+        Assert.That(missingToken.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
     }
 
     [Test]
@@ -119,7 +156,7 @@ public class AuthenticationUiTests
         var other = await client.GetStringAsync("/users/other");
         Assert.That(other, Does.Contain("Followers (1)").And.Contain(">Unfollow</button>"));
         Assert.That(other, Does.Not.Contain("authuser@example.com"));
-        await PostForm("/account", "logout");
+        await Logout();
         var anonymous = await client.GetStringAsync("/users/other");
         Assert.That(anonymous, Does.Contain("Followers (1)").And.Contain("Log in to follow")
             .And.Not.Contain(">Follow</button>").And.Not.Contain(">Unfollow</button>"));
@@ -157,7 +194,7 @@ public class AuthenticationUiTests
         Assert.That(await mismatch.Content.ReadAsStringAsync(), Does.Contain("Your passwords do not match").And.Not.Contain("TestPass123!"));
         Assert.That((await client.GetAsync("/api/account/me")).StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized));
         await Register();
-        await PostForm("/account", "logout");
+        await Logout();
         var duplicate = await Register();
         Assert.That(await duplicate.Content.ReadAsStringAsync(), Does.Contain("already taken").And.Not.Contain("TestPass123!"));
         var login = await PostForm("/login", "login", ("loginModel.UserNameOrEmail", "authuser"), ("loginModel.Password", "WrongPassword!"));
@@ -169,7 +206,7 @@ public class AuthenticationUiTests
     public async Task LoginIgnoresExternalReturnUrl()
     {
         await Register();
-        await PostForm("/account", "logout");
+        await Logout();
         var response = await PostForm("/login?ReturnUrl=https%3A%2F%2Fevil.example", "login",
             ("loginModel.UserNameOrEmail", "authuser"), ("loginModel.Password", "TestPass123!"),
             ("ReturnUrl", "//evil.example"));
@@ -202,7 +239,7 @@ public class AuthenticationUiTests
     public async Task AnonymousProfilePostCannotChangeAnAccount()
     {
         await Register();
-        await PostForm("/account", "logout");
+        await Logout();
         var response = await PostForm("/account", "profile", ("profileModel.DisplayName", "Forged name"));
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
         Assert.That(await client.GetStringAsync("/users/authuser"), Does.Not.Contain("Forged name"));
@@ -210,7 +247,7 @@ public class AuthenticationUiTests
 
     [TestCase("/register", "register")]
     [TestCase("/login", "login")]
-    [TestCase("/account", "logout")]
+    [TestCase("/account/logout", "logout")]
     [TestCase("/account", "profile")]
     public async Task FormsRejectMissingAntiforgeryToken(string path, string handler)
     {

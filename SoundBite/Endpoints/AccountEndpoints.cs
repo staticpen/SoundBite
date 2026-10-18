@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Identity;
 using SoundBite.Data;
 
@@ -102,6 +103,19 @@ public static class AccountEndpoints
                 return Results.Ok(new { message = "Signed out successfully." });
             });
 
+        endpoints.MapPost("/account/logout",
+            async (
+                HttpContext context,
+                IAntiforgery antiforgery,
+                SignInManager<ApplicationUser> signInManager) =>
+            {
+                if (!await antiforgery.IsRequestValidAsync(context))
+                    return Results.BadRequest();
+
+                await signInManager.SignOutAsync();
+                return Results.LocalRedirect("/");
+            });
+
         endpoints.MapGet("/api/account/me",
             async (
                 HttpContext context,
@@ -131,4 +145,3 @@ public sealed record RegisterRequest(
 public sealed record LoginRequest(
     string UserNameOrEmail,
     string Password);
-

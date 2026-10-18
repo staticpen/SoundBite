@@ -1,7 +1,5 @@
-﻿@using Microsoft.AspNetCore.Authentication
 @using Microsoft.AspNetCore.Components.Authorization
 @inherits LayoutComponentBase
-@inject NavigationManager NavigationManager
 
 <div class="page">
     <div class="sidebar">
@@ -11,7 +9,7 @@
     <main>
         <div class="top-row px-4">
             <AuthorizeView>
-                <form method="post" @formname="logout" @onsubmit="LogoutAsync" class="d-inline">
+                <form method="post" action="/account/logout" class="d-inline">
                     <AntiforgeryToken />
                     <button type="submit" class="btn btn-outline-secondary">Log out</button>
                 </form>
@@ -29,16 +27,3 @@
     <a href="." class="reload">Reload</a>
     <span class="dismiss">🗙</span>
 </div>
-
-@code {
-    [CascadingParameter]
-    private HttpContext HttpContext { get; set; } = default!;
-
-    private async Task LogoutAsync()
-    {
-        await HttpContext.SignOutAsync();
-        NavigationManager.NavigateTo("/", forceLoad: true);
-    }
-}
-
-
