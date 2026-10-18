@@ -14,7 +14,7 @@ namespace SoundBite.Tests;
 public class ActivityFeedUiTests
 {
     [Test]
-    public async Task SignedInUserCanSeeRecentActivityFromUsersTheyDoNotFollow()
+    public async Task SignedInUserSeesActivityOnlyFromUsersTheyFollow()
     {
         await RenderAsync("alice", async renderer =>
         {
@@ -28,7 +28,8 @@ public class ActivityFeedUiTests
                 .And.Contain("replied to")
                 .And.Contain("liked a review by")
                 .And.Contain("liked the track")
-                .And.Contain("Carol</a><span> added </span><a href=\"/tracks/")
+                .And.Contain("Bob</a><span> added </span><a href=\"/tracks/")
+                .And.Not.Contain("Carol</a>")
                 .And.Contain("<span> to Favourites</span>"));
         });
     }
@@ -69,7 +70,7 @@ public class ActivityFeedUiTests
             db.Comments.Add(new Comment
             {
                 ReviewId = review.Id,
-                UserId = "alice",
+                UserId = "bob",
                 ParentCommentId = parent.Id,
                 Content = "A reply in the feed"
             });

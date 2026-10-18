@@ -28,12 +28,17 @@ public sealed class FeedService(
         if (!await db.Users.AnyAsync(user => user.Id == actorId, cancellationToken))
             throw new UnauthorizedAccessException("Your account is no longer available.");
 
+        var followedUserIds = db.Follows.AsNoTracking()
+            .Where(follow => follow.FollowerId == actorId)
+            .Select(follow => follow.FollowingId);
+
         IQueryable<ActivityRow> rows = db.Reviews.AsNoTracking()
             .Select(review => new ActivityRow
             {
                 Type = (int)ActivityType.Review,
                 Id = review.Id,
                 ReviewId = review.Id,
+                UserId = review.UserId,
                 UserName = review.User!.UserName!,
                 DisplayName = review.User.DisplayName,
                 TrackId = review.TrackId,
@@ -55,6 +60,7 @@ public sealed class FeedService(
                 Type = (int)ActivityType.Comment,
                 Id = comment.Id,
                 ReviewId = comment.ReviewId,
+                UserId = comment.UserId,
                 UserName = comment.User!.UserName!,
                 DisplayName = comment.User.DisplayName,
                 TrackId = comment.Review!.TrackId,
@@ -77,6 +83,7 @@ public sealed class FeedService(
                 Type = (int)ActivityType.Like,
                 Id = like.Id,
                 ReviewId = like.Review!.Id,
+                UserId = like.UserId,
                 UserName = like.User!.UserName!,
                 DisplayName = like.User.DisplayName,
                 TrackId = like.Review.TrackId,
@@ -99,6 +106,7 @@ public sealed class FeedService(
                 Type = (int)ActivityType.Like,
                 Id = like.Id,
                 ReviewId = like.Comment!.ReviewId,
+                UserId = like.UserId,
                 UserName = like.User!.UserName!,
                 DisplayName = like.User.DisplayName,
                 TrackId = like.Comment.Review!.TrackId,
@@ -120,6 +128,7 @@ public sealed class FeedService(
             {
                 Type = (int)ActivityType.Like,
                 Id = like.Id,
+                UserId = like.UserId,
                 UserName = like.User!.UserName!,
                 DisplayName = like.User.DisplayName,
                 TrackId = like.Track!.Id,
@@ -142,6 +151,7 @@ public sealed class FeedService(
                 Type = (int)ActivityType.Favourite,
                 Id = favourite.TrackId,
                 ReviewId = null,
+                UserId = favourite.UserId,
                 UserName = favourite.User!.UserName!,
                 DisplayName = favourite.User.DisplayName,
                 TrackId = favourite.Track!.Id,
@@ -156,6 +166,8 @@ public sealed class FeedService(
                 ParentUserName = null,
                 ParentDisplayName = null
             }));
+
+        rows = rows.Where(item => followedUserIds.Contains(item.UserId));
 
         var results = await rows
             .OrderByDescending(item => item.CreatedAt)
@@ -175,6 +187,7 @@ public sealed class FeedService(
         public int Type { get; init; }
         public int Id { get; init; }
         public int? ReviewId { get; init; }
+        public string UserId { get; init; } = string.Empty;
         public string UserName { get; init; } = string.Empty;
         public string DisplayName { get; init; } = string.Empty;
         public int? TrackId { get; init; }

@@ -58,23 +58,23 @@ public class FeedServiceTests
     public async Task TearDown() => await connection.DisposeAsync();
 
     [Test]
-    public async Task FeedContainsReviewsAndCommentsFromAllUsersInNewestFirstOrder()
+    public async Task FeedContainsReviewsAndCommentsFromFollowedUsersInNewestFirstOrder()
     {
         var result = await service.GetPageAsync();
         Assert.That(result.HasNext, Is.False);
         Assert.That(result.Items.Select(item => item.Type),
-            Is.EqualTo(new[] { ActivityType.Comment, ActivityType.Review, ActivityType.Review, ActivityType.Review }));
+            Is.EqualTo(new[] { ActivityType.Comment, ActivityType.Review }));
         Assert.That(result.Items.Select(item => item.UserName),
-            Is.EqualTo(new[] { "bob", "carol", "bob", "alice" }));
+            Is.EqualTo(new[] { "bob", "bob" }));
         Assert.That(result.Items.Select(item => item.TrackTitle),
-            Is.EqualTo(new[] { "Bob's track", "Carol's track", "Bob's track", "Alice's track" }));
+            Is.EqualTo(new[] { "Bob's track", "Bob's track" }));
         Assert.That(result.Items[0].Content, Is.EqualTo("Bob commented"));
-        Assert.That(result.Items[0].ReviewId, Is.EqualTo(result.Items[2].ReviewId));
-        Assert.That(result.Items.Any(item => item.UserName == "carol"), Is.True);
+        Assert.That(result.Items[0].ReviewId, Is.EqualTo(result.Items[1].ReviewId));
+        Assert.That(result.Items.Any(item => item.UserName == "alice" || item.UserName == "carol"), Is.False);
     }
 
     [Test]
-    public async Task FeedIncludesLikesAndFavouriteAddsFromUsersNotFollowed()
+    public async Task FeedIncludesFollowedLikesAndFavouritesButExcludesActivityFromOtherUsers()
     {
         await using (var db = factory.CreateDbContext())
         {
@@ -104,17 +104,14 @@ public class FeedServiceTests
         }
 
         var result = await service.GetPageAsync();
-        Assert.That(result.Items[0].Type, Is.EqualTo(ActivityType.Like));
-        Assert.That(result.Items[0].UserName, Is.EqualTo("carol"));
-        Assert.That(result.Items[0].TargetType, Is.EqualTo(LikeTargetType.Track));
+        Assert.That(result.Items.All(item => item.UserName == "bob"), Is.True);
+        Assert.That(result.Items.Any(item => item.Type == ActivityType.Like && item.TargetType == LikeTargetType.Track), Is.False);
 
-        var favourite = result.Items.Single(item =>
-            item.Type == ActivityType.Favourite && item.UserName == "carol");
-        Assert.That(favourite.UserName, Is.EqualTo("carol"));
+        var favourite = result.Items.Single(item => item.Type == ActivityType.Favourite);
+        Assert.That(favourite.UserName, Is.EqualTo("bob"));
         Assert.That(favourite.TrackTitle, Is.EqualTo("Carol's track"));
         Assert.That(favourite.Content, Is.Empty);
-        Assert.That(result.Items.Where(item => item.Type == ActivityType.Favourite)
-            .Select(item => (item.Id, item.UserName)).Distinct().Count(), Is.EqualTo(2));
+        Assert.That(result.Items.Any(item => item.UserName == "carol"), Is.False);
     }
 
     [Test]
@@ -122,6 +119,7 @@ public class FeedServiceTests
     {
         await using (var db = factory.CreateDbContext())
         {
+            db.Follows.Add(new Follow { FollowerId = "alice", FollowingId = "carol" });
             var bobReview = await db.Reviews.SingleAsync(review => review.UserId == "bob");
             var bobComment = await db.Comments.SingleAsync(comment => comment.UserId == "bob");
             var aliceTrack = await db.Tracks.SingleAsync(track => track.Title == "Alice's track");
@@ -129,9 +127,9 @@ public class FeedServiceTests
             var reply = new Comment
             {
                 ReviewId = bobReview.Id,
-                UserId = "alice",
+                UserId = "carol",
                 ParentCommentId = bobComment.Id,
-                Content = "Alice replied",
+                Content = "Carol replied",
                 CreatedAt = now.AddSeconds(1)
             };
             db.Comments.Add(reply);
@@ -145,7 +143,7 @@ public class FeedServiceTests
         }
 
         var result = await service.GetPageAsync();
-        var replyItem = result.Items.Single(item => item.Type == ActivityType.Comment && item.Content == "Alice replied");
+        var replyItem = result.Items.Single(item => item.Type == ActivityType.Comment && item.Content == "Carol replied");
         Assert.That(replyItem.ParentUserName, Is.EqualTo("bob"));
 
         var likes = result.Items.Where(item => item.Type == ActivityType.Like).ToArray();
@@ -196,12 +194,25 @@ public class FeedServiceTests
         var second = await service.GetPageAsync(1);
         Assert.That(first.Items, Has.Count.EqualTo(FeedService.PageSize));
         Assert.That(first.HasNext, Is.True);
-        Assert.That(second.Items, Has.Count.EqualTo(8));
+        Assert.That(second.Items, Has.Count.EqualTo(5));
         Assert.That(second.HasNext, Is.False);
         var allItems = first.Items.Concat(second.Items).ToArray();
-        Assert.That(allItems, Has.Length.EqualTo(FeedService.PageSize + 8));
+        Assert.That(allItems, Has.Length.EqualTo(FeedService.PageSize + 5));
         Assert.That(allItems.Select(item => (item.Type, item.Id, item.UserName)).Distinct().Count(), Is.EqualTo(allItems.Length));
-        Assert.That(allItems.Count(item => item.Type == ActivityType.Like), Is.EqualTo(3));
+        Assert.That(allItems.All(item => item.UserName == "bob"), Is.True);
+        Assert.That(allItems.Count(item => item.Type == ActivityType.Like), Is.EqualTo(2));
+    }
+
+    [Test]
+    public async Task FeedIsEmptyWhenUserDoesNotFollowAnyone()
+    {
+        await using (var db = factory.CreateDbContext())
+            await db.Follows.ExecuteDeleteAsync();
+
+        var result = await service.GetPageAsync();
+
+        Assert.That(result.Items, Is.Empty);
+        Assert.That(result.HasNext, Is.False);
     }
 
     private sealed class TestAuthentication(string? userId) : AuthenticationStateProvider
