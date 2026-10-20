@@ -7,6 +7,7 @@ namespace SoundBite.Services;
 
 public class CatalogueService(IDbContextFactory<ApplicationDbContext> contextFactory) : IMusicCatalog
 {
+    // Finds matching artists, albums, and tracks with case-insensitive local filtering.
     public async Task<CatalogueSearchResults> SearchAsync(string? query, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -28,6 +29,7 @@ public class CatalogueService(IDbContextFactory<ApplicationDbContext> contextFac
                 .OrderBy(a => a.Name, StringComparer.OrdinalIgnoreCase).ThenBy(a => a.Id).ToList(),
             Albums = albums.Where(a => a.Title.Contains(term, StringComparison.OrdinalIgnoreCase))
                 .OrderBy(a => a.Title, StringComparer.OrdinalIgnoreCase).ThenBy(a => a.Id).ToList(),
+            // The ID is a tie-breaker so titles with the same spelling have a stable order.
             Tracks = tracks.Where(t => t.Title.Contains(term, StringComparison.OrdinalIgnoreCase))
                 .OrderBy(t => t.Title, StringComparer.OrdinalIgnoreCase).ThenBy(t => t.Id).ToList()
         };
@@ -42,6 +44,7 @@ public class CatalogueService(IDbContextFactory<ApplicationDbContext> contextFac
             .ToListAsync(cancellationToken);
     }
 
+    // Loads one artist with its albums and tracks for the detail page.
     public async Task<Artist?> GetArtistAsync(int id, CancellationToken cancellationToken = default)
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
@@ -54,6 +57,7 @@ public class CatalogueService(IDbContextFactory<ApplicationDbContext> contextFac
             .SingleOrDefaultAsync(artist => artist.Id == id, cancellationToken);
     }
 
+    // Lists albums in a predictable order for catalogue pages.
     public async Task<IReadOnlyList<Album>> GetAlbumsAsync(CancellationToken cancellationToken = default)
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
@@ -62,6 +66,7 @@ public class CatalogueService(IDbContextFactory<ApplicationDbContext> contextFac
             .ToListAsync(cancellationToken);
     }
 
+    // Loads one album together with its artists and tracks.
     public async Task<Album?> GetAlbumAsync(int id, CancellationToken cancellationToken = default)
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
@@ -71,6 +76,7 @@ public class CatalogueService(IDbContextFactory<ApplicationDbContext> contextFac
             .SingleOrDefaultAsync(album => album.Id == id, cancellationToken);
     }
 
+    // Loads one track together with its artists and album.
     public async Task<Track?> GetTrackAsync(int id, CancellationToken cancellationToken = default)
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);

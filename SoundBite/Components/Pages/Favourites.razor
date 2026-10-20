@@ -188,6 +188,7 @@ else
     private string? addingArtistId;
     private string loadErrorMessage = "Your favourites couldn't be loaded. Please try again later.";
 
+    // Check sign-in and load the user's saved tracks.
     protected override async Task OnInitializedAsync()
     {
         var principal = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
@@ -202,6 +203,7 @@ else
         await LoadAsync();
     }
 
+    // Replace the current list with the user's latest favourites.
     private async Task LoadAsync()
     {
         loading = true;
@@ -225,6 +227,7 @@ else
         }
     }
 
+    // Search tracks and fall back to artist search when none are found.
     private async Task SearchTracksAsync()
     {
         searchedQuery = query.Trim();
@@ -262,6 +265,7 @@ else
         }
     }
 
+    // Import an artist and refresh the matching track search.
     private async Task AddArtistAsync(SpotifyArtistMatch artist)
     {
         if (!signedIn || isAddingArtist)
@@ -308,6 +312,7 @@ else
         }
     }
 
+    // Add a track to favourites and update the visible list.
     private async Task AddAsync(Track track)
     {
         if (busy)
@@ -338,6 +343,7 @@ else
         }
     }
 
+    // Remove a track from favourites and update the visible list.
     private async Task RemoveAsync(int trackId)
     {
         if (busy)
@@ -362,6 +368,7 @@ else
         }
     }
 
+    // Show or hide the track search and clear its previous results.
     private void ToggleAddTracks()
     {
         showAddTracks = !showAddTracks;

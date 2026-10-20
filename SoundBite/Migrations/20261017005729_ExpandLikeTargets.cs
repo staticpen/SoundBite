@@ -8,6 +8,7 @@ namespace SoundBite.Migrations
     public partial class ExpandLikeTargets : Migration
     {
         /// <inheritdoc />
+        // Allows likes to target reviews and comments.
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropIndex(
@@ -99,6 +100,7 @@ namespace SoundBite.Migrations
         }
 
         /// <inheritdoc />
+        // Restricts likes to reviews again.
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropForeignKey(

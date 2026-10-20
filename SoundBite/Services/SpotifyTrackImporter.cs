@@ -8,6 +8,7 @@ public sealed record SpotifyArtistImportResult(int AlbumsImported, int TracksImp
 
 public sealed class SpotifyTrackImporter(IDbContextFactory<ApplicationDbContext> contextFactory)
 {
+    // Adds or updates one Spotify track and returns its local database ID.
     public async Task<int> ImportAsync(
         SpotifyTrackMatch match,
         CancellationToken cancellationToken = default)
@@ -19,6 +20,7 @@ public sealed class SpotifyTrackImporter(IDbContextFactory<ApplicationDbContext>
         return track.Id;
     }
 
+    // Imports an artist's albums and tracks as one database transaction.
     public async Task<SpotifyArtistImportResult> ImportArtistAsync(
         SpotifyArtistDiscography discography,
         CancellationToken cancellationToken = default)
@@ -26,6 +28,7 @@ public sealed class SpotifyTrackImporter(IDbContextFactory<ApplicationDbContext>
         ArgumentNullException.ThrowIfNull(discography);
         ValidateArtist(discography.Artist);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        // Keep the discography atomic: a failure partway through should not leave an incomplete import.
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
 
         var artist = await GetOrAddArtistAsync(db, discography.Artist, cancellationToken);
@@ -51,6 +54,7 @@ public sealed class SpotifyTrackImporter(IDbContextFactory<ApplicationDbContext>
 
             album.Title = albumMatch.Title;
             CacheAlbumCover(album, albumMatch.CoverUrl);
+            // Some Spotify album responses omit artists, so use the imported artist as a fallback.
             var albumArtists = albumMatch.Artists.Count == 0
                 ? [discography.Artist]
                 : albumMatch.Artists.DistinctBy(item => item.SpotifyId);
@@ -64,6 +68,7 @@ public sealed class SpotifyTrackImporter(IDbContextFactory<ApplicationDbContext>
                 if (trackMatch.AlbumSpotifyId != albumMatch.SpotifyId)
                     throw new ArgumentException("Spotify track album does not match its catalogue album.", nameof(discography));
                 await UpsertTrackAsync(db, trackMatch, cancellationToken);
+                // Count processed tracks, including records updated rather than newly created.
                 importedTracks++;
             }
         }
@@ -73,6 +78,7 @@ public sealed class SpotifyTrackImporter(IDbContextFactory<ApplicationDbContext>
         return new SpotifyArtistImportResult(discography.Albums.Count, importedTracks);
     }
 
+    // Adds a track or refreshes its album and artist details from Spotify.
     private static async Task<Track> UpsertTrackAsync(
         ApplicationDbContext db,
         SpotifyTrackMatch match,
@@ -105,6 +111,7 @@ public sealed class SpotifyTrackImporter(IDbContextFactory<ApplicationDbContext>
         foreach (var artist in artists)
             AddAlbumArtist(album, artist);
 
+        // Spotify IDs are stable identifiers, unlike titles which can be shared or updated.
         var track = db.Tracks.Local.SingleOrDefault(item => item.SpotifyId == match.SpotifyId)
             ?? await db.Tracks
                 .Include(item => item.Artists)
@@ -117,6 +124,7 @@ public sealed class SpotifyTrackImporter(IDbContextFactory<ApplicationDbContext>
 
         track.Title = match.Title;
         track.Album = album;
+        // Rebuild this relationship from the current Spotify response so stale artists are removed.
         track.Artists.Clear();
         foreach (var artist in artists)
             track.Artists.Add(artist);
@@ -124,6 +132,7 @@ public sealed class SpotifyTrackImporter(IDbContextFactory<ApplicationDbContext>
         return track;
     }
 
+    // Finds an artist by Spotify ID or adds it if it is new.
     private static async Task<Artist> GetOrAddArtistAsync(
         ApplicationDbContext db,
         SpotifyArtistMatch match,
@@ -144,18 +153,23 @@ public sealed class SpotifyTrackImporter(IDbContextFactory<ApplicationDbContext>
         return artist;
     }
 
+    // Adds an imported artist to an album's artist relationship.
     private static void AddAlbumArtist(Album album, Artist artist)
     {
+        // An artist may already be linked through both the album and track import paths.
         if (!album.Artists.Any(existing => existing.SpotifyId == artist.SpotifyId))
             album.Artists.Add(artist);
     }
 
+    // Applies Spotify cover data while keeping the album's saved image intact.
     private static void CacheAlbumCover(Album album, string? coverUrl)
     {
+        // Keep an existing cached image if Spotify has no URL in a later response.
         if (string.IsNullOrWhiteSpace(album.CoverUrl) && !string.IsNullOrWhiteSpace(coverUrl))
             album.CoverUrl = coverUrl;
     }
 
+    // Makes sure a Spotify track result has the fields needed for import.
     private static void ValidateTrack(SpotifyTrackMatch match)
     {
         ArgumentNullException.ThrowIfNull(match);
@@ -172,6 +186,7 @@ public sealed class SpotifyTrackImporter(IDbContextFactory<ApplicationDbContext>
         }
     }
 
+    // Makes sure a Spotify artist result has the fields needed for import.
     private static void ValidateArtist(SpotifyArtistMatch artist)
     {
         ArgumentNullException.ThrowIfNull(artist);

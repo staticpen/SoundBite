@@ -9,6 +9,7 @@ namespace SoundBite.Migrations
     public partial class AddReviews : Migration
     {
         /// <inheritdoc />
+        // Adds reviews and their relationship to tracks and users.
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.CreateTable(
@@ -54,6 +55,7 @@ namespace SoundBite.Migrations
         }
 
         /// <inheritdoc />
+        // Removes reviews and their relationship data.
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropTable(

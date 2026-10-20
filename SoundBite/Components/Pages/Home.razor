@@ -51,6 +51,7 @@
     private bool signedIn;
     private string welcomeHeading = "Welcome back! Your music journey starts here.";
 
+    // Personalize the welcome heading for signed-in visitors.
     protected override async Task OnInitializedAsync()
     {
         var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;

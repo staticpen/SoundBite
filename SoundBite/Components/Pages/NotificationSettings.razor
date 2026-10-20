@@ -73,6 +73,7 @@ else
     private string? message;
     private bool messageIsError;
 
+    // Check sign-in status and load settings for signed-in users.
     protected override async Task OnInitializedAsync()
     {
         var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
@@ -137,6 +138,7 @@ else
         StateHasChanged();
     }
 
+    // Keep the set of disabled notification categories in sync with the switch.
     private void SetEnabled(NotificationType type, bool enabled)
     {
         if (enabled)

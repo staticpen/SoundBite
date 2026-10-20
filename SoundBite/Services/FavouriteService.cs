@@ -11,6 +11,7 @@ public sealed class FavouriteService(
     IDbContextFactory<ApplicationDbContext> contextFactory,
     AuthenticationStateProvider authenticationStateProvider)
 {
+    // Detects the startup case where the favourites table has not been migrated yet.
     public static bool IsStorageNotMigrated(Exception exception)
     {
         for (Exception? current = exception; current is not null; current = current.InnerException)
@@ -23,6 +24,7 @@ public sealed class FavouriteService(
         return false;
     }
 
+    // Loads favourites belonging to the signed-in user.
     public async Task<IReadOnlyList<FavouriteTrack>> GetMineAsync(
         CancellationToken cancellationToken = default)
     {
@@ -30,6 +32,7 @@ public sealed class FavouriteService(
         return await GetForUserAsync(userId, cancellationToken);
     }
 
+    // Loads a user's favourites with track and artist details.
     public async Task<IReadOnlyList<FavouriteTrack>> GetForUserAsync(
         string userId,
         CancellationToken cancellationToken = default)
@@ -47,6 +50,7 @@ public sealed class FavouriteService(
             .ToListAsync(cancellationToken);
     }
 
+    // Checks whether the signed-in user has saved a track.
     public async Task<bool> ContainsAsync(int trackId, CancellationToken cancellationToken = default)
     {
         ValidateTrackId(trackId);
@@ -57,6 +61,7 @@ public sealed class FavouriteService(
             cancellationToken);
     }
 
+    // Returns the signed-in user's saved track IDs for quick UI checks.
     public async Task<IReadOnlySet<int>> GetMineTrackIdsAsync(
         CancellationToken cancellationToken = default)
     {
@@ -69,9 +74,11 @@ public sealed class FavouriteService(
         return trackIds.ToHashSet();
     }
 
+    // Saves a track for the current user and reports duplicate additions clearly.
     public async Task AddAsync(int trackId, CancellationToken cancellationToken = default)
     {
         ValidateTrackId(trackId);
+        // Use the signed-in user's ID so callers cannot add favourites on someone else's behalf.
         var userId = await GetCurrentUserIdAsync();
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         if (!await db.Tracks.AnyAsync(track => track.Id == trackId, cancellationToken))
@@ -97,6 +104,7 @@ public sealed class FavouriteService(
         }
     }
 
+    // Removes a saved track from the current user's list.
     public async Task RemoveAsync(int trackId, CancellationToken cancellationToken = default)
     {
         ValidateTrackId(trackId);
@@ -112,6 +120,7 @@ public sealed class FavouriteService(
         await db.SaveChangesAsync(cancellationToken);
     }
 
+    // Gets the authenticated account ID or asks the caller to sign in.
     private async Task<string> GetCurrentUserIdAsync()
     {
         var principal = (await authenticationStateProvider.GetAuthenticationStateAsync()).User;
@@ -123,6 +132,7 @@ public sealed class FavouriteService(
         return userId;
     }
 
+    // Makes sure a track ID can refer to a real catalogue entry.
     private static void ValidateTrackId(int trackId)
     {
         if (trackId <= 0)

@@ -8,6 +8,7 @@ namespace SoundBite.Migrations
     public partial class AddFollows : Migration
     {
         /// <inheritdoc />
+        // Adds user-to-user follow relationships.
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.CreateTable(
@@ -42,6 +43,7 @@ namespace SoundBite.Migrations
         }
 
         /// <inheritdoc />
+        // Removes user-to-user follow relationships.
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropTable(

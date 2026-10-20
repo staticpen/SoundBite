@@ -6,9 +6,11 @@ namespace SoundBite.Endpoints;
 
 public static class AccountEndpoints
 {
+    /// <summary>Maps the account registration, sign-in, sign-out, and identity routes.</summary>
     public static IEndpointRouteBuilder MapAccountEndpoints(
         this IEndpointRouteBuilder endpoints)
     {
+        // Creates an account from the submitted registration details.
         endpoints.MapPost("/api/account/register",
             async (
                 RegisterRequest request,
@@ -56,6 +58,7 @@ public static class AccountEndpoints
                 });
             });
 
+        // Signs in an account using its username or email and password.
         endpoints.MapPost("/api/account/login",
             async (
                 LoginRequest request,
@@ -96,6 +99,7 @@ public static class AccountEndpoints
                 });
             });
 
+        // Signs out the current account through the API.
         endpoints.MapPost("/api/account/logout",
             async (SignInManager<ApplicationUser> signInManager) =>
             {
@@ -103,6 +107,7 @@ public static class AccountEndpoints
                 return Results.Ok(new { message = "Signed out successfully." });
             });
 
+        // Signs out the current account after validating the antiforgery token.
         endpoints.MapPost("/account/logout",
             async (
                 HttpContext context,
@@ -116,6 +121,7 @@ public static class AccountEndpoints
                 return Results.LocalRedirect("/");
             });
 
+        // Returns the signed-in account's public identity details.
         endpoints.MapGet("/api/account/me",
             async (
                 HttpContext context,

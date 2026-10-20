@@ -193,6 +193,7 @@ app.MapRazorComponents<App>()
 
 app.Run();
 
+// Checks that album-cover refresh is pointed at an external database file.
 static void EnsureExplicitExternalDatabase(WebApplication app)
 {
     var connectionString = app.Configuration.GetConnectionString("DefaultConnection");

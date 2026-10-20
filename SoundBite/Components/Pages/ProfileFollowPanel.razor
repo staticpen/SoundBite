@@ -50,8 +50,10 @@
     private bool busy;
     private string? error;
 
+    // Load follow counts and any expanded user list when the panel starts.
     protected override Task OnInitializedAsync() => RunAsync(RefreshAsync);
 
+    // Refresh the follow summary and the currently selected follower list.
     private async Task RefreshAsync()
     {
         summary = await FollowService.GetSummaryAsync(UserId);
@@ -66,26 +68,33 @@
         }
     }
 
+    // Open or close the follower or following list.
     private Task ExpandAsync(bool followers) => RunAsync(async () =>
     {
+        // Reset pagination when switching which list is shown.
         expanded = expanded == followers ? null : followers;
         page = 0;
         await RefreshAsync();
     });
 
+    // Move through the currently expanded follower list.
     private Task ChangePageAsync(int offset) => RunAsync(async () =>
     {
+        // Update the page before reloading the selected list.
         page += offset;
         await RefreshAsync();
     });
 
+    // Follow or unfollow this profile, then reload the summary.
     private Task ToggleAsync() => RunAsync(async () =>
     {
+        // Choose the inverse action from the current follow state.
         if (summary!.IsFollowing) await FollowService.UnfollowAsync(UserId);
         else await FollowService.FollowAsync(UserId);
         await RefreshAsync();
     });
 
+    // Run a follow action with shared busy state and error handling.
     private async Task RunAsync(Func<Task> action)
     {
         if (busy) return;

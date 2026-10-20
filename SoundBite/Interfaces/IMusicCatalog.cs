@@ -15,11 +15,13 @@ public interface IMusicCatalog
     /// </summary>
     Task<CatalogueSearchResults> SearchAsync(string? query, CancellationToken cancellationToken = default);
 
+    /// <summary>Returns all artists in the catalogue.</summary>
     Task<IReadOnlyList<Artist>> GetArtistsAsync(CancellationToken cancellationToken = default);
 
     /// <summary>Loads the artist's albums (including their tracks) and credited tracks.</summary>
     Task<Artist?> GetArtistAsync(int id, CancellationToken cancellationToken = default);
 
+    /// <summary>Returns all albums in the catalogue.</summary>
     Task<IReadOnlyList<Album>> GetAlbumsAsync(CancellationToken cancellationToken = default);
 
     /// <summary>Loads the album's artists and tracks.</summary>

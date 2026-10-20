@@ -8,6 +8,7 @@ namespace SoundBite.Migrations
     public partial class AddAlbumCoverUrl : Migration
     {
         /// <inheritdoc />
+        // Adds cover URLs to catalogue albums.
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.AddColumn<string>(
@@ -19,6 +20,7 @@ namespace SoundBite.Migrations
         }
 
         /// <inheritdoc />
+        // Removes cover URLs from catalogue albums.
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropColumn(

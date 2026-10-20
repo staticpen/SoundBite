@@ -9,6 +9,7 @@ namespace SoundBite.Migrations
     public partial class AddPlaylists : Migration
     {
         /// <inheritdoc />
+        // Adds playlist tables and their track relationships.
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.CreateTable(
@@ -86,6 +87,7 @@ namespace SoundBite.Migrations
         }
 
         /// <inheritdoc />
+        // Removes playlist tables and their track relationships.
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropTable(

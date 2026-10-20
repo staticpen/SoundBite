@@ -97,6 +97,7 @@
 
     [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
 
+    // Load the signed-in user's profile and prepare both forms.
     protected override async Task OnInitializedAsync()
     {
         loginModel ??= new();
@@ -116,12 +117,14 @@
         }
     }
 
+    // Sign in with either the username or email, then return to the homepage.
     private async Task LoginAsync()
     {
         loginMessage = null;
         isBusy = true;
         try
         {
+            // Let listeners use either identifier, but keep password checking inside Identity.
             var user = await UserManager.FindByNameAsync(loginModel.UserNameOrEmail)
                 ?? await UserManager.FindByEmailAsync(loginModel.UserNameOrEmail);
 
@@ -153,9 +156,11 @@
         }
     }
 
+    // Clear the password after either a successful or failed login attempt.
     private void ClearLoginPassword() => loginModel.Password = string.Empty;
 
 
+    // Save the current user's edited display name and bio.
     private async Task SaveProfileAsync()
     {
         profileMessage = null;
@@ -199,6 +204,7 @@
         [Required]
         public string Password { get; set; } = string.Empty;
 
+        // Clear both login fields after the form has been submitted.
         public void Reset()
         {
             UserNameOrEmail = string.Empty;

@@ -5,6 +5,7 @@ namespace SoundBite.Services;
 
 public static class AdminRoleBootstrapper
 {
+    // Makes sure configured users have the administrator role before the app uses it.
     public static async Task EnsureConfiguredAdministratorsAsync(
         IServiceProvider services,
         IEnumerable<string> configuredUserIds)
@@ -44,6 +45,7 @@ public static class AdminRoleBootstrapper
         }
     }
 
+    // Stops startup if an identity operation could not be completed.
     private static void EnsureSucceeded(IdentityResult result)
     {
         if (!result.Succeeded)

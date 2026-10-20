@@ -9,6 +9,7 @@ public sealed class TrendService(IDbContextFactory<ApplicationDbContext> context
     public const int DefaultWindowDays = 7;
     public const int MaximumWindowDays = 30;
 
+    // Finds tracks with the most reviews in the selected recent time window.
     public async Task<IReadOnlyList<TrendingTrackEntry>> GetTrendingTracksAsync(
         int windowDays = DefaultWindowDays,
         int limit = RankingService.DefaultLimit,
@@ -29,6 +30,7 @@ public sealed class TrendService(IDbContextFactory<ApplicationDbContext> context
 
         var cutoff = DateTime.UtcNow.AddDays(-windowDays);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        // Filter first so both the review count and average rating describe the same recent period.
         return await db.Reviews.AsNoTracking()
             .Select(review => new
             {

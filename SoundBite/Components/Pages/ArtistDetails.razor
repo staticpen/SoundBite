@@ -94,6 +94,7 @@ else
     private bool loading;
     private bool loadFailed;
 
+    // Reload the requested artist whenever its route ID changes.
     protected override async Task OnParametersSetAsync()
     {
         artist = null;
@@ -116,6 +117,7 @@ else
         }
     }
 
+    // Build a safe Spotify URL for the artist.
     private static string SpotifyUrl(string id) =>
         $"https://open.spotify.com/artist/{Uri.EscapeDataString(id)}";
 }

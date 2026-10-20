@@ -34,6 +34,7 @@ public sealed class SocialInteractionService(
 {
     public const int MaximumCommentLength = 2000;
 
+    // Gets a review's likes and comments, including the current user's interaction state.
     public async Task<ReviewInteractions> GetReviewInteractionsAsync(
         int reviewId,
         CancellationToken cancellationToken = default)
@@ -69,30 +70,39 @@ public sealed class SocialInteractionService(
         return new ReviewInteractions(likeCount, isLiked, comments);
     }
 
+    // Likes a review for the signed-in user.
     public Task LikeReviewAsync(int reviewId, CancellationToken cancellationToken = default) =>
         SetLikeAsync(LikeTargetType.Review, reviewId, true, cancellationToken);
 
+    // Removes the signed-in user's like from a review.
     public Task UnlikeReviewAsync(int reviewId, CancellationToken cancellationToken = default) =>
         SetLikeAsync(LikeTargetType.Review, reviewId, false, cancellationToken);
 
+    // Likes a track for the signed-in user.
     public Task LikeTrackAsync(int trackId, CancellationToken cancellationToken = default) =>
         SetLikeAsync(LikeTargetType.Track, trackId, true, cancellationToken);
 
+    // Removes the signed-in user's like from a track.
     public Task UnlikeTrackAsync(int trackId, CancellationToken cancellationToken = default) =>
         SetLikeAsync(LikeTargetType.Track, trackId, false, cancellationToken);
 
+    // Likes a comment for the signed-in user.
     public Task LikeCommentAsync(int commentId, CancellationToken cancellationToken = default) =>
         SetLikeAsync(LikeTargetType.Comment, commentId, true, cancellationToken);
 
+    // Removes the signed-in user's like from a comment.
     public Task UnlikeCommentAsync(int commentId, CancellationToken cancellationToken = default) =>
         SetLikeAsync(LikeTargetType.Comment, commentId, false, cancellationToken);
 
+    // Likes a review, track, or comment based on its target type.
     public Task LikeAsync(LikeTargetType targetType, int targetId, CancellationToken cancellationToken = default) =>
         SetLikeAsync(targetType, targetId, true, cancellationToken);
 
+    // Removes a like from a review, track, or comment.
     public Task UnlikeAsync(LikeTargetType targetType, int targetId, CancellationToken cancellationToken = default) =>
         SetLikeAsync(targetType, targetId, false, cancellationToken);
 
+    // Gets the like count and whether the current user liked a target.
     public async Task<LikeSummary> GetLikeSummaryAsync(
         LikeTargetType targetType,
         int targetId,
@@ -108,12 +118,14 @@ public sealed class SocialInteractionService(
         return new LikeSummary(count, isLiked);
     }
 
+    // Adds a top-level comment to a review.
     public async Task<ReviewComment> AddCommentAsync(
         int reviewId,
         string? content,
         CancellationToken cancellationToken = default) =>
         await SaveCommentAsync(reviewId, null, content, cancellationToken);
 
+    // Adds a reply to an existing top-level comment.
     public async Task<ReviewComment> AddReplyAsync(
         int parentCommentId,
         string? content,
@@ -125,6 +137,7 @@ public sealed class SocialInteractionService(
             .Include(comment => comment.User)
             .SingleOrDefaultAsync(comment => comment.Id == parentCommentId, cancellationToken)
             ?? throw new InvalidOperationException("Parent comment was not found.");
+        // Replies stay one level deep so the discussion can be displayed as a simple thread.
         if (parent.ParentCommentId is not null)
             throw new InvalidOperationException("Replies can only be added to top-level comments.");
 
@@ -136,6 +149,7 @@ public sealed class SocialInteractionService(
             parent.User);
     }
 
+    // Saves a comment or reply and notifies its review or comment owner when allowed.
     private async Task<ReviewComment> SaveCommentAsync(
         int reviewId,
         int? parentCommentId,
@@ -190,6 +204,7 @@ public sealed class SocialInteractionService(
         return ToReviewComment(comment, user, true, parentUser);
     }
 
+    // Updates a comment owned by the signed-in user.
     public async Task<ReviewComment> UpdateCommentAsync(
         int commentId,
         string? content,
@@ -213,6 +228,7 @@ public sealed class SocialInteractionService(
         return ToReviewComment(comment, user, true);
     }
 
+    // Deletes the user's comment while keeping its replies as top-level comments.
     public async Task DeleteCommentAsync(int commentId, CancellationToken cancellationToken = default)
     {
         ValidateCommentId(commentId);
@@ -232,6 +248,7 @@ public sealed class SocialInteractionService(
         await db.SaveChangesAsync(cancellationToken);
     }
 
+    // Adds or removes the signed-in user's like and sends notifications when needed.
     private async Task SetLikeAsync(
         LikeTargetType targetType,
         int targetId,
@@ -249,6 +266,7 @@ public sealed class SocialInteractionService(
         {
             var notified = false;
             await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+            // A unique constraint plus ON CONFLICT makes repeated like requests idempotent.
             var inserted = await db.Database.ExecuteSqlInterpolatedAsync($"""
                 INSERT INTO "Likes" ("ReviewId", "TrackId", "CommentId", "UserId", "CreatedAt")
                 VALUES (
@@ -298,6 +316,7 @@ public sealed class SocialInteractionService(
         }
     }
 
+    // Finds who should receive a like notification for the selected target.
     private static async Task<string?> GetNotificationRecipientIdAsync(
         ApplicationDbContext db,
         LikeTargetType targetType,
@@ -317,6 +336,7 @@ public sealed class SocialInteractionService(
             _ => throw new ArgumentOutOfRangeException(nameof(targetType))
         };
 
+    // Creates the notification record for review and comment likes.
     private static Notification? CreateLikeNotification(
         LikeTargetType targetType,
         int targetId,
@@ -347,6 +367,7 @@ public sealed class SocialInteractionService(
             _ => throw new ArgumentOutOfRangeException(nameof(targetType))
         };
 
+    // Filters likes to the selected review, track, or comment.
     private static IQueryable<Like> LikeQuery(IQueryable<Like> likes, LikeTargetType targetType, int targetId) =>
         targetType switch
         {
@@ -356,6 +377,7 @@ public sealed class SocialInteractionService(
             _ => throw new ArgumentOutOfRangeException(nameof(targetType))
         };
 
+    // Checks that the target exists before allowing an interaction.
     private static async Task EnsureTargetAvailableAsync(
         ApplicationDbContext db,
         LikeTargetType targetType,
@@ -374,6 +396,7 @@ public sealed class SocialInteractionService(
             throw new InvalidOperationException($"{targetType} was not found or is not available.");
     }
 
+    // Gets the signed-in user or fails if their account is unavailable.
     private async Task<ApplicationUser> GetCurrentUserAsync(
         ApplicationDbContext db,
         CancellationToken cancellationToken)
@@ -386,6 +409,7 @@ public sealed class SocialInteractionService(
             ?? throw new UnauthorizedAccessException("Your account is no longer available.");
     }
 
+    // Returns the signed-in user's ID, or null for an anonymous visitor.
     private async Task<string?> CurrentUserIdAsync()
     {
         var principal = (await authenticationStateProvider.GetAuthenticationStateAsync()).User;
@@ -394,6 +418,7 @@ public sealed class SocialInteractionService(
             : null;
     }
 
+    // Converts a saved comment into the model used by the UI.
     private static ReviewComment ToReviewComment(
         Comment comment,
         ApplicationUser user,
@@ -403,8 +428,10 @@ public sealed class SocialInteractionService(
             user.UserName ?? string.Empty, user.DisplayName, comment.Content,
             comment.CreatedAt, comment.UpdatedAt, isOwner, 0, false);
 
+    // Trims comment text and treats a missing value as empty.
     private static string NormalizeComment(string? content) => content?.Trim() ?? string.Empty;
 
+    // Checks that comment text is present and within the allowed length.
     private static void ValidateComment(string content)
     {
         if (content.Length == 0)
@@ -413,12 +440,14 @@ public sealed class SocialInteractionService(
             throw new ArgumentException($"Comments cannot exceed {MaximumCommentLength} characters.", nameof(content));
     }
 
+    // Checks that a review ID is a positive number.
     private static void ValidateReviewId(int reviewId)
     {
         if (reviewId <= 0)
             throw new ArgumentOutOfRangeException(nameof(reviewId), "Review ID must be greater than zero.");
     }
 
+    // Checks that a like target type and ID are valid.
     private static void ValidateTarget(LikeTargetType targetType, int targetId)
     {
         if (!Enum.IsDefined(targetType))
@@ -426,6 +455,7 @@ public sealed class SocialInteractionService(
         ValidateReviewId(targetId);
     }
 
+    // Checks that a comment ID is a positive number.
     private static void ValidateCommentId(int commentId)
     {
         if (commentId <= 0)

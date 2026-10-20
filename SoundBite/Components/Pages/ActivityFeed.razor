@@ -114,6 +114,7 @@ else
     private bool signedIn;
     private bool loadFailed;
 
+    // Check sign-in status and load the first activity page.
     protected override async Task OnInitializedAsync()
     {
         var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
@@ -142,6 +143,7 @@ else
         }
     }
 
+    // Append the next page of activity without replacing the current items.
     private async Task LoadMoreAsync()
     {
         if (loadingMore || !hasNext) return;

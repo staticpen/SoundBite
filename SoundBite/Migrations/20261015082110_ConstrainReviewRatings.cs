@@ -8,6 +8,7 @@ namespace SoundBite.Migrations
     public partial class ConstrainReviewRatings : Migration
     {
         /// <inheritdoc />
+        // Restricts review ratings to the supported range.
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.AddCheckConstraint(
@@ -17,6 +18,7 @@ namespace SoundBite.Migrations
         }
 
         /// <inheritdoc />
+        // Removes the review rating constraint.
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.Sql("""

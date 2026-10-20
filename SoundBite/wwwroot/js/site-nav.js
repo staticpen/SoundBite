@@ -7,15 +7,19 @@
     }
     window.__soundBiteNavInit = true;
 
+    // Checks whether an element is currently visible on the page.
     function isVisible(element) {
         return element.offsetParent !== null;
     }
 
+    // Marks the navigation menu as collapsed.
     function collapseMenu(toggle) {
         toggle.setAttribute('aria-expanded', 'false');
     }
 
+    // Closes every open account menu except the one being interacted with.
     function closeAccountMenus(except) {
+        // Keeps the account menu that contains the current click open.
         document.querySelectorAll('[data-account-menu][open]').forEach(function (menu) {
             if (menu !== except) {
                 menu.removeAttribute('open');
@@ -23,6 +27,7 @@
         });
     }
 
+    // Handles navigation toggles, menu links, and outside clicks.
     document.addEventListener('click', function (event) {
         var target = event.target;
         if (!(target instanceof Element)) {
@@ -48,6 +53,7 @@
         closeAccountMenus(target.closest('[data-account-menu]'));
     });
 
+    // Closes open menus and restores focus when Escape is pressed.
     document.addEventListener('keydown', function (event) {
         if (event.key !== 'Escape') {
             return;

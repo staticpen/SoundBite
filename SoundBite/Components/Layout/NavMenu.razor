@@ -90,6 +90,7 @@
     private bool notificationCountFailed;
     private readonly List<IDisposable> subscriptions = [];
 
+    // Load authentication state and subscribe to unread-count updates.
     protected override async Task OnInitializedAsync()
     {
         var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
@@ -116,9 +117,11 @@
         }
     }
 
+    // Refresh the unread badge when the user navigates to another page.
     private void HandleLocationChanged(object? sender, LocationChangedEventArgs args) =>
         _ = InvokeAsync(RefreshUnreadCountAsync);
 
+    // Fetch the latest unread count and update the navigation badge.
     private async Task RefreshUnreadCountAsync()
     {
         try
@@ -134,6 +137,7 @@
         StateHasChanged();
     }
 
+    // Unsubscribe from navigation and notification events when leaving.
     public void Dispose()
     {
         Navigation.LocationChanged -= HandleLocationChanged;

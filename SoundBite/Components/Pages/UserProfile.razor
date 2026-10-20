@@ -112,6 +112,7 @@ else
         ? profile?.UserName ?? "Profile"
         : profile.DisplayName;
 
+    // Load the profile, favourites, and reviews for the requested username.
     protected override async Task OnParametersSetAsync()
     {
         isLoading = true;

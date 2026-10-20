@@ -16,12 +16,14 @@ public class FollowService(
 {
     public const int PageSize = 10;
 
+    // Returns the signed-in user's ID, or null when nobody is signed in.
     private async Task<string?> CurrentUserIdAsync()
     {
         var user = (await authenticationStateProvider.GetAuthenticationStateAsync()).User;
         return user.Identity?.IsAuthenticated == true ? user.FindFirstValue(ClaimTypes.NameIdentifier) : null;
     }
 
+    // Counts a profile's followers and following and checks if the current user can follow it.
     public async Task<FollowSummary> GetSummaryAsync(string userId)
     {
         await using var db = await contextFactory.CreateDbContextAsync();
@@ -33,6 +35,7 @@ public class FollowService(
             actor is not null && actor != userId && await db.Users.AnyAsync(u => u.Id == actor));
     }
 
+    // Returns one page of followers or followed users in a stable order.
     public async Task<FollowPage> GetPageAsync(string userId, bool followers, int page = 0)
     {
         if (page < 0 || page > int.MaxValue / PageSize - 1)
@@ -48,9 +51,13 @@ public class FollowService(
         return new FollowPage(rows.Take(PageSize).ToArray(), rows.Count > PageSize);
     }
 
+    // Starts following the selected user.
     public Task FollowAsync(string targetUserId) => SetFollowingAsync(targetUserId, true);
+
+    // Stops following the selected user.
     public Task UnfollowAsync(string targetUserId) => SetFollowingAsync(targetUserId, false);
 
+    // Applies a follow change and only sends a notification for a newly added follow.
     private async Task SetFollowingAsync(string targetUserId, bool following)
     {
         var actor = await CurrentUserIdAsync();

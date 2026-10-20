@@ -8,6 +8,7 @@ namespace SoundBite.Data
     public class ApplicationDbContext
         : IdentityDbContext<ApplicationUser>
     {
+        // Pass the configured EF Core options to the Identity-aware database context.
         public ApplicationDbContext(
             DbContextOptions<ApplicationDbContext> options)
             : base(options)
@@ -26,6 +27,7 @@ namespace SoundBite.Data
         public DbSet<Notification> Notifications => Set<Notification>();
         public DbSet<NotificationOptOut> NotificationOptOuts => Set<NotificationOptOut>();
 
+        // Configure relationships and database constraints used by the app's entities.
         protected override void OnModelCreating(ModelBuilder builder)
         {
             base.OnModelCreating(builder);

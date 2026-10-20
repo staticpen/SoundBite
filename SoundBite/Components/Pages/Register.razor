@@ -78,11 +78,13 @@
     [SupplyParameterFromForm(FormName = "register")]
     private RegisterModel model { get; set; } = default!;
 
+    // Make sure the registration form has a model before it is rendered.
     protected override void OnInitialized() => model ??= new();
     private string? message;
     private bool isSuccess;
     private bool isSubmitting;
 
+    // Validate the confirmation, create the account, and sign in the new user.
     private async Task RegisterAsync()
     {
         if (model.Password != model.ConfirmPassword)
@@ -116,6 +118,7 @@
         }
     }
 
+    // Clear password fields after registration succeeds or fails.
     private void ClearPasswords()
     {
         model.Password = string.Empty;

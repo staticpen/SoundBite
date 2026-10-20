@@ -193,6 +193,7 @@ else
     private string? reviewMessage;
     private readonly ReviewInput reviewInput = new();
 
+    // Reload the track and its reviews whenever the route ID changes.
     protected override async Task OnParametersSetAsync()
     {
         var version = ++loadVersion;
@@ -252,6 +253,7 @@ else
         }
     }
 
+    // Create or update the current user's review and refresh the review list.
     private async Task SaveReviewAsync()
     {
         if (string.IsNullOrWhiteSpace(currentUserId) || track is null)
@@ -292,6 +294,7 @@ else
         }
     }
 
+    // Build a safe Spotify URL for the requested catalogue item.
     private static string SpotifyUrl(string type, string id) =>
         $"https://open.spotify.com/{type}/{Uri.EscapeDataString(id)}";
 

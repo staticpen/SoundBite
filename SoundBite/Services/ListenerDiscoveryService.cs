@@ -19,6 +19,7 @@ public class ListenerDiscoveryService(IDbContextFactory<ApplicationDbContext> co
     public const int ActiveListenerLimit = 8;
     public const int ActiveReviewWindowDays = 30;
 
+    // Finds a small set of username matches while optionally hiding the current user.
     public async Task<IReadOnlyList<ListenerProfile>> FindUsersAsync(
         string? query,
         string? excludeUserId = null,
@@ -29,6 +30,7 @@ public class ListenerDiscoveryService(IDbContextFactory<ApplicationDbContext> co
             return [];
 
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        // Search normalized usernames to make partial matches case-insensitive.
         return await db.Users.AsNoTracking()
             .Where(user =>
                 user.UserName != null &&
@@ -42,6 +44,7 @@ public class ListenerDiscoveryService(IDbContextFactory<ApplicationDbContext> co
             .ToListAsync(cancellationToken);
     }
 
+    // Lists listeners with recent reviews, showing each person only once.
     public async Task<IReadOnlyList<ActiveListenerProfile>> GetActiveListenersAsync(
         string? excludeUserId = null,
         CancellationToken cancellationToken = default)
@@ -53,6 +56,7 @@ public class ListenerDiscoveryService(IDbContextFactory<ApplicationDbContext> co
                 review.CreatedAt >= cutoff &&
                 (excludeUserId == null || review.UserId != excludeUserId))
             .GroupBy(review => review.UserId)
+            // Keep only the newest recent review per listener, so active users appear once.
             .Select(group => group
                 .OrderByDescending(review => review.CreatedAt)
                 .ThenByDescending(review => review.Id)

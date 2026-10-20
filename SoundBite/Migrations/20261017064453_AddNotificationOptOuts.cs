@@ -8,6 +8,7 @@ namespace SoundBite.Migrations
     public partial class AddNotificationOptOuts : Migration
     {
         /// <inheritdoc />
+        // Adds per-user notification opt-out settings.
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.CreateTable(
@@ -30,6 +31,7 @@ namespace SoundBite.Migrations
         }
 
         /// <inheritdoc />
+        // Removes notification opt-out settings.
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropTable(

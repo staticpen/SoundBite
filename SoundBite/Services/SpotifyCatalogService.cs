@@ -14,6 +14,7 @@ public sealed class SpotifyCatalogService(
     private const int AlbumCoverBatchSize = 20;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
+    // Searches Spotify and returns artists with usable IDs and names.
     public async Task<IReadOnlyList<SpotifyArtistMatch>> SearchArtistsAsync(
         string query,
         CancellationToken cancellationToken = default)
@@ -36,6 +37,7 @@ public sealed class SpotifyCatalogService(
             .ToArray();
     }
 
+    // Loads an artist's albums and tracks from Spotify.
     public async Task<SpotifyArtistDiscography> GetArtistDiscographyAsync(
         SpotifyArtistMatch artist,
         CancellationToken cancellationToken = default)
@@ -88,6 +90,7 @@ public sealed class SpotifyCatalogService(
         return new SpotifyArtistDiscography(artist, catalogueAlbums);
     }
 
+    // Searches Spotify and maps valid results into track matches.
     public async Task<IReadOnlyList<SpotifyTrackMatch>> SearchTracksAsync(
         string query,
         CancellationToken cancellationToken = default)
@@ -119,6 +122,7 @@ public sealed class SpotifyCatalogService(
             .ToArray();
     }
 
+    // Fetches cover image URLs for album IDs, using smaller batches for the API.
     public async Task<IReadOnlyDictionary<string, string>> GetAlbumCoverUrlsAsync(
         IReadOnlyList<string> spotifyAlbumIds,
         CancellationToken cancellationToken = default)
@@ -175,6 +179,7 @@ public sealed class SpotifyCatalogService(
         return covers;
     }
 
+    // Picks the largest valid Spotify-hosted HTTPS image from an album's images.
     private static string? SelectAlbumCoverUrl(IEnumerable<SpotifyImageItem>? images) =>
         (images ?? [])
             .Where(image => Uri.TryCreate(image.Url, UriKind.Absolute, out var uri) &&
@@ -185,6 +190,7 @@ public sealed class SpotifyCatalogService(
             .Select(image => image.Url)
             .FirstOrDefault();
 
+    // Follows Spotify's next-page links and collects all results.
     private async Task<List<T>> GetAllPagesAsync<T>(
         string initialUrl,
         CancellationToken cancellationToken)
@@ -204,6 +210,7 @@ public sealed class SpotifyCatalogService(
         return items;
     }
 
+    // Sends an authorized Spotify request and deserializes its response.
     private async Task<T?> GetApiResponseAsync<T>(string url, CancellationToken cancellationToken)
     {
         var requestUri = Uri.TryCreate(url, UriKind.Absolute, out var absoluteUri)
@@ -234,6 +241,7 @@ public sealed class SpotifyCatalogService(
         return await response.Content.ReadFromJsonAsync<T>(JsonOptions, cancellationToken);
     }
 
+    // Converts Spotify artist items into matches and skips incomplete entries.
     private static IReadOnlyList<SpotifyArtistMatch> MapArtists(IEnumerable<SpotifyArtistItem>? artists) =>
         (artists ?? [])
             .Where(artist => !string.IsNullOrWhiteSpace(artist.Id) &&

@@ -10,6 +10,7 @@ public sealed class DemoReviewSeeder(IDbContextFactory<ApplicationDbContext> con
 {
     public const int TrackLimit = 12;
 
+    // Creates or refreshes repeatable sample reviews for the first catalogue tracks.
     public async Task<DemoReviewSeedResult> SeedAsync(CancellationToken cancellationToken = default)
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
@@ -67,6 +68,7 @@ public sealed class DemoReviewSeeder(IDbContextFactory<ApplicationDbContext> con
         return new DemoReviewSeedResult(tracks.Count, seededCount);
     }
 
+    // Builds one stable sample review so rerunning the seeder updates rather than duplicates it.
     private static DemoReview CreateReview(
         int trackId,
         string spotifyId,

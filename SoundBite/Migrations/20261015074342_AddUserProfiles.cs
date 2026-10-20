@@ -8,6 +8,7 @@ namespace SoundBite.Migrations
     public partial class AddUserProfiles : Migration
     {
         /// <inheritdoc />
+        // Adds profile details to application users.
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.AddColumn<string>(
@@ -27,6 +28,7 @@ namespace SoundBite.Migrations
         }
 
         /// <inheritdoc />
+        // Removes the added user profile details.
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropColumn(

@@ -141,6 +141,7 @@ else if (loaded)
     private string? message;
     private readonly List<IDisposable> subscriptions = [];
 
+    // Subscribe to notification updates and load the signed-in user's first page.
     protected override async Task OnInitializedAsync()
     {
         var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
@@ -156,8 +157,10 @@ else if (loaded)
         loading = false;
     }
 
+    // Marshal notification refreshes onto the component's renderer.
     private Task RefreshNotificationPageAsync() => InvokeAsync(LoadAndRenderAsync);
 
+    // Reload the page and notify the renderer that its state changed.
     private async Task LoadAndRenderAsync()
     {
         await LoadAsync();
@@ -201,6 +204,7 @@ else if (loaded)
         }
     }
 
+    // Append older notifications unless a newer refresh has replaced the list.
     private async Task LoadMoreAsync()
     {
         if (loadingMore || refreshing || !hasMore || items.Count == 0) return;
@@ -231,6 +235,7 @@ else if (loaded)
         }
     }
 
+    // Mark one notification as read and refresh its displayed state.
     private async Task MarkReadAsync(int notificationId)
     {
         if (busy) return;
@@ -253,6 +258,7 @@ else if (loaded)
         }
     }
 
+    // Mark every notification as read and refresh the displayed list.
     private async Task MarkAllReadAsync()
     {
         if (busy) return;
@@ -275,6 +281,7 @@ else if (loaded)
         }
     }
 
+    // Remove notification subscriptions when the component is disposed.
     public void Dispose()
     {
         foreach (var subscription in subscriptions)

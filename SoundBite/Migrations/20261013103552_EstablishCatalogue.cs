@@ -8,6 +8,7 @@ namespace SoundBite.Migrations
     public partial class EstablishCatalogue : Migration
     {
         /// <inheritdoc />
+        // Adds the artist, album, and track catalogue tables.
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.CreateTable(
@@ -142,6 +143,7 @@ namespace SoundBite.Migrations
         }
 
         /// <inheritdoc />
+        // Removes the artist, album, and track catalogue tables.
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropTable(

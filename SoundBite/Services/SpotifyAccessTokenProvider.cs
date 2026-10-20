@@ -15,6 +15,7 @@ public sealed class SpotifyAccessTokenProvider(
     private const string CacheKey = "Spotify:AccessToken";
     private readonly SemaphoreSlim refreshLock = new(1, 1);
 
+    // Returns a cached Spotify token or requests a fresh one when needed.
     public async Task<string> GetAccessTokenAsync(CancellationToken cancellationToken = default)
     {
         if (memoryCache.TryGetValue(CacheKey, out string? cachedToken))

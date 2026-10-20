@@ -9,6 +9,7 @@ namespace SoundBite.Migrations
     public partial class AddReviewSocialInteractions : Migration
     {
         /// <inheritdoc />
+        // Adds likes and comments for reviews.
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.CreateTable(
@@ -91,6 +92,7 @@ namespace SoundBite.Migrations
         }
 
         /// <inheritdoc />
+        // Removes review likes and comments.
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropTable(

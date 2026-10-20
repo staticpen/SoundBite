@@ -12,6 +12,7 @@ public sealed class FeedService(
 {
     public const int PageSize = 20;
 
+    // Builds one page of activities from users the signed-in listener follows.
     public async Task<ActivityPage> GetPageAsync(int page = 0, CancellationToken cancellationToken = default)
     {
         if (page < 0 || page > int.MaxValue / PageSize - 1)
@@ -32,6 +33,7 @@ public sealed class FeedService(
             .Where(follow => follow.FollowerId == actorId)
             .Select(follow => follow.FollowingId);
 
+        // Project each activity type into one shape so reviews, comments, likes, and favourites can share a feed.
         IQueryable<ActivityRow> rows = db.Reviews.AsNoTracking()
             .Select(review => new ActivityRow
             {
@@ -175,6 +177,7 @@ public sealed class FeedService(
             .ThenByDescending(item => item.Id)
             .ThenBy(item => item.UserName)
             .Skip(page * PageSize)
+            // The extra row indicates whether another page exists without a separate count query.
             .Take(PageSize + 1)
             .ToListAsync(cancellationToken);
         var entries = results.Select(item => item.ToActivityItem()).ToArray();
@@ -202,6 +205,7 @@ public sealed class FeedService(
         public string? ParentUserName { get; init; }
         public string? ParentDisplayName { get; init; }
 
+        // Converts a database row into the activity shape shown in the feed.
         public ActivityItem ToActivityItem() => new(
             (ActivityType)Type,
             Id,

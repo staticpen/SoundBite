@@ -10,6 +10,7 @@ public sealed class SpotifyAlbumCoverRefreshService(
     IDbContextFactory<ApplicationDbContext> contextFactory,
     ISpotifyCatalog spotifyCatalog)
 {
+    // Looks up and saves cover images for albums that do not have one yet.
     public async Task<SpotifyAlbumCoverRefreshResult> RefreshMissingCoversAsync(
         CancellationToken cancellationToken = default)
     {

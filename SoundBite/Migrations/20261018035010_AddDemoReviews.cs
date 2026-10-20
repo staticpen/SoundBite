@@ -9,6 +9,7 @@ namespace SoundBite.Migrations
     public partial class AddDemoReviews : Migration
     {
         /// <inheritdoc />
+        // Adds demo reviews for the catalogue.
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.CreateTable(
@@ -49,6 +50,7 @@ namespace SoundBite.Migrations
         }
 
         /// <inheritdoc />
+        // Removes the seeded demo reviews.
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropTable(

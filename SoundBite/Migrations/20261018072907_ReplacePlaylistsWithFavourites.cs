@@ -9,6 +9,7 @@ namespace SoundBite.Migrations
     public partial class ReplacePlaylistsWithFavourites : Migration
     {
         /// <inheritdoc />
+        // Replaces playlists with per-user favourite tracks.
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropForeignKey(
@@ -101,6 +102,7 @@ namespace SoundBite.Migrations
         }
 
         /// <inheritdoc />
+        // Restores playlists and removes favourite tracks.
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropCheckConstraint(

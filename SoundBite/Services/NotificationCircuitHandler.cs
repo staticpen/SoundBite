@@ -7,6 +7,7 @@ public sealed class NotificationCircuitHandler(ILogger<NotificationCircuitHandle
 {
     private readonly ConcurrentDictionary<Guid, Func<Task>> subscribers = new();
 
+    // Registers a callback to refresh notification state when the circuit reconnects.
     public IDisposable Subscribe(Func<Task> callback)
     {
         ArgumentNullException.ThrowIfNull(callback);
@@ -15,6 +16,7 @@ public sealed class NotificationCircuitHandler(ILogger<NotificationCircuitHandle
         return new Subscription(() => subscribers.TryRemove(subscriptionId, out _));
     }
 
+    // Runs each registered refresh callback after a Blazor circuit reconnects.
     public override async Task OnConnectionUpAsync(Circuit circuit, CancellationToken cancellationToken)
     {
         foreach (var (subscriptionId, callback) in subscribers.ToArray())
@@ -37,6 +39,7 @@ public sealed class NotificationCircuitHandler(ILogger<NotificationCircuitHandle
     {
         private Action? disposeAction = dispose;
 
+        // Removes this callback once, even if the subscription is disposed more than once.
         public void Dispose() => Interlocked.Exchange(ref disposeAction, null)?.Invoke();
     }
 }

@@ -15,6 +15,7 @@ namespace SoundBite.Migrations
     partial class AddNotifications
     {
         /// <inheritdoc />
+        // Recreates the EF model state recorded for this migration.
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618

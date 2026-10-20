@@ -161,6 +161,7 @@
     private string commentText = string.Empty;
     private string? message;
 
+    // Load the review interactions and reset any in-progress comment form.
     protected override async Task OnParametersSetAsync()
     {
         loading = true;
@@ -188,6 +189,7 @@
         }
     }
 
+    // Toggle the review's like and reload its interaction summary.
     private async Task ToggleLikeAsync()
     {
         if (interactions is null || busy) return;
@@ -210,6 +212,7 @@
         }
     }
 
+    // Create, update, or reply to a comment based on the current form state.
     private async Task SaveCommentAsync()
     {
         if (busy) return;
@@ -244,6 +247,7 @@
         }
     }
 
+    // Delete a comment and clear the editor if it was active.
     private async Task DeleteCommentAsync(int commentId)
     {
         if (busy) return;
@@ -268,6 +272,7 @@
         }
     }
 
+    // Toggle a comment's like and reload the interaction list.
     private async Task ToggleCommentLikeAsync(ReviewComment comment)
     {
         if (busy) return;
@@ -290,6 +295,7 @@
         }
     }
 
+    // Put the selected comment's text into the editor.
     private void BeginEdit(ReviewComment comment)
     {
         editingCommentId = comment.Id;
@@ -298,6 +304,7 @@
         message = null;
     }
 
+    // Prepare the editor to reply to the selected comment.
     private void BeginReply(ReviewComment comment)
     {
         editingCommentId = null;
@@ -306,6 +313,7 @@
         message = null;
     }
 
+    // Clear the comment editor and cancel any edit or reply.
     private void CancelEdit()
     {
         editingCommentId = null;

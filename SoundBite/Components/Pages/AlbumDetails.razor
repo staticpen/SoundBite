@@ -78,6 +78,7 @@ else
     private bool loading;
     private bool loadFailed;
 
+    // Reload the requested album whenever its route ID changes.
     protected override async Task OnParametersSetAsync()
     {
         album = null;
@@ -100,6 +101,7 @@ else
         }
     }
 
+    // Build a safe Spotify URL for the album.
     private static string SpotifyUrl(string id) =>
         $"https://open.spotify.com/album/{Uri.EscapeDataString(id)}";
 }

@@ -10,6 +10,7 @@ public sealed class SpotifyArtistCatalogService(
     SpotifyTrackImporter trackImporter,
     AuthenticationStateProvider authenticationStateProvider)
 {
+    // Imports an artist's Spotify discography after confirming the user is signed in.
     public async Task<SpotifyArtistImportResult> AddArtistAsync(
         SpotifyArtistMatch artist,
         CancellationToken cancellationToken = default)

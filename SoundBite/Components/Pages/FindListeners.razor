@@ -122,6 +122,7 @@
     private bool loadingActiveListeners = true;
     private string? activeListenersError;
 
+    // Load active listeners while recording the current user's ID.
     protected override async Task OnInitializedAsync()
     {
         var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
@@ -144,6 +145,7 @@
         }
     }
 
+    // Find users matching the entered username.
     private async Task SearchAsync()
     {
         searchResults = null;
@@ -173,9 +175,11 @@
         }
     }
 
+    // Use the display name when present, otherwise show the username.
     private static string PreferredName(string displayName, string userName) =>
         string.IsNullOrWhiteSpace(displayName) ? userName : displayName;
 
+    // Build the profile route for a username.
     private static string ProfileUrl(string userName) =>
         $"/users/{Uri.EscapeDataString(userName)}";
 }

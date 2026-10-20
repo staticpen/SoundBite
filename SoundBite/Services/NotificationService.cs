@@ -28,6 +28,7 @@ public sealed class NotificationService(
         return GetPageCoreAsync(beforeCreatedAt, beforeId, cancellationToken);
     }
 
+    // Applies the optional cursor and loads a page of notifications for the signed-in user.
     private async Task<NotificationPage> GetPageCoreAsync(
         DateTime? beforeCreatedAt,
         int? beforeId,
@@ -70,6 +71,7 @@ public sealed class NotificationService(
         return new NotificationPage(items.Take(PageSize).ToList(), unreadCount, hasMore);
     }
 
+    // Counts unread notifications for the current user.
     public async Task<int> GetUnreadCountAsync(CancellationToken cancellationToken = default)
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
@@ -79,6 +81,7 @@ public sealed class NotificationService(
             cancellationToken);
     }
 
+    // Marks one of the current user's notifications as read and refreshes the UI.
     public async Task MarkReadAsync(int notificationId, CancellationToken cancellationToken = default)
     {
         if (notificationId <= 0)
@@ -101,6 +104,7 @@ public sealed class NotificationService(
         }
     }
 
+    // Marks all unread notifications as read and publishes an update when anything changed.
     public async Task<int> MarkAllReadAsync(CancellationToken cancellationToken = default)
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
@@ -141,12 +145,14 @@ public sealed class NotificationService(
         var userId = await GetCurrentUserIdAsync(db, cancellationToken);
         if (enabled)
         {
+            // Enabling means removing the opt-out; old notifications are left unchanged.
             await db.NotificationOptOuts
                 .Where(optOut => optOut.UserId == userId && optOut.Type == type)
                 .ExecuteDeleteAsync(cancellationToken);
         }
         else
         {
+            // Ignore duplicate opt-outs so saving the same preference twice is safe.
             await db.Database.ExecuteSqlInterpolatedAsync($"""
                 INSERT INTO "NotificationOptOuts" ("UserId", "Type") VALUES ({userId}, {(int)type})
                 ON CONFLICT ("UserId", "Type") DO NOTHING
@@ -164,6 +170,7 @@ public sealed class NotificationService(
             optOut => optOut.UserId == recipientUserId && optOut.Type == type,
             cancellationToken);
 
+    // Gets the signed-in user's ID and verifies that the account still exists.
     private async Task<string> GetCurrentUserIdAsync(
         ApplicationDbContext db,
         CancellationToken cancellationToken)

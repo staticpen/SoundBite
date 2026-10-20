@@ -17,6 +17,7 @@ public sealed class SpotifyCatalogueSeeder(
         "Beyonce"
     ];
 
+    // Searches the supplied queries and imports each unique track once.
     public async Task<SpotifyCatalogueSeedResult> SeedAsync(
         IReadOnlyList<string>? queries = null,
         CancellationToken cancellationToken = default)

@@ -9,6 +9,7 @@ namespace SoundBite.Migrations
     public partial class InitialCreate : Migration
     {
         /// <inheritdoc />
+        // Creates the initial identity and application tables.
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.CreateTable(
@@ -195,6 +196,7 @@ namespace SoundBite.Migrations
         }
 
         /// <inheritdoc />
+        // Removes the initial identity and application tables.
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropTable(

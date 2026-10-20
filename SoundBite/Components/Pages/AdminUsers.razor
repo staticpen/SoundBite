@@ -111,6 +111,7 @@ else
     private bool notAuthorized;
     private bool isError;
 
+    // Identify the current administrator and load the first user page.
     protected override async Task OnInitializedAsync()
     {
         var principal = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
@@ -118,11 +119,13 @@ else
         await LoadPageAsync(0);
     }
 
+    // Restart the user list from its first page using the current search.
     private async Task SearchAsync()
     {
         await LoadPageAsync(0);
     }
 
+    // Load a page of matching users and report access or loading errors.
     private async Task LoadPageAsync(int page)
     {
         isBusy = true;
@@ -149,6 +152,7 @@ else
         }
     }
 
+    // Lock or unlock the selected user.
     private async Task ToggleLockAsync(AdminUserSummary user)
     {
         await UpdateUserAsync(
@@ -157,6 +161,7 @@ else
             user.IsLocked ? "User unlocked." : "User locked.");
     }
 
+    // Grant or remove the administrator role for the selected user.
     private async Task ToggleAdministratorAsync(AdminUserSummary user)
     {
         await UpdateUserAsync(
@@ -165,6 +170,7 @@ else
             user.IsAdministrator ? "Administrator role removed." : "Administrator role granted.");
     }
 
+    // Run an admin change, refresh the current page, and show its result.
     private async Task UpdateUserAsync(AdminUserSummary user, Func<Task> operation, string successMessage)
     {
         if (isBusy)

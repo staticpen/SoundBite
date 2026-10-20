@@ -16,12 +16,14 @@ public sealed class AdminService(
     public const int PageSize = 25;
     public const int MaximumPage = int.MaxValue / PageSize - 1;
 
+    // Returns one page of account details after checking the caller is an active administrator.
     public async Task<AdminUserPage> GetUsersAsync(
         string? search = null,
         int page = 0,
         CancellationToken cancellationToken = default)
     {
         ValidatePage(page);
+        // Check on the server before returning account information; hiding the UI link is not authorization.
         await RequireAdministratorAsync();
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -68,6 +70,7 @@ public sealed class AdminService(
         return new AdminUserPage(results, totalCount, page, totalCount > (page + 1) * PageSize);
     }
 
+    // Changes a user's lockout state while preventing the last active administrator from being locked.
     public async Task SetUserLockedAsync(
         string targetUserId,
         bool locked,
@@ -111,6 +114,7 @@ public sealed class AdminService(
             locked ? DateTimeOffset.MaxValue : null));
     }
 
+    // Adds or removes an administrator role without allowing the last administrator to be demoted.
     public async Task SetUserAdministratorAsync(
         string targetUserId,
         bool administrator,
@@ -144,6 +148,7 @@ public sealed class AdminService(
         EnsureSucceeded(result);
     }
 
+    // Confirms the signed-in user still has an active administrator account.
     private async Task<string> RequireAdministratorAsync()
     {
         var principal = (await authenticationStateProvider.GetAuthenticationStateAsync()).User;
@@ -170,6 +175,7 @@ public sealed class AdminService(
         return actorId;
     }
 
+    // Looks up the administrator role ID for the current database.
     private static Task<string?> GetAdministratorRoleIdAsync(
         ApplicationDbContext db,
         CancellationToken cancellationToken) =>
@@ -177,12 +183,14 @@ public sealed class AdminService(
             .Select(role => role.Id)
             .SingleOrDefaultAsync(cancellationToken);
 
+    // Rejects page numbers that could overflow the pagination offset.
     private static void ValidatePage(int page)
     {
         if (page is < 0 or > MaximumPage)
             throw new ArgumentOutOfRangeException(nameof(page));
     }
 
+    // Converts failed identity results into an error callers can handle.
     private static void EnsureSucceeded(IdentityResult result)
     {
         if (!result.Succeeded)

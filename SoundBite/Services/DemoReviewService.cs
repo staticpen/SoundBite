@@ -6,6 +6,7 @@ namespace SoundBite.Services;
 
 public sealed class DemoReviewService(IDbContextFactory<ApplicationDbContext> contextFactory)
 {
+    // Returns the sample reviews for one track, newest first.
     public async Task<IReadOnlyList<DemoReview>> GetForTrackAsync(
         int trackId,
         CancellationToken cancellationToken = default)

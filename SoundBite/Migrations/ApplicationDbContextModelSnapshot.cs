@@ -12,6 +12,7 @@ namespace SoundBite.Migrations
     [DbContext(typeof(ApplicationDbContext))]
     partial class ApplicationDbContextModelSnapshot : ModelSnapshot
     {
+        // Stores the current EF model so future migrations can compare schema changes.
         protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618

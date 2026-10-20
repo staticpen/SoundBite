@@ -204,6 +204,7 @@
     private int favouriteStatusVersion;
     private string favouritesError = "Favourites are unavailable.";
 
+    // Check whether the visitor is signed in and load artist suggestions.
     protected override async Task OnInitializedAsync()
     {
         var principal = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
@@ -221,6 +222,7 @@
         }
     }
 
+    // Search the catalogue and, when needed, look for matching Spotify artists.
     private async Task SearchAsync()
     {
         if (isLoading)
@@ -277,6 +279,7 @@
         }
     }
 
+    // Import an artist and refresh the catalogue search results.
     private async Task AddArtistAsync(SpotifyArtistMatch artist)
     {
         if (!signedIn || isAddingArtist)

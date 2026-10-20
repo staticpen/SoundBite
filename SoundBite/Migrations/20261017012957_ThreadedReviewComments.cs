@@ -8,6 +8,7 @@ namespace SoundBite.Migrations
     public partial class ThreadedReviewComments : Migration
     {
         /// <inheritdoc />
+        // Adds parent links so review comments can have replies.
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropIndex(
@@ -45,6 +46,7 @@ namespace SoundBite.Migrations
         }
 
         /// <inheritdoc />
+        // Removes parent links from review comments.
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropForeignKey(

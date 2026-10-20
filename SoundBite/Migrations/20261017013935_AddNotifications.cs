@@ -9,6 +9,7 @@ namespace SoundBite.Migrations
     public partial class AddNotifications : Migration
     {
         /// <inheritdoc />
+        // Adds notifications and their user relationships.
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.CreateTable(
@@ -109,6 +110,7 @@ namespace SoundBite.Migrations
         }
 
         /// <inheritdoc />
+        // Removes notifications and their user relationships.
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropTable(

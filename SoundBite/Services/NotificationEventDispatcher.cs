@@ -5,6 +5,7 @@ public sealed class NotificationEventDispatcher(ILogger<NotificationEventDispatc
     private readonly object subscribersLock = new();
     private readonly Dictionary<string, Dictionary<Guid, Func<Task>>> subscribers = new();
 
+    // Registers a callback for notification updates belonging to one user.
     public IDisposable Subscribe(string userId, Func<Task> callback)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(userId);
@@ -34,6 +35,7 @@ public sealed class NotificationEventDispatcher(ILogger<NotificationEventDispatc
         });
     }
 
+    // Sends an update to a snapshot of the user's subscribers.
     public async Task PublishAsync(string userId)
     {
         Func<Task>[] callbacks;
@@ -63,6 +65,7 @@ public sealed class NotificationEventDispatcher(ILogger<NotificationEventDispatc
     {
         private Action? disposeAction = dispose;
 
+        // Removes this callback once, even if the subscription is disposed more than once.
         public void Dispose() => Interlocked.Exchange(ref disposeAction, null)?.Invoke();
     }
 }
